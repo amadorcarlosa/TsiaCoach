@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AIInCSharp": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
