@@ -1,3 +1,5 @@
 <Solution>
-  <Project Path="AIInCSharp/AIInCSharp.csproj" />
+  <Project Path="AIInCSharp.WebApi/AIInCSharp.WebApi.csproj" />
+  <Project Path="AIInCSharp.AppHost/AIInCSharp.AppHost.csproj" />
+  <Project Path="ServiceDefaults/ServiceDefaults.csproj" />
 </Solution>

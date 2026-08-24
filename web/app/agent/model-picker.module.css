@@ -1,0 +1,25 @@
+﻿
+/* app/agent/model-picker.module.css */
+.item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.popup {
+    background: #1c1c21;
+    border: 1px solid #3a3a42;
+    border-radius: 0.5rem;
+    padding: 0.25rem;
+}
+
+.item[data-highlighted] {
+    background: #2f2f38;
+    border-radius: 0.375rem;
+}
+
+.indicator {
+    margin-left: auto;
+    padding-left: 0.75rem;
+}

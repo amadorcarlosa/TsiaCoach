@@ -1,0 +1,16 @@
+POST http://localhost:5145/api/agent
+Content-Type: application/json
+
+{
+  "model": "gpt-5.4-mini",
+  "instructions": "Act like Tobias Funke",
+  "prompt": "Are you wearing cutoffs?",
+  "history": [
+    { "role": "user", "message": "hello" },
+    {
+      "role": "assistant",
+      "message": "hi there",
+      "model": "claude-opus-5"
+    }
+  ]
+}

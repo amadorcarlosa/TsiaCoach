@@ -1,0 +1,40 @@
+﻿.shell {
+    min-height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+}
+
+.measure {
+    width: 100%;
+    max-width: var(--shell-max);
+    margin-inline: auto;
+    padding-inline: var(--shell-pad);
+}
+
+.header {
+    border-bottom: 1px solid var(--line);
+}
+
+.headerInner {
+    composes: measure;
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.mainInner {
+    composes: measure;
+    padding-block: 2rem;
+}
+
+.footer {
+    border-top: 1px solid var(--line);
+}
+
+.footerInner {
+    composes: measure;
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+}
