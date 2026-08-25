@@ -1,4 +1,5 @@
 ﻿// lib/api/models.ts
+import 'server-only';
 import type { components } from '@/lib/api/schema';
 
 type FoundryDeploymentResponse =

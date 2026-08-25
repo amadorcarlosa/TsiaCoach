@@ -7,9 +7,9 @@ import { badgeSize } from './model-picker.classes';
 type VendorName = components['schemas']['VendorName'];
 
 const vendorIcons: Record<VendorName, string> = {
-    Anthropic: '/provider-icons/anthropic-claude-symbol-250.webp',
-    OpenAI: '/provider-icons/openai-blossom-white.svg',
-    DeepSeek: '/provider-icons/deepseek.svg',
+    anthropic: '/provider-icons/anthropic-claude-symbol-250.webp',
+    openAI: '/provider-icons/openai-blossom-white.svg',
+    deepSeek: '/provider-icons/deepseek.svg',
 };
 
 export type ModelOption = {

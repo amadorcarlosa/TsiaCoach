@@ -1,12 +1,47 @@
 ﻿namespace AIInCSharp.WebApi.Agents;
-using System.Text.Json.Serialization;
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum VendorName
+using System.Text.Json.Serialization;
+public sealed record ModelDescriptor(
+   string Name,
+   string DisplayName,
+   Vendor Vendor);
+public static class ModelCatalog
 {
-   Anthropic,
-   OpenAI,
-   DeepSeek
+   private static readonly Vendor OpenAI = new OpenAIVendor();
+   private static readonly Vendor Anthropic = new AnthropicVendor();
+   private static readonly Vendor DeepSeekVendor = new DeepSeekVendor();
+
+   public static IReadOnlyList<ModelDescriptor> All { get; } =
+   [
+      new(
+         Models.Gpt.Model.Five.Version.Four.Type.Mini.Name,
+         Models.Gpt.Model.Five.Version.Four.Type.Mini.View,
+         OpenAI),
+       new( Models.Gpt.Model.Five.Version.Six.Type.Sol.Name,
+      Models.Gpt.Model.Five.Version.Six.Type.Sol.View,
+      OpenAI),
+      new( Models.Gpt.Model.Five.Chat.Name,
+         Models.Gpt.Model.Five.Chat.View,
+         OpenAI),
+      new(Models.Gpt.Model.Five.Nano.Name,
+         Models.Gpt.Model.Five.Nano.View,
+         OpenAI),
+      
+      new(
+         Models.DeepSeek.Model.Version.Four.Type.Pro.Name,
+         Models.DeepSeek.Model.Version.Four.Type.Pro.View,
+         DeepSeekVendor),
+      
+
+      new(
+        Models. Claude.Model.Opus.Version.Five.Name,
+         Models.Claude.Model.Opus.Version.Five.View,
+         Anthropic)
+   ];
+
+   public static ModelDescriptor? Find(string model) =>
+      All.FirstOrDefault(candidate =>
+         string.Equals(candidate.Name, model, StringComparison.Ordinal));
 }
 public static class Models
 {

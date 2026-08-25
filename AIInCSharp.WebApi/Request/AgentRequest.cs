@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.AI;
 
 namespace AIInCSharp.WebApi.Request;
 
@@ -69,3 +70,35 @@ public sealed record AgentRequest(
     string Instructions,
     string Prompt,
     IReadOnlyList<TurnDto> History);
+internal static class AgentRequestExtensions
+{
+    public static ChatMessage ToChatMessage(this TurnDto turn) =>
+        turn switch
+        {
+            UserMessage user =>
+                new ChatMessage(
+                    ChatRole.User,
+                    user.Message),
+
+            ModelMessage assistant =>
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    assistant.Message)
+        };
+
+    public static IReadOnlyList<ChatMessage> ToChatMessages(
+        this AgentRequest request)
+    {
+        List<ChatMessage> messages =
+            request.History
+                .Select(static turn => turn.ToChatMessage())
+                .ToList();
+
+        messages.Add(
+            new ChatMessage(
+                ChatRole.User,
+                request.Prompt));
+
+        return messages;
+    }
+}    

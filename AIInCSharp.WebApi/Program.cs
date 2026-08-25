@@ -1,15 +1,59 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AIInCSharp.WebApi;
+using AIInCSharp.WebApi.Agents;
 using AIInCSharp.WebApi.EndPoints;
-using OpenAI.Responses;
+using Azure.Core;
+using Azure.Identity;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+
 
 var builder = WebApplication.CreateBuilder(args);
+
+string? endpoint = builder.Configuration["endpoint"];
+if (string.IsNullOrWhiteSpace(endpoint))
+{
+    throw new InvalidOperationException("Endpoint is not configured.");
+}
+string? foundryResource = builder.Configuration["foundryResource"];
+if (string.IsNullOrWhiteSpace(foundryResource))
+{
+    throw new InvalidOperationException("Foundry resource is not configured.");
+}
+string? tenantId = builder.Configuration["tenantId"];
+builder.Services.AddSingleton<TokenCredential>(new ChainedTokenCredential(
+    new AzureCliCredential(new AzureCliCredentialOptions { TenantId = tenantId }),
+    new EnvironmentCredential()));
+builder.Services.AddSingleton(sp =>
+    new FoundryTokenCredential(sp.GetRequiredService<TokenCredential>(), foundryResource));
+
+builder.Services.AddSingleton<ModelClient>(sp =>
+{
+    var config = new ModelConfig(
+        new AzureOpenAIConfig(new Uri(endpoint), sp.GetRequiredService<TokenCredential>()),
+        new AzureAnthropicModelConfig(sp.GetRequiredService<FoundryTokenCredential>()));
+
+    return config.CreateModelClient() switch
+    {
+        ModelClient created => created,
+        AgentError error => throw new InvalidOperationException(
+            $"Failed to create model clients: {error}")
+    };
+});
+builder.Services.AddSingleton<AgentFactory>();
+
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(
         new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.AddServiceDefaults();
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+        tracing.AddSource(AgentTelemetry.SourceName))
+    .WithMetrics(metrics =>
+        metrics.AddMeter(AgentTelemetry.SourceName));
 
 var app = builder.Build();
 // Configure the HTTP request pipeline.
