@@ -273,6 +273,14 @@ public static class PracticeItemOne
 
     public static readonly IReadOnlyList<AnswerMathBinding> AnswerMathBindings =
         AuthoredMathematics.AnswerBindings;
+
+    public static readonly IReadOnlyDictionary<AnswerChoiceId, MisconceptionCode> Distractors =
+        new Dictionary<AnswerChoiceId, MisconceptionCode>
+        {
+            { new("answer-a"), new("ordinary-step-and-missing-sum") },
+            { new("answer-b"), new("stopped-at-second-integer") },
+            { new("answer-c"), new("ordinary-step-in-sum") }
+        };
     public static readonly VariableQuantity N = new(
         Id: new("entity-n"),
         SymbolId: new("symbol-n"),
@@ -431,13 +439,14 @@ public static class PracticeItemOne
     );
     public static readonly PracticeItemId Id = new("practice-item-sample-1");
 
-    public static readonly PracticeItem Item = new(
-        Id: Id,
-        Text: Text,
-        Semantics: Semantics,
-        Mathematics: Mathematics,
-        Answers: Answers,
-        AnswerMathBindings: AnswerMathBindings,
-        CorrectAnswerId: new("answer-d")
+    public static readonly PracticeItem Item = PracticeItem.Create(
+        id: Id,
+        text: Text,
+        semantics: Semantics,
+        mathematics: Mathematics,
+        answers: Answers,
+        answerMathBindings: AnswerMathBindings,
+        correctAnswerId: new("answer-d"),
+        distractors: Distractors
     );
 }
