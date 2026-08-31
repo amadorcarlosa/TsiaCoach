@@ -1,0 +1,102 @@
+/*
+ * MathTabla design tokens — light / dark surface layer.
+ * Synced from the design system. Never hand-edit.
+ */
+
+:root {
+  /* ── Primary (teal) ── */
+  --color-primary-50:  #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+
+  /* ── Accent: purple ── */
+  --color-purple-500: #7c3aed;
+  --color-purple-bg:  rgba(124, 58, 237, 0.08);
+
+  /* ── Accent: blue ── */
+  --color-blue-600: #1d4ed8;
+
+  /* ── Accent: pink ── */
+  --color-pink-500: #ec4899;
+
+  /* ── Accent: orange ── */
+  --color-orange-500: #ea580c;
+  --color-orange-bg:  rgba(234, 88, 12, 0.12);
+
+  /* ── Accent: coral (destructive / "stuck") ── */
+  --color-coral-500: #f97352;
+  --color-coral-600: #c94831;
+
+  /* ── Accent: green (success) ── */
+  --color-green-600: #16a34a;
+
+  /* ── Accent: red (error) ── */
+  --color-red-600: #dc2626;
+
+  /* ── Surfaces ── */
+  --mt-bg:          #f7f7f8;
+  --mt-bg-elevated: #ffffff;
+  --mt-bg-inset:    #f1f3f5;
+  --mt-bg-overlay:  rgba(247, 247, 248, 0.88);
+
+  /* ── Borders ── */
+  --mt-border:        rgba(0, 0, 0, 0.12);
+  --mt-border-strong: rgba(0, 0, 0, 0.22);
+
+  /* ── Text ── */
+  --mt-text:        rgba(0, 0, 0, 0.88);
+  --mt-text-sub:    rgba(0, 0, 0, 0.62);
+  --mt-text-muted:  rgba(0, 0, 0, 0.45);
+  --mt-text-faint:  rgba(0, 0, 0, 0.30);
+
+  /* ── Selection ── */
+  --mt-selection: #99f6e4;
+
+  /* ── Radii ── */
+  --mt-radius-sm:   6px;
+  --mt-radius-md:   8px;
+  --mt-radius-lg:   12px;
+  --mt-radius-xl:   16px;
+  --mt-radius-2xl:  18px;
+  --mt-radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --mt-shadow-sm:   0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --mt-shadow-md:   0 4px 14px rgba(0, 0, 0, 0.12);
+  --mt-shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 8px rgba(0, 0, 0, 0.08);
+
+  /* ── Grid paper (scaffold board background) ── */
+  --mt-grid-line: rgba(0, 0, 0, 0.07);
+  --mt-grid-size: 32px;
+
+  /* ── Layout ── */
+  --mt-page-max: 1200px;
+  --mt-content-max: 800px;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --mt-bg:          #0a0a0a;
+  --mt-bg-elevated: #171717;
+  --mt-bg-inset:    #1a1a1a;
+  --mt-bg-overlay:  rgba(10, 10, 10, 0.88);
+
+  --mt-border:        rgba(255, 255, 255, 0.12);
+  --mt-border-strong: rgba(255, 255, 255, 0.22);
+
+  --mt-text:       rgba(255, 255, 255, 0.92);
+  --mt-text-sub:   rgba(255, 255, 255, 0.62);
+  --mt-text-muted: rgba(255, 255, 255, 0.45);
+  --mt-text-faint: rgba(255, 255, 255, 0.30);
+
+  --mt-selection: #134e4a;
+  --mt-grid-line: rgba(255, 255, 255, 0.06);
+}

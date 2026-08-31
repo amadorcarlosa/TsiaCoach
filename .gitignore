@@ -1,0 +1,35 @@
+# .NET build and test output
+**/bin/
+**/obj/
+**/TestResults/
+/TestResults/
+/artifacts/
+
+# JavaScript dependencies and build output
+**/node_modules/
+**/.next/
+**/.nuxt/
+**/.output/
+**/.nitro/
+**/coverage/
+**/dist/
+
+# IDE and user-specific files
+/.idea/
+/.vs/
+*.suo
+*.user
+*.rsuser
+*.DotSettings.user
+*.tsbuildinfo
+
+# Local configuration and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini

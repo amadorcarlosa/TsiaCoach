@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="TsiaCoach.WebApi.Tests/TsiaCoach.WebApi.Tests.csproj" />
+  <Project Path="TsiaCoach.WebApi/TsiaCoach.WebApi.csproj" />
+  <Project Path="TsiaCoach.AppHost.Tests/TsiaCoach.AppHost.Tests.csproj" />
+  <Project Path="TsiaCoach.AppHost/TsiaCoach.AppHost.csproj" />
+  <Project Path="TsiaCoach.Common/TsiaCoach.Common.csproj" />
+  <Project Path="TsiaCoach.Domain/TsiaCoach.Domain.csproj" />
+  <Project Path="TsiaCoach.ServiceDefaults/TsiaCoach.ServiceDefaults.csproj" />
+</Solution>

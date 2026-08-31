@@ -1,0 +1,89 @@
+title: "The TSI is a gate. **Not a measure.**"
+description: >-
+  You already know more math than this test is asking for. Step through it
+  once with the scaffolding in place, clear the gate, and get on with your degree.
+
+seo:
+  title: "TSIA Coach"
+  description: >-
+    Clear the TSIA2 math gate with scaffolded walkthroughs — not memorization.
+
+hero:
+  links:
+    - label: "Take the 12-question diagnostic →"
+      to: "/sample-questions"
+      size: "xl"
+    - label: "Watch a walkthrough"
+      to: "#how"
+      color: "neutral"
+      variant: "outline"
+      size: "xl"
+
+sections:
+  - title: "910 → 950"
+    description: >-
+      Forty points is the difference between a semester of developmental math
+      and starting the course you actually enrolled for. It is a gap in
+      scaffolding, not in ability.
+    orientation: "horizontal"
+    reverse: false
+    features:
+      - title: "910"
+        description: "Typical placement"
+      - title: "950"
+        description: "College ready"
+
+  - title: "Every walkthrough runs the same four phases."
+    id: "how"
+    description: >-
+      You act at each one. The scaffold holds the parts you are not working on
+      yet, so the only thing in front of you is the step you are actually doing.
+    orientation: "horizontal"
+    reverse: true
+    features:
+      - title: "1. Name the unknown"
+        description: >-
+          Say what the letter stands for, in words, before touching any symbols.
+      - title: "2. Translate the phrases"
+        description: >-
+          Map each piece of English to a fragment of algebra. One phrase at a time.
+      - title: "3. Assemble"
+        description: >-
+          Snap the fragments together into the expression the question is asking for.
+      - title: "4. Check against the choices"
+        description: >-
+          Find your expression among A–D, and see why the other three are there.
+
+features:
+  title: "Twenty questions. Four reporting categories."
+  description: "What’s on the test · 4 areas"
+  items:
+    - title: "Quantitative reasoning"
+      description: "Ratios, percents, proportional change, and unit rates. 9 walkthroughs."
+    - title: "Algebraic reasoning"
+      description: "Linear equations, expressions from words, and systems. 14 walkthroughs."
+    - title: "Geometry & measurement"
+      description: "Area, volume, similarity, and the coordinate plane. 8 walkthroughs."
+    - title: "Probability & statistics"
+      description: "Reading data, center and spread, and simple probability. 6 walkthroughs."
+
+testimonials:
+  headline: ""
+  title: ""
+  description: ""
+  items: []
+
+cta:
+  title: "Clear the gate and get on with your degree."
+  description: >-
+    Start with the 12-question diagnostic. No account is needed, and it takes
+    about 15 minutes.
+  links:
+    - label: "Start the diagnostic →"
+      to: "/sample-questions"
+      size: "lg"
+    - label: "See how a walkthrough is built"
+      to: "#how"
+      color: "neutral"
+      variant: "outline"
+      size: "lg"

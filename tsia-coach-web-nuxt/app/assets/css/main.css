@@ -1,0 +1,147 @@
+﻿@import "tailwindcss";
+@import "@nuxt/ui";
+@import "./tokens.css";
+
+/*
+ * Nuxt UI semantic-token bridge.
+ * Nuxt UI components resolve through the MathTabla color, surface, text,
+ * and border tokens in both light and dark modes.
+ */
+:root,
+.light,
+.dark {
+  --ui-color-primary-50: var(--color-primary-50);
+  --ui-color-primary-100: var(--color-primary-100);
+  --ui-color-primary-200: var(--color-primary-200);
+  --ui-color-primary-300: var(--color-primary-300);
+  --ui-color-primary-400: var(--color-primary-400);
+  --ui-color-primary-500: var(--color-primary-500);
+  --ui-color-primary-600: var(--color-primary-600);
+  --ui-color-primary-700: var(--color-primary-700);
+  --ui-color-primary-800: var(--color-primary-800);
+  --ui-color-primary-900: var(--color-primary-900);
+  --ui-color-primary-950: var(--color-primary-900);
+  --ui-text-dimmed: var(--mt-text-faint);
+  --ui-text-muted: var(--mt-text-muted);
+  --ui-text-toned: var(--mt-text-sub);
+  --ui-text: var(--mt-text-sub);
+  --ui-text-highlighted: var(--mt-text);
+  --ui-text-inverted: #fff;
+  --ui-bg: var(--mt-bg);
+  --ui-bg-muted: var(--mt-bg-inset);
+  --ui-bg-elevated: var(--mt-bg-elevated);
+  --ui-bg-accented: var(--mt-bg-inset);
+  --ui-bg-inverted: var(--mt-text);
+  --ui-border: var(--mt-border);
+  --ui-border-muted: var(--mt-border);
+  --ui-border-accented: var(--mt-border-strong);
+  --ui-border-inverted: var(--mt-text);
+}
+
+:root,
+.light {
+  --ui-primary: var(--color-primary-700);
+}
+
+.dark {
+  --ui-primary: var(--color-primary-300);
+}
+
+.mt-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--mt-text-muted);
+}
+
+.mt-accent-strip {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary-500) 0%,
+    rgba(56, 189, 248, 0.6) 50%,
+    transparent 100%
+  );
+}
+
+.mt-accent-strip-console {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--color-navy-500) 0%,
+    rgb(20 184 166 / 0.6) 50%,
+    transparent 100%
+  );
+}
+
+/*
+ * Translucent sticky chrome (navbar).
+ * -webkit-backdrop-filter must stay alongside the standard property:
+ * Safari (including iOS 18) still only honors the prefixed form.
+ */
+.mt-overlay {
+  background: var(--mt-bg-overlay);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.mt-panel {
+  background: var(--mt-bg-elevated);
+  border: 1px solid var(--mt-border);
+  border-radius: var(--mt-radius-xl);
+  box-shadow: var(--mt-shadow-sm);
+}
+
+.mt-board {
+  background-color: var(--mt-bg-elevated);
+  background-image:
+    linear-gradient(var(--mt-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mt-grid-line) 1px, transparent 1px);
+  background-size: var(--mt-grid-size) var(--mt-grid-size);
+  border: 1px solid var(--mt-border);
+  border-radius: var(--mt-radius-2xl);
+  box-shadow: var(--mt-shadow-lg);
+}
+
+/*
+ * Track definitions
+ * Column tracks and flex ratios Tailwind's scale cannot express.
+ */
+.mt-tracks-hero {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+}
+
+.mt-tracks-areas {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.mt-tracks-phases {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+
+.mt-tracks-phrase-row {
+  grid-template-columns: 1fr auto 128px;
+}
+
+.mt-tracks-deployments {
+  grid-template-columns:
+    minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.7fr)
+    minmax(0, 0.8fr) minmax(0, 1.6fr);
+}
+
+.mt-runs-aside {
+  flex: 1 1 260px;
+}
+
+.mt-runs-main {
+  flex: 999 1 480px;
+}
+
+.mt-playground-aside {
+  flex: 1 1 300px;
+}
+
+.mt-playground-main {
+  flex: 999 1 420px;
+}
