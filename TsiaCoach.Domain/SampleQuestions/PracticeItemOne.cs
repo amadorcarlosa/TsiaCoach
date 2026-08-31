@@ -1,4 +1,5 @@
 ﻿using TsiaCoach.Domain.PracticeItems;
+using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.Text;
 using TsiaCoach.Domain.ValueObjects;
@@ -7,7 +8,15 @@ namespace TsiaCoach.Domain.SampleQuestions;
 
 public static class PracticeItemOne
 {
-    public static readonly IReadOnlyList<TextToken> TextTokens =
+    public const string SourceText =
+        "If n is the least of two consecutive odd integers, which of the following " +
+        "represents the sum of the two integers?\n" +
+        "A. n + 1\n" +
+        "B. n + 2\n" +
+        "C. 2n + 1\n" +
+        "D. 2n + 2";
+
+    private static readonly IReadOnlyList<TextToken> TokenDefinitions =
     [
         // Question stem
         new(new("t0"),  new(0),  "If",          TokenKind.Word),
@@ -133,37 +142,137 @@ public static class PracticeItemOne
         ) // "consecutive odd integers"
     ];
 
-    public static readonly TextStructure Text = new(
-        Tokens: TextTokens,
-        Sentences: Sentences,
-        Phrases: Phrases
+    public static readonly TextStructure Text = TextStructure.Create(
+        sourceText: SourceText,
+        tokens: TokenDefinitions,
+        sentences: Sentences,
+        phrases: Phrases
     );
+
+    public static IReadOnlyList<TextToken> TextTokens => Text.Tokens;
+
     public static readonly IReadOnlyList<AnswerChoice> Answers =
     [
-        new(
-            Id: new("answer-a"),
-            LabelSpan: new(new(23), 2),   // A.
-            ContentSpan: new(new(25), 3)  // n + 1
+        AnswerChoice.Create(
+            id: new("answer-a"),
+            labelSpan: new(new(23), 2),   // A.
+            contentSpan: new(new(25), 3), // n + 1
+            text: Text
         ),
 
-        new(
-            Id: new("answer-b"),
-            LabelSpan: new(new(28), 2),   // B.
-            ContentSpan: new(new(30), 3)  // n + 2
+        AnswerChoice.Create(
+            id: new("answer-b"),
+            labelSpan: new(new(28), 2),   // B.
+            contentSpan: new(new(30), 3), // n + 2
+            text: Text
         ),
 
-        new(
-            Id: new("answer-c"),
-            LabelSpan: new(new(33), 2),   // C.
-            ContentSpan: new(new(35), 4)  // 2n + 1
+        AnswerChoice.Create(
+            id: new("answer-c"),
+            labelSpan: new(new(33), 2),   // C.
+            contentSpan: new(new(35), 4), // 2n + 1
+            text: Text
         ),
 
-        new(
-            Id: new("answer-d"),
-            LabelSpan: new(new(39), 2),   // D.
-            ContentSpan: new(new(41), 4)  // 2n + 2
+        AnswerChoice.Create(
+            id: new("answer-d"),
+            labelSpan: new(new(39), 2),   // D.
+            contentSpan: new(new(41), 4), // 2n + 2
+            text: Text
         )
     ];
+
+    private static readonly AuthoredAnswerMathematics AuthoredMathematics =
+        SampleQuestionAuthoring.CreateAnswerMathematics(
+            Text,
+            [
+                new(new("answer-a"), new("math-answer-a"), new(new(25), 3), new("symbol-n"), null, 1),
+                new(new("answer-b"), new("math-answer-b"), new(new(30), 3), new("symbol-n"), null, 2),
+                new(new("answer-c"), new("math-answer-c"), new(new(35), 4), new("symbol-n"), 2, 1),
+                new(new("answer-d"), new("math-answer-d"), new(new(41), 4), new("symbol-n"), 2, 2)
+            ]);
+
+    private static readonly MathObject SecondMemberMathematics = new(
+        Id: new("math-second-member"),
+        RootNodeId: new("math-second-member-addition"),
+        Nodes:
+        [
+            new(
+                Id: new("math-second-member-variable"),
+                Kind: MathNodeKind.SymbolReference,
+                Value: "symbol-n",
+                ChildNodeIds: []),
+            new(
+                Id: new("math-second-member-step"),
+                Kind: MathNodeKind.IntegerLiteral,
+                Value: "2",
+                ChildNodeIds: []),
+            new(
+                Id: new("math-second-member-addition"),
+                Kind: MathNodeKind.Addition,
+                Value: null,
+                ChildNodeIds:
+                [
+                    new("math-second-member-variable"),
+                    new("math-second-member-step")
+                ])
+        ]
+    );
+
+    private static readonly MathObject RequestedValueComposedMathematics = new(
+        Id: new("math-requested-value-composed"),
+        RootNodeId: new("math-requested-value-composed-addition"),
+        Nodes:
+        [
+            new(
+                Id: new("math-requested-value-first-member"),
+                Kind: MathNodeKind.SymbolReference,
+                Value: "symbol-n",
+                ChildNodeIds: []),
+            new(
+                Id: new("math-requested-value-second-variable"),
+                Kind: MathNodeKind.SymbolReference,
+                Value: "symbol-n",
+                ChildNodeIds: []),
+            new(
+                Id: new("math-requested-value-ordered-step"),
+                Kind: MathNodeKind.IntegerLiteral,
+                Value: "2",
+                ChildNodeIds: []),
+            new(
+                Id: new("math-requested-value-second-member"),
+                Kind: MathNodeKind.Addition,
+                Value: null,
+                ChildNodeIds:
+                [
+                    new("math-requested-value-second-variable"),
+                    new("math-requested-value-ordered-step")
+                ]),
+            new(
+                Id: new("math-requested-value-composed-addition"),
+                Kind: MathNodeKind.Addition,
+                Value: null,
+                ChildNodeIds:
+                [
+                    new("math-requested-value-first-member"),
+                    new("math-requested-value-second-member")
+                ])
+        ]
+    );
+
+    public static readonly MathematicsModel Mathematics = new(
+        Objects: AuthoredMathematics.Mathematics.Objects
+            .Concat(
+            [
+                SecondMemberMathematics,
+                RequestedValueComposedMathematics
+            ])
+            .ToArray(),
+        TextBindings: AuthoredMathematics.Mathematics.TextBindings
+    );
+
+    public static readonly IReadOnlyList<AnswerMathBinding> AnswerMathBindings =
+        AuthoredMathematics.AnswerBindings;
     public static readonly VariableQuantity N = new(
         Id: new("entity-n"),
         SymbolId: new("symbol-n"),
@@ -214,6 +323,91 @@ public static class PracticeItemOne
         )
     );
 
+    public static readonly DerivedExpression SecondMember = new(
+        Id: new("latent-second-member"),
+        Meaning: LatentExpressionMeaning.QuantityDefinition,
+        MathObjectId: new("math-second-member"),
+        Provenance: new(
+            Origin: LatentMathOrigin.ImplicitlyDerived,
+            AnchorPhraseIds:
+            [
+                new("phrase-ordered-step")
+            ],
+            SourceEntityIds:
+            [
+                new("entity-n"),
+                new("entity-odd-pair")
+            ],
+            SourceLatentMathIds:
+            [
+                new("latent-ordered-step")
+            ]
+        )
+    );
+
+    public static readonly DerivedScalar LikeTermCount = new(
+        Id: new("latent-like-term-count"),
+        Meaning: LatentScalarMeaning.LikeTermCount,
+        Value: 2,
+        Provenance: new(
+            Origin: LatentMathOrigin.ImplicitlyDerived,
+            AnchorPhraseIds:
+            [
+                new("phrase-set-declaration")
+            ],
+            SourceEntityIds:
+            [
+                new("entity-odd-pair")
+            ],
+            SourceLatentMathIds: []
+        )
+    );
+
+    public static readonly DerivedExpression RequestedValueComposed = new(
+        Id: new("latent-requested-value-composed"),
+        Meaning: LatentExpressionMeaning.RequestedValueComposed,
+        MathObjectId: new("math-requested-value-composed"),
+        Provenance: new(
+            Origin: LatentMathOrigin.Computed,
+            AnchorPhraseIds:
+            [
+                new("phrase-target")
+            ],
+            SourceEntityIds:
+            [
+                new("entity-n"),
+                new("entity-odd-pair")
+            ],
+            SourceLatentMathIds:
+            [
+                new("latent-second-member")
+            ]
+        )
+    );
+
+    public static readonly DerivedExpression RequestedValueSimplified = new(
+        Id: new("latent-requested-value-simplified"),
+        Meaning: LatentExpressionMeaning.RequestedValueSimplified,
+        MathObjectId: new("math-answer-d"),
+        Provenance: new(
+            Origin: LatentMathOrigin.Computed,
+            AnchorPhraseIds:
+            [
+                new("phrase-target")
+            ],
+            SourceEntityIds:
+            [
+                new("entity-odd-pair")
+            ],
+            SourceLatentMathIds:
+            [
+                new("latent-requested-value-composed"),
+                new("latent-like-term-count"),
+                new("latent-ordered-step")
+            ]
+        )
+    );
+
     public static readonly SemanticModel Semantics = new(
         Entities:
         [
@@ -228,7 +422,11 @@ public static class PracticeItemOne
         ],
         LatentFacts:
         [
-            OrderedStep
+            OrderedStep,
+            SecondMember,
+            LikeTermCount,
+            RequestedValueComposed,
+            RequestedValueSimplified
         ]
     );
     public static readonly PracticeItemId Id = new("practice-item-sample-1");
@@ -237,7 +435,9 @@ public static class PracticeItemOne
         Id: Id,
         Text: Text,
         Semantics: Semantics,
+        Mathematics: Mathematics,
         Answers: Answers,
+        AnswerMathBindings: AnswerMathBindings,
         CorrectAnswerId: new("answer-d")
     );
 }

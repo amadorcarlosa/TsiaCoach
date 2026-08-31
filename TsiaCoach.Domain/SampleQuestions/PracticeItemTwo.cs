@@ -1,4 +1,5 @@
 using TsiaCoach.Domain.PracticeItems;
+using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.Text;
 using TsiaCoach.Domain.ValueObjects;
@@ -7,7 +8,17 @@ namespace TsiaCoach.Domain.SampleQuestions;
 
 public static class PracticeItemTwo
 {
-    public static readonly IReadOnlyList<TextToken> TextTokens =
+    public const string SourceText =
+        "Last year, a bakery sold w loaves of bread. " +
+        "This year, the bakery sold three more than twice the number of loaves of bread sold last year. " +
+        "If next year the bakery plans on selling twice the number of loaves of bread sold this year, " +
+        "how many loaves of bread does the bakery expect to sell next year?\n" +
+        "A. 2w\n" +
+        "B. 2w + 3\n" +
+        "C. 4w + 3\n" +
+        "D. 4w + 6";
+
+    private static readonly IReadOnlyList<TextToken> TokenDefinitions =
     [
         // Sentence 0: "Last year, a bakery sold w loaves of bread."
         new(new("t0"),  new(0),  "Last",    TokenKind.Word),
@@ -226,38 +237,61 @@ public static class PracticeItemTwo
         ) // "how many loaves of bread does the bakery expect to sell next year"
     ];
 
-    public static readonly TextStructure Text = new(
-        Tokens: TextTokens,
-        Sentences: Sentences,
-        Phrases: Phrases
+    public static readonly TextStructure Text = TextStructure.Create(
+        sourceText: SourceText,
+        tokens: TokenDefinitions,
+        sentences: Sentences,
+        phrases: Phrases
     );
+
+    public static IReadOnlyList<TextToken> TextTokens => Text.Tokens;
 
     public static readonly IReadOnlyList<AnswerChoice> Answers =
     [
-        new(
-            Id: new("answer-a"),
-            LabelSpan: new(new(64), 2),   // A.
-            ContentSpan: new(new(66), 2)  // 2w
+        AnswerChoice.Create(
+            id: new("answer-a"),
+            labelSpan: new(new(64), 2),   // A.
+            contentSpan: new(new(66), 2), // 2w
+            text: Text
         ),
 
-        new(
-            Id: new("answer-b"),
-            LabelSpan: new(new(68), 2),   // B.
-            ContentSpan: new(new(70), 4)  // 2w + 3
+        AnswerChoice.Create(
+            id: new("answer-b"),
+            labelSpan: new(new(68), 2),   // B.
+            contentSpan: new(new(70), 4), // 2w + 3
+            text: Text
         ),
 
-        new(
-            Id: new("answer-c"),
-            LabelSpan: new(new(74), 2),   // C.
-            ContentSpan: new(new(76), 4)  // 4w + 3
+        AnswerChoice.Create(
+            id: new("answer-c"),
+            labelSpan: new(new(74), 2),   // C.
+            contentSpan: new(new(76), 4), // 4w + 3
+            text: Text
         ),
 
-        new(
-            Id: new("answer-d"),
-            LabelSpan: new(new(80), 2),   // D.
-            ContentSpan: new(new(82), 4)  // 4w + 6
+        AnswerChoice.Create(
+            id: new("answer-d"),
+            labelSpan: new(new(80), 2),   // D.
+            contentSpan: new(new(82), 4), // 4w + 6
+            text: Text
         )
     ];
+
+    private static readonly AuthoredAnswerMathematics AuthoredMathematics =
+        SampleQuestionAuthoring.CreateAnswerMathematics(
+            Text,
+            [
+                new(new("answer-a"), new("math-answer-a"), new(new(66), 2), new("symbol-w"), 2, null),
+                new(new("answer-b"), new("math-answer-b"), new(new(70), 4), new("symbol-w"), 2, 3),
+                new(new("answer-c"), new("math-answer-c"), new(new(76), 4), new("symbol-w"), 4, 3),
+                new(new("answer-d"), new("math-answer-d"), new(new(82), 4), new("symbol-w"), 4, 6)
+            ]);
+
+    public static readonly MathematicsModel Mathematics =
+        AuthoredMathematics.Mathematics;
+
+    public static readonly IReadOnlyList<AnswerMathBinding> AnswerMathBindings =
+        AuthoredMathematics.AnswerBindings;
 
     public static readonly VariableQuantity W = new(
         Id: new("entity-w"),
@@ -367,6 +401,29 @@ public static class PracticeItemTwo
         RequestedEntityId: new("entity-next-year")
     );
 
+    public static readonly DerivedExpression RequestedValueSimplified = new(
+        Id: new("latent-requested-value-simplified"),
+        Meaning: LatentExpressionMeaning.RequestedValueSimplified,
+        MathObjectId: new("math-answer-d"),
+        Provenance: new(
+            Origin: LatentMathOrigin.Computed,
+            AnchorPhraseIds:
+            [
+                new("phrase-target")
+            ],
+            SourceEntityIds:
+            [
+                new("entity-next-year")
+            ],
+            SourceLatentMathIds:
+            [
+                new("latent-this-year-scale"),
+                new("latent-this-year-increment"),
+                new("latent-next-year-scale")
+            ]
+        )
+    );
+
     public static readonly SemanticModel Semantics = new(
         Entities:
         [
@@ -386,7 +443,8 @@ public static class PracticeItemTwo
         [
             ThisYearScaleFactor,
             ThisYearIncrement,
-            NextYearScaleFactor
+            NextYearScaleFactor,
+            RequestedValueSimplified
         ]
     );
 
@@ -396,7 +454,9 @@ public static class PracticeItemTwo
         Id: Id,
         Text: Text,
         Semantics: Semantics,
+        Mathematics: Mathematics,
         Answers: Answers,
+        AnswerMathBindings: AnswerMathBindings,
         CorrectAnswerId: new("answer-d")
     );
 }
