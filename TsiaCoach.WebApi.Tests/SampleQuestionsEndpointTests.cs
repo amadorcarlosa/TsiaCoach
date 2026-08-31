@@ -70,6 +70,47 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
     }
 
     [Test]
+    public async Task QuestionOne_ExposesExactTextAndAddressableMathBindings()
+    {
+        using HttpClient client = Factory.CreateClient();
+
+        PracticeItemResponse? item = await client.GetFromJsonAsync<PracticeItemResponse>(
+            "/api/sample-questions/practice-item-sample-1");
+
+        await Assert.That(item is not null).IsTrue();
+        await Assert.That(item!.Text.SourceText).IsEqualTo(PracticeItemOne.SourceText);
+
+        AnswerChoiceResponse answer = item.Answers.Single(candidate =>
+            candidate.Id == "answer-d");
+
+        await Assert.That(Slice(item.Text.SourceText, answer.LabelCharacterSpan))
+            .IsEqualTo("D.");
+        await Assert.That(Slice(item.Text.SourceText, answer.ContentCharacterSpan))
+            .IsEqualTo("2n + 2");
+
+        MathTextBindingResponse objectBinding = item.Mathematics.TextBindings
+            .Single(binding =>
+                binding.MathObjectId == "math-answer-d" &&
+                binding.MathNodeId is null);
+        MathTextBindingResponse additionBinding = item.Mathematics.TextBindings
+            .Single(binding =>
+                binding.MathNodeId == "math-answer-d-addition");
+
+        await Assert.That(Slice(item.Text.SourceText, objectBinding.CharacterSpan))
+            .IsEqualTo("2n + 2");
+        await Assert.That(Slice(item.Text.SourceText, additionBinding.CharacterSpan))
+            .IsEqualTo(" + ");
+        await Assert.That(item.AnswerMathBindings.Single(binding =>
+                binding.AnswerChoiceId == "answer-d").MathObjectId)
+            .IsEqualTo("math-answer-d");
+        await Assert.That(item.Semantics.LatentFacts
+                .OfType<DerivedExpressionResponse>()
+                .Single(fact => fact.Meaning == "requestedValueSimplified")
+                .MathObjectId)
+            .IsEqualTo("math-answer-d");
+    }
+
+    [Test]
     public async Task UnknownQuestion_ReturnsNotFound()
     {
         using HttpClient client = Factory.CreateClient();
@@ -108,4 +149,9 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
             .Take(span.Length)
             .Select(token => token.Surface)
             .ToArray();
+
+    private static string Slice(
+        string sourceText,
+        CharacterSpanResponse span) =>
+        sourceText.Substring(span.Start, span.Length);
 }

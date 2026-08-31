@@ -70,6 +70,7 @@ var api = app.MapGroup("/api");
 api.MapModels();
 api.MapAgents();
 api.MapSampleQuestions();
+api.MapScaffolds();
 app.Run();
 
 namespace TsiaCoach.WebApi

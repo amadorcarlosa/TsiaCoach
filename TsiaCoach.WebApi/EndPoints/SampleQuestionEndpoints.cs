@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.SampleQuestions;
+using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.ValueObjects;
 using TsiaCoach.WebApi.Response;
@@ -50,21 +51,25 @@ public static class SampleQuestionEndpoints
         new(
             Id: item.Id.Value,
             Text: new(
+                SourceText: item.Text.SourceText,
                 Tokens: item.Text.Tokens.Select(token => new TextTokenResponse(
                     Id: token.Id.Value,
                     Index: token.Index.Value,
                     Surface: token.Surface,
-                    Kind: ContractName(token.Kind)
+                    Kind: ContractName(token.Kind),
+                    CharacterSpan: ToResponse(token.CharacterSpan)
                 )).ToArray(),
                 Sentences: item.Text.Sentences.Select(sentence =>
                     new SentenceSpanResponse(
                         Id: sentence.Id.Value,
-                        Span: ToResponse(sentence.Span)
+                        Span: ToResponse(sentence.Span),
+                        CharacterSpan: ToResponse(sentence.CharacterSpan)
                     )).ToArray(),
                 Phrases: item.Text.Phrases.Select(phrase =>
                     new PhraseSpanResponse(
                         Id: phrase.Id.Value,
-                        Span: ToResponse(phrase.Span)
+                        Span: ToResponse(phrase.Span),
+                        CharacterSpan: ToResponse(phrase.CharacterSpan)
                     )).ToArray()
             ),
             Semantics: new(
@@ -72,16 +77,51 @@ public static class SampleQuestionEndpoints
                 Edges: item.Semantics.Edges.Select(ToResponse).ToArray(),
                 LatentFacts: item.Semantics.LatentFacts.Select(ToResponse).ToArray()
             ),
+            Mathematics: new(
+                Objects: item.Mathematics.Objects.Select(ToResponse).ToArray(),
+                TextBindings: item.Mathematics.TextBindings
+                    .Select(binding => new MathTextBindingResponse(
+                        MathObjectId: binding.MathObjectId.Value,
+                        MathNodeId: binding.MathNodeId?.Value,
+                        CharacterSpan: ToResponse(binding.CharacterSpan)
+                    ))
+                    .ToArray()
+            ),
             Answers: item.Answers.Select(answer => new AnswerChoiceResponse(
                 Id: answer.Id.Value,
                 LabelSpan: ToResponse(answer.LabelSpan),
-                ContentSpan: ToResponse(answer.ContentSpan)
+                LabelCharacterSpan: ToResponse(answer.LabelCharacterSpan),
+                ContentSpan: ToResponse(answer.ContentSpan),
+                ContentCharacterSpan: ToResponse(answer.ContentCharacterSpan)
             )).ToArray(),
+            AnswerMathBindings: item.AnswerMathBindings
+                .Select(binding => new AnswerMathBindingResponse(
+                    AnswerChoiceId: binding.AnswerChoiceId.Value,
+                    MathObjectId: binding.MathObjectId.Value
+                ))
+                .ToArray(),
             CorrectAnswerId: item.CorrectAnswerId.Value
         );
 
     private static TokenSpanResponse ToResponse(TokenSpan span) =>
         new(span.Start.Value, span.Length);
+
+    private static CharacterSpanResponse ToResponse(CharacterSpan span) =>
+        new(span.Start, span.Length);
+
+    private static MathObjectResponse ToResponse(MathObject value) =>
+        new(
+            Id: value.Id.Value,
+            RootNodeId: value.RootNodeId.Value,
+            Nodes: value.Nodes.Select(node => new MathNodeResponse(
+                Id: node.Id.Value,
+                Kind: ContractName(node.Kind),
+                Value: node.Value,
+                ChildNodeIds: node.ChildNodeIds
+                    .Select(id => id.Value)
+                    .ToArray()
+            )).ToArray()
+        );
 
     private static SemanticEntityResponse ToResponse(SemanticEntity entity) =>
         entity.Value switch

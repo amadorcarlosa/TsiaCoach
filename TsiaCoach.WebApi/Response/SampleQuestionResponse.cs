@@ -6,11 +6,14 @@ public sealed record PracticeItemResponse(
     string Id,
     TextStructureResponse Text,
     SemanticModelResponse Semantics,
+    MathematicsResponse Mathematics,
     IReadOnlyList<AnswerChoiceResponse> Answers,
+    IReadOnlyList<AnswerMathBindingResponse> AnswerMathBindings,
     string CorrectAnswerId
 );
 
 public sealed record TextStructureResponse(
+    string SourceText,
     IReadOnlyList<TextTokenResponse> Tokens,
     IReadOnlyList<SentenceSpanResponse> Sentences,
     IReadOnlyList<PhraseSpanResponse> Phrases
@@ -20,7 +23,8 @@ public sealed record TextTokenResponse(
     string Id,
     int Index,
     string Surface,
-    string Kind
+    string Kind,
+    CharacterSpanResponse CharacterSpan
 );
 
 public sealed record TokenSpanResponse(
@@ -28,20 +32,58 @@ public sealed record TokenSpanResponse(
     int Length
 );
 
+public sealed record CharacterSpanResponse(
+    int Start,
+    int Length
+);
+
 public sealed record SentenceSpanResponse(
     string Id,
-    TokenSpanResponse Span
+    TokenSpanResponse Span,
+    CharacterSpanResponse CharacterSpan
 );
 
 public sealed record PhraseSpanResponse(
     string Id,
-    TokenSpanResponse Span
+    TokenSpanResponse Span,
+    CharacterSpanResponse CharacterSpan
 );
 
 public sealed record AnswerChoiceResponse(
     string Id,
     TokenSpanResponse LabelSpan,
-    TokenSpanResponse ContentSpan
+    CharacterSpanResponse LabelCharacterSpan,
+    TokenSpanResponse ContentSpan,
+    CharacterSpanResponse ContentCharacterSpan
+);
+
+public sealed record AnswerMathBindingResponse(
+    string AnswerChoiceId,
+    string MathObjectId
+);
+
+public sealed record MathematicsResponse(
+    IReadOnlyList<MathObjectResponse> Objects,
+    IReadOnlyList<MathTextBindingResponse> TextBindings
+);
+
+public sealed record MathObjectResponse(
+    string Id,
+    string RootNodeId,
+    IReadOnlyList<MathNodeResponse> Nodes
+);
+
+public sealed record MathNodeResponse(
+    string Id,
+    string Kind,
+    string? Value,
+    IReadOnlyList<string> ChildNodeIds
+);
+
+public sealed record MathTextBindingResponse(
+    string MathObjectId,
+    string? MathNodeId,
+    CharacterSpanResponse CharacterSpan
 );
 
 public sealed record SemanticModelResponse(

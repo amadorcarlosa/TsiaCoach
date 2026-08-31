@@ -10,9 +10,6 @@ seo:
 
 hero:
   links:
-    - label: "Take the 12-question diagnostic →"
-      to: "/sample-questions"
-      size: "xl"
     - label: "Watch a walkthrough"
       to: "#how"
       color: "neutral"
@@ -76,12 +73,9 @@ testimonials:
 cta:
   title: "Clear the gate and get on with your degree."
   description: >-
-    Start with the 12-question diagnostic. No account is needed, and it takes
-    about 15 minutes.
+    Step through the scaffolded walkthroughs at your own pace. No account is
+    needed.
   links:
-    - label: "Start the diagnostic →"
-      to: "/sample-questions"
-      size: "lg"
     - label: "See how a walkthrough is built"
       to: "#how"
       color: "neutral"

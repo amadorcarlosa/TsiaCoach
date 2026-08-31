@@ -5,6 +5,9 @@ const items = [{
   label: 'How it works',
   to: '/#how'
 }, {
+  label: 'Parity ladder',
+  to: '/scaffolds/scaffold-parity-ladder'
+}, {
   label: "What's on the test",
   to: '/#areas'
 }]

@@ -136,6 +136,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scaffolds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetScaffolds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scaffolds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetScaffoldById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -159,7 +191,19 @@ export interface components {
         AnswerChoiceResponse: {
             id: string;
             labelSpan: components["schemas"]["TokenSpanResponse"];
+            labelCharacterSpan: components["schemas"]["CharacterSpanResponse"];
             contentSpan: components["schemas"]["TokenSpanResponse"];
+            contentCharacterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
+        AnswerMathBindingResponse: {
+            answerChoiceId: string;
+            mathObjectId: string;
+        };
+        CharacterSpanResponse: {
+            /** Format: int32 */
+            start: number | string;
+            /** Format: int32 */
+            length: number | string;
         };
         DerivationOperationResponse: components["schemas"]["DerivationOperationResponseScaleByResponse"] | components["schemas"]["DerivationOperationResponseIncrementByResponse"];
         DerivationOperationResponseIncrementByResponse: {
@@ -178,6 +222,11 @@ export interface components {
             name: string;
             displayName: string;
             vendor: components["schemas"]["VendorName"];
+        };
+        InstructionalBindingResponse: {
+            semanticEntityId: string;
+            /** Format: int32 */
+            value: number | string;
         };
         LatentMathProvenanceResponse: {
             origin: string;
@@ -203,6 +252,73 @@ export interface components {
             value: number | string;
             provenance: components["schemas"]["LatentMathProvenanceResponse"];
         };
+        LearnerActionResponse: components["schemas"]["LearnerActionResponseMatchEquivalentLengthActionResponse"] | components["schemas"]["LearnerActionResponseClassifyByFitActionResponse"] | components["schemas"]["LearnerActionResponseNameFitClassificationActionResponse"] | components["schemas"]["LearnerActionResponseTraverseAllGapsActionResponse"] | components["schemas"]["LearnerActionResponseJoinQuantitiesActionResponse"] | components["schemas"]["LearnerActionResponseEnterScalarActionResponse"] | components["schemas"]["LearnerActionResponseBuildExpressionActionResponse"] | components["schemas"]["LearnerActionResponseSelectAnswerChoiceActionResponse"];
+        LearnerActionResponseBuildExpressionActionResponse: {
+            /** @enum {string} */
+            type?: "buildExpression";
+        };
+        LearnerActionResponseClassifyByFitActionResponse: {
+            /** @enum {string} */
+            type?: "classifyByFit";
+        };
+        LearnerActionResponseEnterScalarActionResponse: {
+            /** @enum {string} */
+            type?: "enterScalar";
+            reading: string;
+        };
+        LearnerActionResponseJoinQuantitiesActionResponse: {
+            /** @enum {string} */
+            type?: "joinQuantities";
+        };
+        LearnerActionResponseMatchEquivalentLengthActionResponse: {
+            /** @enum {string} */
+            type?: "matchEquivalentLength";
+        };
+        LearnerActionResponseNameFitClassificationActionResponse: {
+            /** @enum {string} */
+            type?: "nameFitClassification";
+            classification: string;
+        };
+        LearnerActionResponseSelectAnswerChoiceActionResponse: {
+            /** @enum {string} */
+            type?: "selectAnswerChoice";
+        };
+        LearnerActionResponseTraverseAllGapsActionResponse: {
+            /** @enum {string} */
+            type?: "traverseAllGaps";
+        };
+        LengthSourceResponse: components["schemas"]["LengthSourceResponseLiteralLengthResponse"] | components["schemas"]["LengthSourceResponseLatentLengthReferenceResponse"];
+        LengthSourceResponseLatentLengthReferenceResponse: {
+            /** @enum {string} */
+            type?: "latentLengthReference";
+            latentMathId: string;
+        };
+        LengthSourceResponseLiteralLengthResponse: {
+            /** @enum {string} */
+            type?: "literalLength";
+            /** Format: int32 */
+            value: number | string;
+        };
+        MathematicsResponse: {
+            objects: components["schemas"]["MathObjectResponse"][];
+            textBindings: components["schemas"]["MathTextBindingResponse"][];
+        };
+        MathNodeResponse: {
+            id: string;
+            kind: string;
+            value: null | string;
+            childNodeIds: string[];
+        };
+        MathObjectResponse: {
+            id: string;
+            rootNodeId: string;
+            nodes: components["schemas"]["MathNodeResponse"][];
+        };
+        MathTextBindingResponse: {
+            mathObjectId: string;
+            mathNodeId: null | string;
+            characterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
         ModelMessage: {
             message: string;
             model: string;
@@ -211,12 +327,15 @@ export interface components {
         PhraseSpanResponse: {
             id: string;
             span: components["schemas"]["TokenSpanResponse"];
+            characterSpan: components["schemas"]["CharacterSpanResponse"];
         };
         PracticeItemResponse: {
             id: string;
             text: components["schemas"]["TextStructureResponse"];
             semantics: components["schemas"]["SemanticModelResponse"];
+            mathematics: components["schemas"]["MathematicsResponse"];
             answers: components["schemas"]["AnswerChoiceResponse"][];
+            answerMathBindings: components["schemas"]["AnswerMathBindingResponse"][];
             correctAnswerId: string;
         };
         ProblemDetails: {
@@ -226,6 +345,85 @@ export interface components {
             status?: null | number | string;
             detail?: null | string;
             instance?: null | string;
+        };
+        QuantityReferenceResponse: components["schemas"]["QuantityReferenceResponseSemanticQuantityReferenceResponse"] | components["schemas"]["QuantityReferenceResponseLatentExpressionReferenceResponse"];
+        QuantityReferenceResponseLatentExpressionReferenceResponse: {
+            /** @enum {string} */
+            type?: "latentExpressionReference";
+            latentMathId: string;
+        };
+        QuantityReferenceResponseSemanticQuantityReferenceResponse: {
+            /** @enum {string} */
+            type?: "semanticQuantityReference";
+            semanticEntityId: string;
+        };
+        ScaffoldPhaseResponse: {
+            id: string;
+            purpose: string;
+            steps: components["schemas"]["ScaffoldStepResponse"][];
+        };
+        ScaffoldPromptResponse: {
+            text: string;
+            focusPhraseIds: string[];
+        };
+        ScaffoldResourceResponse: components["schemas"]["ScaffoldResourceResponseRodResourceResponse"] | components["schemas"]["ScaffoldResourceResponseRodSeriesResourceResponse"];
+        ScaffoldResourceResponseRodResourceResponse: {
+            /** @enum {string} */
+            type?: "rodResource";
+            id: string;
+            length: components["schemas"]["LengthSourceResponse"];
+            multiplicity: string;
+            role: string;
+        };
+        ScaffoldResourceResponseRodSeriesResourceResponse: {
+            /** @enum {string} */
+            type?: "rodSeriesResource";
+            id: string;
+            lengths: (number | string)[];
+        };
+        ScaffoldResponse: {
+            id: string;
+            practiceItemId: string;
+            resources: components["schemas"]["ScaffoldResourceResponse"][];
+            phases: components["schemas"]["ScaffoldPhaseResponse"][];
+        };
+        ScaffoldSceneResponse: components["schemas"]["ScaffoldSceneResponseRodEquivalenceSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodMeasurementSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodGapSceneResponse"] | components["schemas"]["ScaffoldSceneResponseQuantityJoinSceneResponse"] | components["schemas"]["ScaffoldSceneResponseAnswerChoiceSceneResponse"];
+        ScaffoldSceneResponseAnswerChoiceSceneResponse: {
+            /** @enum {string} */
+            type?: "answerChoiceScene";
+        };
+        ScaffoldSceneResponseQuantityJoinSceneResponse: {
+            /** @enum {string} */
+            type?: "quantityJoinScene";
+            parts: components["schemas"]["QuantityReferenceResponse"][];
+            bindings: components["schemas"]["InstructionalBindingResponse"][];
+            showSizedTarget: boolean;
+        };
+        ScaffoldSceneResponseRodEquivalenceSceneResponse: {
+            /** @enum {string} */
+            type?: "rodEquivalenceScene";
+            unitRodId: string;
+            probeRodId: string;
+        };
+        ScaffoldSceneResponseRodGapSceneResponse: {
+            /** @enum {string} */
+            type?: "rodGapScene";
+            stepRodId: string;
+            classificationStepId: string;
+            includedOutcome: string;
+        };
+        ScaffoldSceneResponseRodMeasurementSceneResponse: {
+            /** @enum {string} */
+            type?: "rodMeasurementScene";
+            probeRodId: string;
+            spanSeriesId: string;
+        };
+        ScaffoldStepResponse: {
+            id: string;
+            prompt: components["schemas"]["ScaffoldPromptResponse"];
+            scene: components["schemas"]["StepSceneResponse"];
+            action: components["schemas"]["LearnerActionResponse"];
+            successCheck: components["schemas"]["SuccessCheckResponse"];
         };
         SemanticEdgeResponse: components["schemas"]["SemanticEdgeResponseSelectsElementResponse"] | components["schemas"]["SemanticEdgeResponseRefersToResponse"] | components["schemas"]["SemanticEdgeResponseDerivesFromResponse"] | components["schemas"]["SemanticEdgeResponseRequestsValueResponse"] | components["schemas"]["SemanticEdgeResponseRequestsOperationResponse"];
         SemanticEdgeResponseDerivesFromResponse: {
@@ -294,8 +492,61 @@ export interface components {
         SentenceSpanResponse: {
             id: string;
             span: components["schemas"]["TokenSpanResponse"];
+            characterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
+        StepSceneResponse: components["schemas"]["StepSceneResponseFreshSceneResponse"] | components["schemas"]["StepSceneResponseContinuedSceneResponse"];
+        StepSceneResponseContinuedSceneResponse: {
+            /** @enum {string} */
+            type?: "continuedScene";
+            sourceStepId: string;
+            access: string;
+        };
+        StepSceneResponseFreshSceneResponse: {
+            /** @enum {string} */
+            type?: "freshScene";
+            definition: components["schemas"]["ScaffoldSceneResponse"];
+        };
+        SuccessCheckResponse: components["schemas"]["SuccessCheckResponseLengthsAreEquivalentCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesComputedFitCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesIntegerDomainCheckResponse"] | components["schemas"]["SuccessCheckResponseAllGapsTraversedCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesPartCompositionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentScalarCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentExpressionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesCorrectAnswerCheckResponse"];
+        SuccessCheckResponseAllGapsTraversedCheckResponse: {
+            /** @enum {string} */
+            type?: "allGapsTraversed";
+            requiredResourceId: string;
+        };
+        SuccessCheckResponseLengthsAreEquivalentCheckResponse: {
+            /** @enum {string} */
+            type?: "lengthsAreEquivalent";
+        };
+        SuccessCheckResponseMatchesComputedFitCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesComputedFit";
+        };
+        SuccessCheckResponseMatchesCorrectAnswerCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesCorrectAnswer";
+        };
+        SuccessCheckResponseMatchesIntegerDomainCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesIntegerDomain";
+            classification: string;
+            domain: string;
+        };
+        SuccessCheckResponseMatchesLatentExpressionCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesLatentExpression";
+            expectedExpressionId: string;
+        };
+        SuccessCheckResponseMatchesLatentScalarCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesLatentScalar";
+            expectedValueId: string;
+            reading: string;
+        };
+        SuccessCheckResponseMatchesPartCompositionCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesPartComposition";
         };
         TextStructureResponse: {
+            sourceText: string;
             tokens: components["schemas"]["TextTokenResponse"][];
             sentences: components["schemas"]["SentenceSpanResponse"][];
             phrases: components["schemas"]["PhraseSpanResponse"][];
@@ -306,6 +557,7 @@ export interface components {
             index: number | string;
             surface: string;
             kind: string;
+            characterSpan: components["schemas"]["CharacterSpanResponse"];
         };
         TokenSpanResponse: {
             /** Format: int32 */
@@ -420,6 +672,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PracticeItemResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetScaffolds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaffoldResponse"][];
+                };
+            };
+        };
+    };
+    GetScaffoldById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaffoldResponse"];
                 };
             };
             /** @description Not Found */
