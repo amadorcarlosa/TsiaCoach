@@ -39,7 +39,10 @@ public sealed record ScaffoldStep(
     StepScene Scene,
     LearnerAction Action,
     SuccessCheck SuccessCheck
-);
+)
+{
+    public bool CanStartCold => Scene.Value is FreshScene;
+};
 
 public sealed record ScaffoldPrompt(
     string Text,
