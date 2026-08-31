@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tsia-coach-web-nuxt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "tsia-coach-web-nuxt", "dev"],
+      "port": 3000
+    }
+  ]
+}
