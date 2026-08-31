@@ -334,9 +334,7 @@ export interface components {
             text: components["schemas"]["TextStructureResponse"];
             semantics: components["schemas"]["SemanticModelResponse"];
             mathematics: components["schemas"]["MathematicsResponse"];
-            answers: components["schemas"]["AnswerChoiceResponse"][];
-            answerMathBindings: components["schemas"]["AnswerMathBindingResponse"][];
-            correctAnswerId: string;
+            interaction: components["schemas"]["QuestionInteractionResponse"];
         };
         ProblemDetails: {
             type?: null | string;
@@ -356,6 +354,14 @@ export interface components {
             /** @enum {string} */
             type?: "semanticQuantityReference";
             semanticEntityId: string;
+        };
+        QuestionInteractionResponse: components["schemas"]["QuestionInteractionResponseMultipleChoiceInteractionResponse"];
+        QuestionInteractionResponseMultipleChoiceInteractionResponse: {
+            /** @enum {string} */
+            type?: "multipleChoice";
+            answers: components["schemas"]["AnswerChoiceResponse"][];
+            answerMathBindings: components["schemas"]["AnswerMathBindingResponse"][];
+            correctAnswerId: string;
         };
         ScaffoldPhaseResponse: {
             id: string;

@@ -87,20 +87,21 @@ public static class SampleQuestionEndpoints
                     ))
                     .ToArray()
             ),
-            Answers: item.Answers.Select(answer => new AnswerChoiceResponse(
-                Id: answer.Id.Value,
-                LabelSpan: ToResponse(answer.LabelSpan),
-                LabelCharacterSpan: ToResponse(answer.LabelCharacterSpan),
-                ContentSpan: ToResponse(answer.ContentSpan),
-                ContentCharacterSpan: ToResponse(answer.ContentCharacterSpan)
-            )).ToArray(),
-            AnswerMathBindings: item.AnswerMathBindings
-                .Select(binding => new AnswerMathBindingResponse(
-                    AnswerChoiceId: binding.AnswerChoiceId.Value,
-                    MathObjectId: binding.MathObjectId.Value
-                ))
-                .ToArray(),
-            CorrectAnswerId: item.CorrectAnswerId.Value
+            Interaction: new MultipleChoiceInteractionResponse(
+                Answers: item.Answers.Select(answer => new AnswerChoiceResponse(
+                    Id: answer.Id.Value,
+                    LabelSpan: ToResponse(answer.LabelSpan),
+                    LabelCharacterSpan: ToResponse(answer.LabelCharacterSpan),
+                    ContentSpan: ToResponse(answer.ContentSpan),
+                    ContentCharacterSpan: ToResponse(answer.ContentCharacterSpan)
+                )).ToArray(),
+                AnswerMathBindings: item.AnswerMathBindings
+                    .Select(binding => new AnswerMathBindingResponse(
+                        AnswerChoiceId: binding.AnswerChoiceId.Value,
+                        MathObjectId: binding.MathObjectId.Value
+                    ))
+                    .ToArray(),
+                CorrectAnswerId: item.CorrectAnswerId.Value)
         );
 
     private static TokenSpanResponse ToResponse(TokenSpan span) =>

@@ -42,6 +42,8 @@ public static class AgentEndpoints
         AgentCreation creation = agentFactory.Create(
             request.Model,
             request.Instructions);
+        
+        
 
         return creation switch
         {

@@ -7,10 +7,18 @@ public sealed record PracticeItemResponse(
     TextStructureResponse Text,
     SemanticModelResponse Semantics,
     MathematicsResponse Mathematics,
+    QuestionInteractionResponse Interaction
+);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(MultipleChoiceInteractionResponse), "multipleChoice")]
+public abstract record QuestionInteractionResponse;
+
+public sealed record MultipleChoiceInteractionResponse(
     IReadOnlyList<AnswerChoiceResponse> Answers,
     IReadOnlyList<AnswerMathBindingResponse> AnswerMathBindings,
     string CorrectAnswerId
-);
+) : QuestionInteractionResponse;
 
 public sealed record TextStructureResponse(
     string SourceText,

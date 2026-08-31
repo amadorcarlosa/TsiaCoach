@@ -32,8 +32,14 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
         PracticeItemResponse questionTwo = items.Single(item =>
             item.Id == "practice-item-sample-2");
 
+        MultipleChoiceInteractionResponse questionOneInteraction =
+            RequireMultipleChoice(questionOne);
+        MultipleChoiceInteractionResponse questionTwoInteraction =
+            RequireMultipleChoice(questionTwo);
+
         await Assert.That(questionOne.Text.Tokens.Count).IsEqualTo(45);
-        await Assert.That(questionOne.CorrectAnswerId).IsEqualTo("answer-d");
+        await Assert.That(questionOneInteraction.CorrectAnswerId)
+            .IsEqualTo("answer-d");
         await Assert.That(questionOne.Semantics.Entities
                 .OfType<OrderedSetResponse>()
                 .Single()
@@ -41,7 +47,8 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
             .IsEqualTo("oddIntegers");
 
         await Assert.That(questionTwo.Text.Tokens.Count).IsEqualTo(86);
-        await Assert.That(questionTwo.CorrectAnswerId).IsEqualTo("answer-d");
+        await Assert.That(questionTwoInteraction.CorrectAnswerId)
+            .IsEqualTo("answer-d");
         await Assert.That(questionTwo.Semantics.Entities
                 .OfType<DerivedQuantityResponse>()
                 .Count())
@@ -80,7 +87,10 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
         await Assert.That(item is not null).IsTrue();
         await Assert.That(item!.Text.SourceText).IsEqualTo(PracticeItemOne.SourceText);
 
-        AnswerChoiceResponse answer = item.Answers.Single(candidate =>
+        MultipleChoiceInteractionResponse interaction =
+            RequireMultipleChoice(item);
+
+        AnswerChoiceResponse answer = interaction.Answers.Single(candidate =>
             candidate.Id == "answer-d");
 
         await Assert.That(Slice(item.Text.SourceText, answer.LabelCharacterSpan))
@@ -100,7 +110,7 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
             .IsEqualTo("2n + 2");
         await Assert.That(Slice(item.Text.SourceText, additionBinding.CharacterSpan))
             .IsEqualTo(" + ");
-        await Assert.That(item.AnswerMathBindings.Single(binding =>
+        await Assert.That(interaction.AnswerMathBindings.Single(binding =>
                 binding.AnswerChoiceId == "answer-d").MathObjectId)
             .IsEqualTo("math-answer-d");
         await Assert.That(item.Semantics.LatentFacts
@@ -154,4 +164,10 @@ public sealed class SampleQuestionsEndpointTests : ApiTestBase
         string sourceText,
         CharacterSpanResponse span) =>
         sourceText.Substring(span.Start, span.Length);
+
+    private static MultipleChoiceInteractionResponse RequireMultipleChoice(
+        PracticeItemResponse item) =>
+        item.Interaction as MultipleChoiceInteractionResponse
+        ?? throw new InvalidOperationException(
+            $"Practice item '{item.Id}' is not multiple choice.");
 }
