@@ -50,13 +50,13 @@ public sealed class PracticeItemEvaluationTests
     }
 
     [Test]
-    public async Task PracticeItemTwo_AnswerA_ReturnsIncorrectCheckIncompleteThisYear()
+    public async Task PracticeItemTwo_AnswerA_ReturnsIncorrectCheckThisYearResolvedAsW()
     {
         CheckOutcome outcome = PracticeItemTwo.Item.Evaluate(new("answer-a"));
 
         IncorrectCheck? incorrect = outcome.Value as IncorrectCheck;
         await Assert.That(incorrect is not null).IsTrue();
-        await Assert.That(incorrect!.Misconception).IsEqualTo(new MisconceptionCode("incomplete-this-year"));
+        await Assert.That(incorrect!.Misconception).IsEqualTo(new MisconceptionCode("this-year-resolved-as-w"));
     }
 
     [Test]

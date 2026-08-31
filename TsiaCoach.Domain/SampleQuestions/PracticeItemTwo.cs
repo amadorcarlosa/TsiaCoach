@@ -296,7 +296,7 @@ public static class PracticeItemTwo
     public static readonly IReadOnlyDictionary<AnswerChoiceId, MisconceptionCode> Distractors =
         new Dictionary<AnswerChoiceId, MisconceptionCode>
         {
-            { new("answer-a"), new("incomplete-this-year") },
+            { new("answer-a"), new("this-year-resolved-as-w") },
             { new("answer-b"), new("stopped-at-this-year") },
             { new("answer-c"), new("scaled-variable-only") }
         };
