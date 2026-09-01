@@ -22,6 +22,10 @@ export interface DraggablePieceOptions {
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 
+// Fraction of the piece that must overlap a zone for a drop to count. Shared
+// by snap targeting and drop resolution so they always agree.
+const DROP_OVERLAP_RATIO = 0.2
+
 export function useDraggablePiece(options: DraggablePieceOptions) {
   const activeZoneId = ref<string | null>(null)
   const isKeyboardLifted = ref(false)
@@ -80,7 +84,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
 
     // Only snap into a zone the release position would already pass hitZone
     // for, so the visual snap and the drop-resolution hit test always agree.
-    const zoneId = hitZone(pieceRect, accepting, 0.5)
+    const zoneId = hitZone(pieceRect, accepting, DROP_OVERLAP_RATIO)
     const zone = zoneId ? accepting.find(candidate => candidate.id === zoneId) : undefined
 
     if (!zone) {
@@ -168,7 +172,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     dropResolved = true
     activeZoneId.value = null
 
-    const zoneId = pieceRect ? hitZone(pieceRect, acceptingZones(), 0.5) : null
+    const zoneId = pieceRect ? hitZone(pieceRect, acceptingZones(), DROP_OVERLAP_RATIO) : null
 
     if (zoneId) {
       options.onDropped(zoneId)
