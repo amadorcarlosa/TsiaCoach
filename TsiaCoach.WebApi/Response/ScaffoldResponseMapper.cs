@@ -1,6 +1,8 @@
 using TsiaCoach.Domain.Scaffolds;
 using TsiaCoach.Domain.ScaffoldSessions;
 using TsiaCoach.Domain.Scaffolds.Evaluation;
+using TsiaCoach.Domain.PracticeItems;
+using TsiaCoach.Domain.Semantics;
 using TsiaCoach.WebApi.ScaffoldSessions;
 
 namespace TsiaCoach.WebApi.Response;
@@ -36,6 +38,7 @@ internal static class ScaffoldResponseMapper
         ScaffoldResource resource) => ToResponse(resource);
 
     internal static ScaffoldLearnerStepResponse ToLearnerStepResponse(
+        Scaffold scaffold,
         ScaffoldStep step) =>
         new(
             Id: step.Id.Value,
@@ -44,8 +47,24 @@ internal static class ScaffoldResponseMapper
                 FocusPhraseIds: step.Prompt.FocusPhraseIds
                     .Select(id => id.Value)
                     .ToArray()),
-            Scene: ToResponse(step.Scene),
+            Scene: ToResponse(ResolveScene(scaffold, step)),
             Action: ToResponse(step.Action));
+
+    internal static ScaffoldLearnerResourceResponse ToLearnerResourceResponse(
+        ScaffoldResource resource,
+        PracticeItem practiceItem) =>
+        resource.Value switch
+        {
+            RodResource value => new ScaffoldLearnerRodResourceResponse(
+                Id: value.Id.Value,
+                Length: ResolveLength(value.Length, practiceItem),
+                Multiplicity: ContractName(value.Multiplicity),
+                Role: ContractName(value.Role)),
+            RodSeriesResource value => new ScaffoldLearnerRodSeriesResourceResponse(
+                Id: value.Id.Value,
+                Lengths: value.Lengths.Select(length => length.Value).ToArray()),
+            _ => throw Unsupported("scaffold learner resource", resource.Value)
+        };
 
     private static ScaffoldResourceResponse ToResponse(ScaffoldResource resource) =>
         resource.Value switch
@@ -164,6 +183,50 @@ internal static class ScaffoldResponseMapper
 
     private static InvalidOperationException Unsupported(string kind, object? value) =>
         new($"Unsupported {kind} case: {value?.GetType().Name ?? "null"}.");
+
+    private static ScaffoldScene ResolveScene(
+        Scaffold scaffold,
+        ScaffoldStep step) =>
+        step.Scene.Value switch
+        {
+            FreshScene fresh => fresh.Definition,
+            ContinuedScene continued => ResolveScene(
+                scaffold,
+                scaffold.Phases
+                    .SelectMany(phase => phase.Steps)
+                    .Single(candidate => candidate.Id == continued.SourceStepId)),
+            _ => throw Unsupported("step scene", step.Scene.Value)
+        };
+
+    private static int ResolveLength(
+        LengthSource source,
+        PracticeItem practiceItem) =>
+        source.Value switch
+        {
+            LiteralLength literal => literal.Value.Value,
+            LatentLengthReference latent => ScalarLength(practiceItem, latent),
+            _ => throw Unsupported("length source", source.Value)
+        };
+
+    private static int ScalarLength(
+        PracticeItem practiceItem,
+        LatentLengthReference reference)
+    {
+        DerivedScalar scalar = practiceItem.Semantics.LatentFacts
+            .Select(fact => fact.Value)
+            .OfType<DerivedScalar>()
+            .SingleOrDefault(candidate => candidate.Id == reference.LatentMathId)
+            ?? throw new InvalidOperationException(
+                $"Latent length '{reference.LatentMathId.Value}' does not exist.");
+
+        if (scalar.Value <= 0 || scalar.Value != decimal.Truncate(scalar.Value))
+        {
+            throw new InvalidOperationException(
+                $"Latent length '{reference.LatentMathId.Value}' must be a positive whole number.");
+        }
+
+        return checked((int)scalar.Value);
+    }
 }
 
 internal static class ScaffoldSessionResponseMapper
@@ -212,7 +275,9 @@ internal static class ScaffoldSessionResponseMapper
             CompletedStepCount: completedStepCount,
             TotalStepCount: totalStepCount,
             Resources: context.Scaffold.Resources
-                .Select(ScaffoldResponseMapper.ToResourceResponse)
+                .Select(resource => ScaffoldResponseMapper.ToLearnerResourceResponse(
+                    resource,
+                    context.PracticeItem))
                 .ToArray(),
             State: state,
             LastCheck: lastCheck);
@@ -228,7 +293,7 @@ internal static class ScaffoldSessionResponseMapper
             ?? throw new InvalidOperationException(
                 $"Scaffold step '{stepId.Value}' does not exist.");
 
-        return ScaffoldResponseMapper.ToLearnerStepResponse(step);
+        return ScaffoldResponseMapper.ToLearnerStepResponse(scaffold, step);
     }
 
     private static ScaffoldLastCheckResponse ToLastCheck(

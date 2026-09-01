@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@nuxt/kit": "^4.5.2",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.3.0",
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",

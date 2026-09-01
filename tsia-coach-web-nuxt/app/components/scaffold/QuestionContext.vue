@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import type { CharacterSpan, SampleItem } from '#shared/types/sample-items'
-import { getMultipleChoiceInteraction } from '#shared/types/sample-items'
+import type { CharacterSpan, PracticeItemPrompt } from '#shared/types/sample-items'
 import {
   createInteractiveTextSegments,
   sliceSourceText
 } from '~/utils/interactive-text'
 
 const props = withDefaults(defineProps<{
-  practiceItem: SampleItem
+  practiceItem: PracticeItemPrompt
   focusPhraseIds?: string[]
   answersRevealed?: boolean
 }>(), {
@@ -16,7 +15,7 @@ const props = withDefaults(defineProps<{
 })
 
 const stemSpan = computed<CharacterSpan>(() => {
-  const interaction = getMultipleChoiceInteraction(props.practiceItem)
+  const interaction = props.practiceItem.interaction
   const firstAnswerStart = Math.min(
     ...interaction?.answers.map(
       answer => Number(answer.labelCharacterSpan.start)

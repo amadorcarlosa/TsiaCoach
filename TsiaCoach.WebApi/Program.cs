@@ -51,8 +51,13 @@ builder.Services.AddSingleton<ScaffoldSessionService>();
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.AllowOutOfOrderMetadataProperties = true;
     options.SerializerOptions.Converters.Add(
-        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+        new JsonStringEnumConverter(
+            JsonNamingPolicy.CamelCase,
+            allowIntegerValues: false));
+});
 builder.AddServiceDefaults();
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>

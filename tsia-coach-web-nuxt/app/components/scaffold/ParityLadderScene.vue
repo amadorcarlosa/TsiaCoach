@@ -1,179 +1,122 @@
 <script setup lang="ts">
-import type { SampleItem } from '#shared/types/sample-items'
-import { getMultipleChoiceInteraction } from '#shared/types/sample-items'
+import type { PracticeItemPrompt } from '#shared/types/sample-items'
 import type {
-  FreshScene,
-  QuantityJoinScene,
-  RodSeriesResource,
-  Scaffold,
-  ScaffoldStep
+  ScaffoldLastCheck,
+  ScaffoldLearnerResource,
+  ScaffoldLearnerRodResource,
+  ScaffoldLearnerRodSeriesResource,
+  ScaffoldLearnerStep,
+  ScaffoldStepSubmission,
 } from '#shared/types/scaffolds'
-import { latentExpressionText, latentScalarValue } from '~/utils/scaffold-math'
+import { mathObjectText } from '~/utils/scaffold-math'
 import { sliceSourceText } from '~/utils/interactive-text'
 
 const props = defineProps<{
-  scaffold: Scaffold
-  step: ScaffoldStep
-  practiceItem: SampleItem
-  completed: boolean
+  resources: ScaffoldLearnerResource[]
+  step: ScaffoldLearnerStep
+  practiceItem: PracticeItemPrompt
+  lastCheck: ScaffoldLastCheck | null
+  checking: boolean
 }>()
 
 const emit = defineEmits<{
-  complete: []
+  submit: [submission: ScaffoldStepSubmission]
 }>()
 
-type CheckState = 'idle' | 'correct' | 'incorrect'
+const unitRodCount = ref(0)
+const leftoverSelections = ref<Set<number>>(new Set())
+const integerDomain = ref<'integers' | 'oddIntegers' | 'evenIntegers' | null>(null)
+const traversedGapCount = ref(0)
+const selectedPartIndexes = ref<Set<number>>(new Set())
+const scalarValue = ref<number | null>(null)
+const selectedMathObjectId = ref<string | null>(null)
+const selectedAnswerChoiceId = ref<string | null>(null)
+const equivalenceBoardEl = ref<HTMLElement | null>(null)
+const matchBuildZoneEl = ref<HTMLElement | null>(null)
+const matchSupplyPieceEl = ref<HTMLElement | null>(null)
 
-const whiteCount = ref(0)
-const oddSelections = ref<Set<number>>(new Set())
-const classificationName = ref<'odd' | 'even' | null>(null)
-const gapProgress = ref(0)
-const scalarAnswer = ref<number | null>(null)
-const joinedParts = ref<Set<number>>(new Set())
-const expressionAnswer = ref<string | null>(null)
-const answerChoiceId = ref<string | null>(null)
-const checkState = ref<CheckState>('idle')
-const classificationNames = ['odd', 'even'] as const
+const matchDropZones = useDropZones(equivalenceBoardEl)
+matchDropZones.registerZone('match-build-row', matchBuildZoneEl, { accepts: () => unitRodCount.value < 3 })
+
+const matchDragAnnouncer = useDragAnnouncer()
+const { activeZoneId, resetToOrigin } = useDraggablePiece({
+  pieceId: 'match-equivalent-length-white-rod',
+  el: matchSupplyPieceEl,
+  boardEl: equivalenceBoardEl,
+  zones: matchDropZones,
+  onDropped: () => {
+    unitRodCount.value += 1
+    clearCheck()
+    resetToOrigin()
+  },
+  announce: matchDragAnnouncer.announce,
+  announceLabel: 'white rod',
+})
+
+function clearCheck() {
+  // no-op placeholder for local check-state reset hooks
+}
 
 const actionType = computed(() => props.step.action.type)
+const scene = computed(() => props.step.scene)
+const rodResources = computed(() => props.resources.filter(
+  resource => resource.type === 'rodResource',
+) as ScaffoldLearnerRodResource[])
+const seriesResource = computed(() => props.resources.find(
+  resource => resource.type === 'rodSeriesResource',
+) as ScaffoldLearnerRodSeriesResource | undefined)
+const measurementLengths = computed(() => seriesResource.value?.lengths.map(Number) ?? [])
 
-const rodSeries = computed(() => props.scaffold.resources.find(resource =>
-  resource.type === 'rodSeriesResource'
-) as RodSeriesResource | undefined)
+function rodById(id: string | undefined): ScaffoldLearnerRodResource | undefined {
+  return rodResources.value.find(resource => resource.id === id)
+}
 
-const measurementLengths = computed(() =>
-  rodSeries.value?.lengths.map(Number) ?? []
+const unitRod = computed(() => {
+  if (scene.value.type === 'rodEquivalenceScene') return rodById(scene.value.unitRodId)
+  return rodResources.value.find(resource => resource.role.toLowerCase().includes('unit'))
+})
+
+const stepRod = computed(() => {
+  if (scene.value.type === 'rodEquivalenceScene') return rodById(scene.value.probeRodId)
+  if (scene.value.type === 'rodMeasurementScene') return rodById(scene.value.probeRodId)
+  if (scene.value.type === 'rodGapScene') return rodById(scene.value.stepRodId)
+  return rodResources.value.find(resource => resource.role.toLowerCase().includes('step'))
+})
+
+const stepLength = computed(() => Number(stepRod.value?.length ?? 2))
+const unitLength = computed(() => Number(unitRod.value?.length ?? 1))
+const displayedClass = computed(() => measurementLengths.value.filter(length =>
+  (length - unitLength.value) % stepLength.value === 0,
+))
+const gapPairs = computed(() => displayedClass.value.slice(0, -1).map((from, index) => ({
+  from,
+  to: displayedClass.value[index + 1]!,
+  resourceId: stepRod.value?.id ?? '',
+})))
+const joinScene = computed(() => scene.value.type === 'quantityJoinScene' ? scene.value : null)
+const answerViews = computed(() => props.practiceItem.interaction.answers.map(answer => ({
+  id: answer.id,
+  label: sliceSourceText(props.practiceItem, answer.labelCharacterSpan),
+  expression: sliceSourceText(props.practiceItem, answer.contentCharacterSpan),
+})))
+const expressionOptions = computed(() => props.practiceItem.mathematics.objects
+  .map(object => ({ id: object.id, text: mathObjectText(props.practiceItem, object.id) }))
+  .filter((option): option is { id: string, text: string } => Boolean(option.text)))
+const lastResponseWasWrong = computed(() =>
+  props.lastCheck?.stepId === props.step.id && !props.lastCheck.satisfied,
 )
 
-const freshScene = computed(() =>
-  props.step.scene.type === 'freshScene'
-    ? props.step.scene as FreshScene
-    : null
-)
-
-const joinScene = computed(() => {
-  const definition = freshScene.value?.definition
-  return definition?.type === 'quantityJoinScene'
-    ? definition as QuantityJoinScene
-    : null
-})
-
-const isKnownJoin = computed(() =>
-  (joinScene.value?.bindings.length ?? 0) > 0
-)
-
-const baseLabel = computed(() => isKnownJoin.value ? '15' : 'n')
-const baseLength = computed(() => isKnownJoin.value ? 15 : 8)
-
-const joinStageEl = ref<HTMLElement | null>(null)
-const partZeroEl = ref<HTMLElement | null>(null)
-const partOneEl = ref<HTMLElement | null>(null)
-const sumLaneEl = ref<HTMLElement | null>(null)
-
-const firstPartLabel = computed(() => `First part, ${baseLabel.value}`)
-const nextPartLabel = computed(() => `Next part, ${baseLabel.value} plus 2`)
-
-const joinDropZones = useDropZones(joinStageEl)
-// The zone is the whole Sum lane, not the train inside it: an empty train
-// hugs its content (~20px tall), so no piece could ever reach the 50% overlap
-// hitZone needs. The lane keeps a stable min-height taller than a piece, so the
-// first drop is reachable and the zone geometry stops moving as rods are added.
-joinDropZones.registerZone('joined-train', sumLaneEl, {
-  accepts: pieceId => !joinedParts.value.has(Number(pieceId))
-})
-
-const joinAnnouncer = useDragAnnouncer()
-
-const partZeroDrag = useDraggablePiece({
-  pieceId: '0',
-  el: partZeroEl,
-  boardEl: joinStageEl,
-  zones: joinDropZones,
-  onDropped: () => {
-    const next = new Set(joinedParts.value)
-    next.add(0)
-    joinedParts.value = next
-    clearCheck()
-    partZeroDrag.resetToOrigin()
-  },
-  announce: joinAnnouncer.announce,
-  announceLabel: firstPartLabel.value
-})
-
-const partOneDrag = useDraggablePiece({
-  pieceId: '1',
-  el: partOneEl,
-  boardEl: joinStageEl,
-  zones: joinDropZones,
-  onDropped: () => {
-    const next = new Set(joinedParts.value)
-    next.add(1)
-    joinedParts.value = next
-    clearCheck()
-    partOneDrag.resetToOrigin()
-  },
-  announce: joinAnnouncer.announce,
-  announceLabel: nextPartLabel.value
-})
-
-const joinActiveZoneId = computed(() =>
-  partZeroDrag.activeZoneId.value ?? partOneDrag.activeZoneId.value
-)
-
-const expectedScalar = computed(() => {
-  const check = props.step.successCheck
-  return check.type === 'matchesLatentScalar'
-    ? latentScalarValue(props.practiceItem, check.expectedValueId)
-    : null
-})
-
-const expectedExpression = computed(() => {
-  const check = props.step.successCheck
-  return check.type === 'matchesLatentExpression'
-    ? latentExpressionText(props.practiceItem, check.expectedExpressionId)
-    : null
-})
-
-const expressionOptions = computed(() => {
-  if (expectedExpression.value === 'n + (n + 2)') {
-    return ['n + 2', 'n + (n + 2)', '2n + 1']
-  }
-
-  return ['n + 2', '2n + 1', '2n + 2']
-})
-
-const multipleChoiceInteraction = computed(() =>
-  getMultipleChoiceInteraction(props.practiceItem)
-)
-
-const answerViews = computed(() =>
-  multipleChoiceInteraction.value?.answers.map(answer => ({
-    id: answer.id,
-    label: sliceSourceText(props.practiceItem, answer.labelCharacterSpan),
-    expression: sliceSourceText(props.practiceItem, answer.contentCharacterSpan)
-  })) ?? []
-)
-
-const canCheck = computed(() => {
+const canSubmit = computed(() => {
   switch (actionType.value) {
-    case 'matchEquivalentLength':
-      return whiteCount.value > 0
-    case 'classifyByFit':
-      return oddSelections.value.size > 0
-    case 'nameFitClassification':
-      return classificationName.value !== null
-    case 'traverseAllGaps':
-      return gapProgress.value === 4
-    case 'joinQuantities':
-      return joinedParts.value.size === 2
-    case 'enterScalar':
-      return scalarAnswer.value !== null
-    case 'buildExpression':
-      return expressionAnswer.value !== null
-    case 'selectAnswerChoice':
-      return answerChoiceId.value !== null
-    default:
-      return false
+    case 'matchEquivalentLength': return unitRodCount.value > 0
+    case 'classifyByFit': return measurementLengths.value.length > 0
+    case 'nameFitClassification': return integerDomain.value !== null
+    case 'traverseAllGaps': return traversedGapCount.value > 0
+    case 'joinQuantities': return selectedPartIndexes.value.size > 0
+    case 'enterScalar': return scalarValue.value !== null
+    case 'buildExpression': return selectedMathObjectId.value !== null
+    case 'selectAnswerChoice': return selectedAnswerChoiceId.value !== null
+    default: return false
   }
 })
 
@@ -182,822 +125,254 @@ const checkLabel = computed(() => {
     case 'matchEquivalentLength': return 'Check the match'
     case 'classifyByFit': return 'Check the group'
     case 'nameFitClassification': return 'Check the name'
-    case 'traverseAllGaps': return 'Check every gap'
-    case 'joinQuantities': return 'Check the joined train'
+    case 'traverseAllGaps': return 'Check the gaps'
+    case 'joinQuantities': return 'Check the joined parts'
     case 'selectAnswerChoice': return 'Check answer'
     default: return 'Check response'
   }
 })
 
-const feedbackText = computed(() => {
-  if (checkState.value === 'correct') {
-    return actionType.value === 'traverseAllGaps'
-      ? 'The same red rod crosses every gap. The step stays 2.'
-      : 'That structure is correct. Keep it on the board.'
-  }
-
-  if (checkState.value === 'incorrect') {
-    if (actionType.value === 'classifyByFit') {
-      return 'Try the red rod again. Select only lengths that leave one white unit.'
-    }
-
-    if (actionType.value === 'enterScalar') {
-      return 'Read the object again: are you counting pieces, or measuring a length?'
-    }
-
-    return 'The pieces do not match yet. Adjust the board and check again.'
-  }
-
-  return null
-})
-
-function clearCheck() {
-  if (checkState.value !== 'idle') {
-    checkState.value = 'idle'
-  }
-}
-
-function toggleOdd(length: number) {
-  const next = new Set(oddSelections.value)
+function toggleNumber(length: number) {
+  const next = new Set(leftoverSelections.value)
   next.has(length) ? next.delete(length) : next.add(length)
-  oddSelections.value = next
-  clearCheck()
+  leftoverSelections.value = next
 }
 
-function chooseClassification(value: 'odd' | 'even') {
-  classificationName.value = value
-  clearCheck()
+function togglePart(index: number) {
+  const next = new Set(selectedPartIndexes.value)
+  next.has(index) ? next.delete(index) : next.add(index)
+  selectedPartIndexes.value = next
 }
 
-function crossGap(index: number) {
-  if (index === gapProgress.value) {
-    gapProgress.value += 1
-    clearCheck()
-  }
-}
-
-function chooseScalar(value: number) {
-  scalarAnswer.value = value
-  clearCheck()
-}
-
-function chooseExpression(value: string) {
-  expressionAnswer.value = value
-  clearCheck()
-}
-
-function chooseAnswer(id: string) {
-  answerChoiceId.value = id
-  clearCheck()
-}
-
-function checkResponse() {
-  let correct = false
-
+function createSubmission(): ScaffoldStepSubmission | null {
   switch (actionType.value) {
-    case 'matchEquivalentLength':
-      correct = whiteCount.value === 2
-      break
-    case 'classifyByFit':
-      correct = [1, 3, 5, 7, 9].every(value => oddSelections.value.has(value))
-        && oddSelections.value.size === 5
-      break
-    case 'nameFitClassification':
-      correct = classificationName.value === 'odd'
-      break
-    case 'traverseAllGaps':
-      correct = gapProgress.value === 4
-      break
-    case 'joinQuantities':
-      correct = joinedParts.value.size === 2
-      break
-    case 'enterScalar':
-      correct = scalarAnswer.value === expectedScalar.value
-      break
-    case 'buildExpression':
-      correct = expressionAnswer.value === expectedExpression.value
-      break
-    case 'selectAnswerChoice':
-      correct = answerChoiceId.value ===
-        multipleChoiceInteraction.value?.correctAnswerId
-      break
-  }
-
-  checkState.value = correct ? 'correct' : 'incorrect'
-
-  if (correct) {
-    emit('complete')
+    case 'matchEquivalentLength': return { type: 'matchEquivalentLength', unitRodCount: unitRodCount.value }
+    case 'classifyByFit': return {
+      type: 'classifyByFit',
+      classifications: measurementLengths.value.map(length => ({
+        length,
+        classification: leftoverSelections.value.has(length) ? 'oneUnitLeftover' : 'flush',
+      })),
+    }
+    case 'nameFitClassification': return integerDomain.value
+      ? { type: 'nameFitClassification', domain: integerDomain.value }
+      : null
+    case 'traverseAllGaps': return {
+      type: 'traverseAllGaps',
+      traversals: gapPairs.value.slice(0, traversedGapCount.value),
+    }
+    case 'joinQuantities': return {
+      type: 'joinQuantities',
+      parts: (joinScene.value?.parts ?? [])
+        .filter((_, index) => selectedPartIndexes.value.has(index))
+        .map(part => 'semanticEntityId' in part
+          ? { type: 'semanticQuantity' as const, semanticEntityId: part.semanticEntityId }
+          : { type: 'latentExpression' as const, latentMathId: part.latentMathId }),
+    }
+    case 'enterScalar': return scalarValue.value === null ? null : { type: 'enterScalar', value: scalarValue.value }
+    case 'buildExpression': return selectedMathObjectId.value ? { type: 'buildExpression', mathObjectId: selectedMathObjectId.value } : null
+    case 'selectAnswerChoice': return selectedAnswerChoiceId.value ? { type: 'selectAnswerChoice', answerChoiceId: selectedAnswerChoiceId.value } : null
+    default: return null
   }
 }
 
-function resetInteraction() {
-  whiteCount.value = 0
-  oddSelections.value = new Set()
-  classificationName.value = null
-  gapProgress.value = 0
-  scalarAnswer.value = null
-  joinedParts.value = new Set()
-  expressionAnswer.value = null
-  answerChoiceId.value = null
-  checkState.value = props.completed ? 'correct' : 'idle'
+function submit() {
+  const submission = createSubmission()
+  if (submission) emit('submit', submission)
 }
 
-watch(() => props.step.id, resetInteraction, { immediate: true })
-watch(() => props.completed, value => {
-  if (value) {
-    checkState.value = 'correct'
-  }
-})
+function resetInputs() {
+  unitRodCount.value = 0
+  leftoverSelections.value = new Set()
+  integerDomain.value = null
+  traversedGapCount.value = 0
+  selectedPartIndexes.value = new Set()
+  scalarValue.value = null
+  selectedMathObjectId.value = null
+  selectedAnswerChoiceId.value = null
+}
+
+watch(() => props.step.id, resetInputs, { immediate: true })
 </script>
 
 <template>
-  <section
-    class="lesson-board"
-    :data-step-id="step.id"
-    :data-action-type="actionType"
-  >
-    <div class="board-surface">
-      <div class="board-key">
-        <span class="key-chip">
-          <span class="key-swatch is-red" />
-          red = 2 units
-        </span>
-        <span class="key-chip">
-          <span class="key-swatch is-white" />
-          white = 1 unit
-        </span>
-      </div>
+  <section class="lesson-board" :data-step-id="step.id" :data-action-type="actionType">
+    <div class="board-key">
+      <span><i class="rod-swatch is-red" /> step rod = {{ stepLength }} units</span>
+      <span><i class="rod-swatch is-white" /> unit rod = {{ unitLength }} unit</span>
+    </div>
 
+    <div v-if="actionType === 'matchEquivalentLength'" ref="equivalenceBoardEl" class="board-stage equivalence-stage">
+      <p class="stage-label">Build the same length with unit rods.</p>
       <div
-        v-if="actionType === 'matchEquivalentLength'"
-        class="equivalence-stage"
+        ref="matchBuildZoneEl"
+        class="comparison-row"
+        :class="{ 'is-active': activeZoneId === 'match-build-row' }"
       >
-        <div class="comparison-row">
-          <span class="lane-label">Match</span>
-          <ScaffoldRodPiece
-            :length="2"
-            label="red"
-            tone="red"
-          />
-        </div>
-        <div class="comparison-row">
-          <span class="lane-label">Build</span>
-          <div class="white-train target-two">
-            <ScaffoldRodPiece
-              v-for="index in whiteCount"
-              :key="index"
-              :length="1"
-              label="1"
-              tone="white"
-            />
-            <button
-              v-if="whiteCount < 3"
-              type="button"
-              class="add-piece"
-              aria-label="Add one white rod"
-              @click="whiteCount += 1; clearCheck()"
-            >
-              + white
-            </button>
+        <ScaffoldRodPiece :length="stepLength" :label="String(stepLength)" tone="red" />
+        <span class="equals">=</span>
+        <ScaffoldRodPiece v-for="index in unitRodCount" :key="index" :length="unitLength" :label="String(unitLength)" tone="white" />
+      </div>
+      <div class="control-row">
+        <div class="supply-dock">
+          <span>Supply</span>
+          <div ref="matchSupplyPieceEl" class="quantity-part" aria-label="White rod supply">
+            <ScaffoldRodPiece :length="1" label="1" tone="white" />
           </div>
         </div>
+        <button v-if="unitRodCount > 0" type="button" class="add-piece" aria-label="Remove one white rod" @click="unitRodCount--; clearCheck()">
+          – white
+        </button>
       </div>
+      <div class="sr-only" aria-live="polite">{{ matchDragAnnouncer.message }}</div>
+    </div>
 
-      <div
-        v-else-if="actionType === 'classifyByFit'"
-        class="measure-stage"
-      >
-        <div class="probe-dock">
-          <span class="lane-label">Probe</span>
-          <ScaffoldRodPiece
-            :length="2"
-            label="2"
-            tone="red"
-          />
-          <span class="probe-note">Select every length that leaves one white.</span>
-        </div>
-        <div class="rod-grid">
-          <ScaffoldRodPiece
-            v-for="length in measurementLengths"
-            :key="length"
-            :length="length"
-            :label="String(length)"
-            tone="ink"
-            interactive
-            :selected="oddSelections.has(length)"
-            @select="toggleOdd(length)"
-          />
-        </div>
+    <div v-else-if="actionType === 'classifyByFit'" class="board-stage">
+      <p class="stage-label">Select the lengths that leave one unit after measuring with the step rod.</p>
+      <div class="rod-grid">
+        <ScaffoldRodPiece v-for="length in measurementLengths" :key="length" :length="length" :label="String(length)" tone="ink" interactive :selected="leftoverSelections.has(length)" @select="toggleNumber(length)" />
       </div>
+    </div>
 
-      <div
-        v-else-if="actionType === 'nameFitClassification'"
-        class="name-stage"
-      >
-        <p class="board-caption">Every survivor leaves exactly one white unit.</p>
-        <div class="survivor-row">
-          <ScaffoldRodPiece
-            v-for="length in [1, 3, 5, 7, 9]"
-            :key="length"
-            :length="length"
-            :label="String(length)"
-            tone="ink"
-          />
-        </div>
-        <div class="choice-row" role="radiogroup" aria-label="Name this number group">
-          <button
-            v-for="name in classificationNames"
-            :key="name"
-            type="button"
-            class="response-choice"
-            :class="{ 'is-selected': classificationName === name }"
-            :aria-pressed="classificationName === name"
-            @click="chooseClassification(name)"
-          >
-            {{ name }}
-          </button>
-        </div>
+    <div v-else-if="actionType === 'nameFitClassification'" class="board-stage">
+      <div class="rod-grid compact">
+        <ScaffoldRodPiece v-for="length in displayedClass" :key="length" :length="length" :label="String(length)" tone="ink" />
       </div>
-
-      <div
-        v-else-if="actionType === 'traverseAllGaps'"
-        class="staircase-stage"
-      >
-        <div
-          v-for="(length, index) in [1, 3, 5, 7, 9]"
-          :key="length"
-          class="stair-row"
-        >
-          <span class="stair-number">{{ length }}</span>
-          <ScaffoldRodPiece
-            :length="length"
-            :label="String(length)"
-            tone="ink"
-          />
-          <ScaffoldRodPiece
-            v-if="index < 4"
-            :length="2"
-            :label="index < gapProgress ? '+2' : '?'"
-            tone="red"
-            interactive
-            :selected="index < gapProgress"
-            :dimmed="index > gapProgress"
-            @select="crossGap(index)"
-          />
-        </div>
+      <div class="choice-row">
+        <button v-for="option in [{ value: 'oddIntegers', label: 'odd' }, { value: 'evenIntegers', label: 'even' }]" :key="option.value" type="button" :class="{ selected: integerDomain === option.value }" @click="integerDomain = option.value as 'oddIntegers' | 'evenIntegers'">{{ option.label }}</button>
       </div>
+    </div>
 
-      <div
-        v-else-if="actionType === 'joinQuantities'"
-        ref="joinStageEl"
-        class="join-stage"
-      >
-        <div class="join-lane">
-          <span class="lane-label">First</span>
-          <div
-            ref="partZeroEl"
-            class="quantity-part"
-            :class="{ 'is-joined': joinedParts.has(0) }"
-            :aria-label="firstPartLabel"
-          >
-            <ScaffoldRodPiece
-              :length="baseLength"
-              :label="baseLabel"
-              tone="teal"
-            />
-          </div>
-        </div>
-        <div class="join-lane">
-          <span class="lane-label">Next</span>
-          <div
-            ref="partOneEl"
-            class="quantity-part"
-            :class="{ 'is-joined': joinedParts.has(1) }"
-            :aria-label="nextPartLabel"
-          >
-            <ScaffoldRodPiece
-              :length="baseLength"
-              :label="baseLabel"
-              tone="teal"
-            />
-            <ScaffoldRodPiece
-              :length="2"
-              label="+2"
-              tone="red"
-            />
-          </div>
-        </div>
-        <div
-          ref="sumLaneEl"
-          class="sum-lane"
-          :class="{
-            'has-sized-target': joinScene?.showSizedTarget,
-            'is-active': joinActiveZoneId === 'joined-train'
-          }"
-        >
-          <span class="lane-label">Sum</span>
-          <div class="joined-train">
-            <template v-if="joinedParts.has(0)">
-              <ScaffoldRodPiece
-                :length="baseLength"
-                :label="baseLabel"
-                tone="teal"
-              />
-            </template>
-            <template v-if="joinedParts.has(1)">
-              <ScaffoldRodPiece
-                :length="baseLength"
-                :label="baseLabel"
-                tone="teal"
-              />
-              <ScaffoldRodPiece
-                :length="2"
-                label="2"
-                tone="red"
-              />
-            </template>
-            <span v-if="joinedParts.size === 0" class="empty-lane-copy">
-              Drag each part here to join it.
-            </span>
-          </div>
-        </div>
-        <div class="sr-only" aria-live="polite">
-          {{ joinAnnouncer.message }}
-        </div>
+    <div v-else-if="actionType === 'traverseAllGaps'" class="board-stage gap-stage">
+      <button v-for="(gap, index) in gapPairs" :key="`${gap.from}-${gap.to}`" type="button" class="gap-card" :class="{ selected: index < traversedGapCount }" @click="traversedGapCount = index + 1">
+        <span>{{ gap.from }}</span>
+        <ScaffoldRodPiece :length="stepLength" :label="index < traversedGapCount ? String(stepLength) : '?'" tone="red" />
+        <span>{{ gap.to }}</span>
+      </button>
+    </div>
+
+    <div v-else-if="actionType === 'joinQuantities'" class="board-stage">
+      <p class="stage-label">Select each part that belongs in the sum lane.</p>
+      <div class="join-grid">
+        <button v-for="(_part, index) in joinScene?.parts ?? []" :key="index" type="button" :class="{ selected: selectedPartIndexes.has(index) }" @click="togglePart(index)">
+          <span>Part {{ index + 1 }}</span>
+          <ScaffoldRodPiece :length="index === 0 ? 8 : 10" :label="index === 0 ? (joinScene?.bindings.length ? '15' : 'n') : (joinScene?.bindings.length ? '17' : 'n + 2')" :tone="index === 0 ? 'teal' : 'red'" />
+        </button>
       </div>
+    </div>
 
-      <div
-        v-else-if="actionType === 'enterScalar'"
-        class="scalar-stage"
-      >
-        <div
-          v-if="step.id === 'step-state-odd-step-length'"
-          class="single-measure"
-        >
-          <ScaffoldRodPiece :length="2" label="? units" tone="red" />
-          <span class="measure-bracket">one odd-to-odd step</span>
-        </div>
-        <div v-else class="frozen-train">
-          <ScaffoldRodPiece :length="8" label="15" tone="teal" />
-          <ScaffoldRodPiece :length="8" label="15" tone="teal" />
-          <ScaffoldRodPiece :length="2" label="2" tone="red" />
-        </div>
-        <div class="choice-row" role="radiogroup" aria-label="Choose a number">
-          <button
-            v-for="value in [1, 2, 3]"
-            :key="value"
-            type="button"
-            class="response-choice is-number"
-            :class="{ 'is-selected': scalarAnswer === value }"
-            :aria-pressed="scalarAnswer === value"
-            @click="chooseScalar(value)"
-          >
-            {{ value }}
-          </button>
-        </div>
+    <div v-else-if="actionType === 'enterScalar'" class="board-stage">
+      <p class="stage-label">Enter the number you read from the model.</p>
+      <UInputNumber v-model="scalarValue" :min="0" size="xl" class="number-input" />
+    </div>
+
+    <div v-else-if="actionType === 'buildExpression'" class="board-stage">
+      <div class="expression-grid">
+        <button v-for="option in expressionOptions" :key="option.id" type="button" :class="{ selected: selectedMathObjectId === option.id }" @click="selectedMathObjectId = option.id">{{ option.text }}</button>
       </div>
+    </div>
 
-      <div
-        v-else-if="actionType === 'buildExpression'"
-        class="expression-stage"
-      >
-        <div class="frozen-train symbolic">
-          <ScaffoldRodPiece :length="8" label="n" tone="teal" />
-          <ScaffoldRodPiece :length="8" label="n" tone="teal" />
-          <ScaffoldRodPiece :length="2" label="2" tone="red" />
-        </div>
-        <div class="expression-options" role="radiogroup" aria-label="Choose an expression">
-          <button
-            v-for="expression in expressionOptions"
-            :key="expression"
-            type="button"
-            class="expression-choice"
-            :class="{ 'is-selected': expressionAnswer === expression }"
-            :aria-pressed="expressionAnswer === expression"
-            @click="chooseExpression(expression)"
-          >
-            {{ expression }}
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-else-if="actionType === 'selectAnswerChoice'"
-        class="answer-stage"
-      >
-        <div class="answer-grid" role="radiogroup" aria-label="Answer choices">
-          <button
-            v-for="answer in answerViews"
-            :key="answer.id"
-            type="button"
-            class="answer-choice"
-            :class="{ 'is-selected': answerChoiceId === answer.id }"
-            :aria-pressed="answerChoiceId === answer.id"
-            @click="chooseAnswer(answer.id)"
-          >
-            <span class="answer-label">{{ answer.label }}</span>
-            <span class="answer-expression">{{ answer.expression }}</span>
-          </button>
-        </div>
+    <div v-else-if="actionType === 'selectAnswerChoice'" class="board-stage">
+      <div class="answer-grid">
+        <button v-for="answer in answerViews" :key="answer.id" type="button" :class="{ selected: selectedAnswerChoiceId === answer.id }" @click="selectedAnswerChoiceId = answer.id"><strong>{{ answer.label }}</strong><span>{{ answer.expression }}</span></button>
       </div>
     </div>
 
     <footer class="response-dock">
-      <p
-        v-if="feedbackText"
-        class="feedback-copy"
-        :class="`is-${checkState}`"
-        aria-live="polite"
-      >
-        <UIcon
-          :name="checkState === 'correct' ? 'i-lucide-circle-check' : 'i-lucide-refresh-cw'"
-          class="size-4 shrink-0"
-        />
-        {{ feedbackText }}
-      </p>
-      <p v-else class="response-hint">
-        Work on the board, then check the structure.
-      </p>
-
-      <UButton
-        :label="checkState === 'correct' ? 'Completed' : checkLabel"
-        :icon="checkState === 'correct' ? 'i-lucide-check' : 'i-lucide-scan-line'"
-        :color="checkState === 'incorrect' ? 'warning' : 'primary'"
-        :variant="checkState === 'correct' ? 'soft' : 'solid'"
-        :disabled="!canCheck || checkState === 'correct'"
-        @click="checkResponse"
-      />
+      <p v-if="lastResponseWasWrong" class="feedback" aria-live="polite"><UIcon name="i-lucide-refresh-cw" class="size-4" />That does not match the model yet. Adjust your response and try again.</p>
+      <p v-else>Build your response, then let the coach check it.</p>
+      <UButton :label="checkLabel" icon="i-lucide-scan-line" :loading="checking" :disabled="!canSubmit || checking" data-testid="check-scaffold-response" @click="submit" />
     </footer>
   </section>
 </template>
 
 <style scoped>
-.lesson-board {
-  overflow: hidden;
-  border: 1px solid var(--mt-border);
-  border-radius: 1.25rem;
-  background: var(--mt-bg-elevated);
-  box-shadow: var(--mt-shadow-md);
-}
-
-.board-surface {
-  --board-unit: clamp(0.75rem, 2.3vw, 1.55rem);
-  min-height: 29rem;
-  padding: clamp(1rem, 3vw, 2rem);
-  background-color: #eef3f0;
-  background-image:
-    linear-gradient(rgb(24 50 58 / 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(24 50 58 / 0.09) 1px, transparent 1px);
-  background-size: var(--board-unit) var(--board-unit);
-  color: #18323a;
-}
-
-:global(.dark) .board-surface {
-  background-color: #132126;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px);
-  color: #edf7f5;
-}
-
-.board-key {
+.lesson-board { overflow: hidden; border: 1px solid var(--mt-border); border-radius: 1.1rem; background: var(--mt-bg-elevated); box-shadow: var(--mt-shadow-sm); }
+.board-key { display: flex; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--mt-border); padding: .75rem 1rem; color: var(--mt-text-muted); font: .68rem "JetBrains Mono", monospace; }
+.board-key span { display: flex; align-items: center; gap: .4rem; }
+.rod-swatch { width: 1.5rem; height: .45rem; border-radius: 999px; background: #c9373b; }
+.rod-swatch.is-white { border: 1px solid var(--mt-border-strong); background: #fff; }
+.board-stage { display: grid; min-height: 22rem; align-content: center; gap: 1.5rem; padding: clamp(1.25rem, 4vw, 3rem); background-image: linear-gradient(var(--mt-border) 1px, transparent 1px), linear-gradient(90deg, var(--mt-border) 1px, transparent 1px); background-size: 2rem 2rem; }
+.stage-label { margin: 0; color: var(--mt-text-sub); text-align: center; }
+.rod-row, .control-row, .choice-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .75rem; }
+.comparison-row {
+  --comparison-gap: .75rem;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-bottom: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--comparison-gap);
+  width: min(100%, 68rem);
+  min-height: 4.8rem;
+  margin-inline: auto;
+  padding: .85rem 1rem;
+  border-radius: .9rem;
+  border: 2px dashed color-mix(in srgb, var(--mt-border-strong) 55%, transparent);
+  background: color-mix(in srgb, var(--mt-bg-elevated) 92%, transparent);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
-
-.key-chip {
+.comparison-row.is-active {
+  border-color: var(--color-primary-600);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-primary-500) 14%, transparent);
+  background: color-mix(in srgb, var(--color-primary-100) 26%, transparent);
+}
+.equals { font: 700 1.4rem "JetBrains Mono", monospace; }
+.rod-grid { display: grid; grid-template-columns: repeat(5, minmax(5rem, 1fr)); align-items: end; gap: .8rem; }
+.rod-grid.compact { grid-template-columns: repeat(5, minmax(3rem, 7rem)); justify-content: center; }
+.choice-row button, .expression-grid button, .answer-grid button, .join-grid button, .gap-card { border: 1px solid var(--mt-border-strong); border-radius: .8rem; background: var(--mt-bg-elevated); padding: .8rem 1rem; color: var(--mt-text); }
+button.selected { border-color: var(--color-primary-600); background: color-mix(in srgb, var(--color-primary-500) 12%, var(--mt-bg-elevated)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 22%, transparent); }
+.gap-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gap-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; font: 700 .8rem "JetBrains Mono", monospace; }
+.join-grid, .expression-grid, .answer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.join-grid button { display: grid; justify-items: center; gap: 1rem; }
+.supply-dock {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  border: 1px solid rgb(24 50 58 / 0.16);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.72);
-  padding: 0.35rem 0.65rem;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.key-swatch {
-  width: 1.15rem;
-  height: 0.55rem;
-  border: 1px solid rgb(15 23 42 / 0.25);
-  border-radius: 0.15rem;
-}
-
-.key-swatch.is-red { background: #d84a4a; }
-.key-swatch.is-white { background: #fffef9; }
-
-.equivalence-stage,
-.measure-stage,
-.name-stage,
-.staircase-stage,
-.join-stage,
-.scalar-stage,
-.expression-stage,
-.answer-stage {
-  min-height: 22rem;
-}
-
-.equivalence-stage,
-.name-stage,
-.scalar-stage,
-.expression-stage {
-  display: grid;
-  align-content: center;
-  gap: 2rem;
-}
-
-.comparison-row,
-.join-lane,
-.sum-lane {
-  display: grid;
-  grid-template-columns: 3.5rem minmax(0, 1fr);
-  align-items: center;
-  gap: 1rem;
-}
-
-.comparison-row + .comparison-row,
-.join-lane + .join-lane,
-.sum-lane {
-  margin-top: 1.35rem;
-}
-
-.lane-label,
-.stair-number {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.62;
-}
-
-.white-train,
-.joined-train,
-.frozen-train,
-.survivor-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.target-two {
-  min-height: 3.65rem;
-  padding: 0.4rem;
-  border: 2px dashed rgb(24 50 58 / 0.28);
-  border-radius: 0.65rem;
-}
-
-.add-piece {
-  margin-left: 0.6rem;
-  border: 1px dashed rgb(24 50 58 / 0.35);
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.6);
-  padding: 0.55rem 0.7rem;
-  color: inherit;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.probe-dock {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-.probe-note,
-.board-caption,
-.empty-lane-copy,
-.measure-bracket {
-  color: currentColor;
-  font-size: 0.82rem;
-  opacity: 0.68;
-}
-
-.rod-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: center;
-  gap: 0.75rem 1rem;
-}
-
-.survivor-row {
-  align-items: flex-end;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding: 0.5rem 0.25rem 0.8rem;
-}
-
-.choice-row {
-  display: flex;
+  gap: .65rem;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.75rem;
 }
-
-.response-choice,
-.expression-choice {
-  min-width: 7rem;
-  border: 1px solid rgb(24 50 58 / 0.22);
-  border-radius: 0.75rem;
-  background: rgb(255 255 255 / 0.78);
-  padding: 0.8rem 1rem;
-  color: #18323a;
-  font-weight: 700;
-  text-transform: capitalize;
-  transition: 150ms ease;
+.supply-dock span {
+  font: 600 .74rem "JetBrains Mono", monospace;
+  color: var(--mt-text-muted);
+  letter-spacing: .02em;
+  text-transform: uppercase;
 }
-
-.response-choice.is-number {
-  min-width: 3.5rem;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 1.05rem;
-}
-
-.response-choice.is-selected,
-.expression-choice.is-selected {
-  border-color: #0f766e;
-  background: #0f766e;
-  box-shadow: 0 3px 0 #0b5c57;
-  color: #fff;
-  transform: translateY(-2px);
-}
-
-.staircase-stage {
-  display: grid;
-  align-content: center;
-  gap: 0.55rem;
-}
-
-.stair-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0;
-}
-
-.stair-number {
-  width: 2rem;
-  flex: none;
-}
-
 .quantity-part {
-  position: relative;
-  z-index: 5;
-  display: flex;
   min-width: 44px;
   min-height: 44px;
-  width: fit-content;
+  padding: .25rem;
+  border-radius: .7rem;
   touch-action: none;
-  border: 0;
-  border-radius: 0.65rem;
-  background: transparent;
-  padding: 0.25rem;
   cursor: grab;
-  -webkit-user-select: none;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-touch-callout: none;
-  transition: 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 140ms ease;
 }
-
-.quantity-part:hover {
-  background: rgb(15 118 110 / 0.12);
-  box-shadow: 0 0 0 2px rgb(15 118 110 / 0.35);
+.quantity-part:active { cursor: grabbing; }
+.add-piece {
+  min-height: 44px;
+  border: 1px solid var(--mt-border-strong);
+  border-radius: .6rem;
+  background: var(--mt-bg-elevated);
+  color: var(--mt-text);
+  padding: .35rem .8rem;
+  font: 700 .74rem "JetBrains Mono", monospace;
+  cursor: pointer;
 }
-
-.quantity-part:active {
-  cursor: grabbing;
+.add-piece:hover {
+  background: color-mix(in srgb, var(--mt-bg-elevated) 72%, var(--color-primary-500));
 }
-
-.quantity-part:focus-visible {
-  outline: 3px solid rgb(20 184 166 / 0.42);
+.add-piece:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary-500) 34%, transparent);
   outline-offset: 3px;
 }
-
-.quantity-part.is-joined {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.sum-lane {
-  min-height: 5.2rem;
-  border-top: 1px solid rgb(24 50 58 / 0.22);
-  border-radius: 0.65rem;
-  padding-top: 1.25rem;
-  transition: 160ms ease;
-}
-
-.sum-lane.is-active {
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.32);
-  background: rgb(15 118 110 / 0.08);
-}
-
-.sum-lane.has-sized-target .joined-train {
-  min-height: 3.75rem;
-  border: 2px dashed rgb(15 118 110 / 0.34);
-  border-radius: 0.65rem;
-  padding: 0.4rem;
-}
-
-.single-measure {
-  display: grid;
-  justify-items: center;
-  gap: 0.75rem;
-}
-
-.frozen-train {
-  justify-content: center;
-  overflow-x: auto;
-  padding: 1rem 0.25rem;
-}
-
-.expression-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.expression-choice {
-  min-width: 0;
-  font-family: "JetBrains Mono", monospace;
-  font-size: clamp(0.8rem, 2vw, 1rem);
-  text-transform: none;
-}
-
-.answer-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-
-.answer-choice {
-  display: flex;
-  min-height: 4.5rem;
-  align-items: center;
-  gap: 0.85rem;
-  border: 1px solid rgb(24 50 58 / 0.2);
-  border-radius: 0.8rem;
-  background: rgb(255 255 255 / 0.78);
-  padding: 0.8rem;
-  color: #18323a;
-  text-align: left;
-}
-
-.answer-choice.is-selected {
-  border-color: #0f766e;
-  box-shadow: inset 0 0 0 2px #0f766e;
-}
-
-.answer-label {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  flex: none;
-  place-items: center;
-  border-radius: 50%;
-  background: #18323a;
-  color: #fff;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.answer-expression {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.response-dock {
-  display: flex;
-  min-height: 4.8rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border-top: 1px solid var(--mt-border);
-  background: var(--mt-bg-elevated);
-  padding: 1rem 1.25rem;
-}
-
-.feedback-copy,
-.response-hint {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin: 0;
-  color: var(--mt-text-sub);
-  font-size: 0.85rem;
-}
-
-.feedback-copy.is-correct { color: var(--color-green-600); }
-.feedback-copy.is-incorrect { color: var(--color-orange-500); }
-
+.add-piece:active { transform: translateY(1px); }
+.expression-grid button { font: 700 1rem "JetBrains Mono", monospace; }
+.answer-grid button { display: grid; grid-template-columns: auto 1fr; gap: .8rem; text-align: left; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1009,37 +384,9 @@ watch(() => props.completed, value => {
   white-space: nowrap;
   border: 0;
 }
-
-@media (max-width: 640px) {
-  .board-surface {
-    min-height: 27rem;
-    overflow-x: hidden;
-  }
-
-  .rod-grid,
-  .answer-grid,
-  .expression-options {
-    grid-template-columns: 1fr;
-  }
-
-  .comparison-row,
-  .join-lane,
-  .sum-lane {
-    grid-template-columns: 1fr;
-    gap: 0.45rem;
-  }
-
-  .response-dock {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .response-choice,
-  .expression-choice,
-  .quantity-part {
-    transition: none;
-  }
-}
+.number-input { width: min(12rem, 100%); margin: 0 auto; }
+.response-dock { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--mt-border); padding: 1rem; }
+.response-dock p { display: flex; align-items: center; gap: .45rem; margin: 0; color: var(--mt-text-muted); font-size: .78rem; }
+.response-dock .feedback { color: var(--color-warning-700); }
+@media (max-width: 700px) { .rod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .gap-stage, .join-grid, .expression-grid, .answer-grid { grid-template-columns: 1fr; } .response-dock { align-items: stretch; flex-direction: column; } }
 </style>

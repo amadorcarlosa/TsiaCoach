@@ -1,37 +1,7 @@
-import type { SampleItem } from '#shared/types/sample-items'
-
-export function latentScalarValue(
-  item: SampleItem,
-  latentMathId: string,
-): number | null {
-  const fact = item.semantics.latentFacts.find(candidate =>
-    candidate.type === 'derivedScalar' && candidate.id === latentMathId
-  )
-
-  if (!fact || fact.type !== 'derivedScalar') {
-    return null
-  }
-
-  return Number(fact.value)
-}
-
-export function latentExpressionText(
-  item: SampleItem,
-  latentMathId: string,
-): string | null {
-  const fact = item.semantics.latentFacts.find(candidate =>
-    candidate.type === 'derivedExpression' && candidate.id === latentMathId
-  )
-
-  if (!fact || fact.type !== 'derivedExpression') {
-    return null
-  }
-
-  return mathObjectText(item, fact.mathObjectId)
-}
+import type { InteractiveTextItem } from '#shared/types/sample-items'
 
 export function mathObjectText(
-  item: SampleItem,
+  item: InteractiveTextItem,
   mathObjectId: string,
 ): string | null {
   const object = item.mathematics.objects.find(candidate =>

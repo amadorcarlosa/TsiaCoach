@@ -11,9 +11,26 @@ public sealed record ScaffoldSessionResponse(
     int CheckCount,
     int CompletedStepCount,
     int TotalStepCount,
-    IReadOnlyList<ScaffoldResourceResponse> Resources,
+    IReadOnlyList<ScaffoldLearnerResourceResponse> Resources,
     ScaffoldSessionStateResponse State,
     ScaffoldLastCheckResponse? LastCheck);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(ScaffoldLearnerRodResourceResponse), "rodResource")]
+[JsonDerivedType(typeof(ScaffoldLearnerRodSeriesResourceResponse), "rodSeriesResource")]
+public abstract record ScaffoldLearnerResourceResponse;
+
+public sealed record ScaffoldLearnerRodResourceResponse(
+    string Id,
+    int Length,
+    string Multiplicity,
+    string Role)
+    : ScaffoldLearnerResourceResponse;
+
+public sealed record ScaffoldLearnerRodSeriesResourceResponse(
+    string Id,
+    IReadOnlyList<int> Lengths)
+    : ScaffoldLearnerResourceResponse;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ActiveScaffoldSessionResponse), "active")]
@@ -30,7 +47,7 @@ public sealed record CompletedScaffoldSessionResponse
 public sealed record ScaffoldLearnerStepResponse(
     string Id,
     ScaffoldPromptResponse Prompt,
-    StepSceneResponse Scene,
+    ScaffoldSceneResponse Scene,
     LearnerActionResponse Action);
 
 public sealed record ScaffoldLastCheckResponse(

@@ -2,6 +2,10 @@
 import { storeToRefs } from 'pinia'
 import type { CharacterSpan } from '#shared/types/sample-items'
 import {
+  isAfterIncorrectCheckPhase,
+  isScaffoldEntryRoute,
+} from '#shared/types/sample-items'
+import {
   LoadStates,
   SubmissionStates,
   feedbackFor,
@@ -98,6 +102,19 @@ const feedback = computed<SampleItemFeedback | null>(() => {
 
   return feedbackFor(attemptProjection.value, submissionState.value)
 })
+
+const scaffoldHref = computed(() => {
+  const projection = attemptProjection.value
+  if (
+    !isAfterIncorrectCheckPhase(projection)
+    || projection.phase.hintLevel !== 'escalated'
+    || !isScaffoldEntryRoute(projection.phase.route)
+  ) {
+    return null
+  }
+
+  return `/scaffolds/${encodeURIComponent(projection.attemptId)}`
+})
 </script>
 
 <template>
@@ -160,6 +177,7 @@ const feedback = computed<SampleItemFeedback | null>(() => {
           :selected-answer-id="selectedAnswerId"
           :focus-target="focusTarget"
           :feedback="feedback"
+          :scaffold-href="scaffoldHref"
           :is-terminal="store.isAttemptTerminal"
           :is-submitting="submissionState === SubmissionStates.Submitting"
           @select-answer="store.selectAnswer"

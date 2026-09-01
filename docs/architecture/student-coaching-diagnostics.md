@@ -9,7 +9,9 @@ Accepted
 - Latent scalars, latent expressions, and correct answer ids remain evaluator inputs only.
 - `ScaffoldStepEvaluation` outcomes contain only satisfied/not-satisfied state and no solution-bearing data.
 - Expression evaluation in this slice compares a submitted known `MathObjectId` with the expected latent expression's authored math object.
-- Step authorization, step order enforcement, and append-only scaffold history are deferred to Slice 7.
+- Authorized scaffold sessions now pin the latest authorizing attempt check and server-derived scaffold entry.
+- Session history stores only scaffold submission facts and server timestamps; progress replays `ScaffoldStepEvaluator` and never stores correctness.
+- Session checks can target only the derived current step, remain on that step when unsatisfied, advance one step when satisfied, and become terminal after the final satisfied step.
 
 ## Slice 5 safe path
 - `/sample-Items` now uses `PracticeItemPromptResponse` through Nuxt BFF endpoints at `/api/practice-items` and attempt routes.
@@ -55,3 +57,15 @@ After an incorrect check, the policy projects the latest misconception to its au
 - Items without a scaffold produce `NoScaffoldAuthored`.
 - Text-only Help and Diagnosis remain available.
 - `openScaffoldStep` is excluded from the response allow-list.
+
+## Slice 7 authorized scaffold sessions
+- `POST /api/attempts/{attemptId}/scaffold-sessions` can create a session only for an escalated coaching diagnosis with an authored `ScaffoldEntry` route. `BeforeCheck`, initial hints, correct attempts, and `NoScaffoldAuthored` routes return conflict.
+- A session is reused for the same `AttemptId + ScaffoldId + EntryStepId`; its grant remains valid after the attempt changes.
+- `GET /api/scaffold-sessions/{sessionId}` and `POST /api/scaffold-sessions/{sessionId}/checks` expose only a safe current-step projection and the latest derived satisfied/not-satisfied result. They do not expose `SuccessCheck`, solution data, submissions, timestamps, or complete history.
+- The legacy `/api/scaffolds` endpoint remains solution-bearing for authoring/debugging, but Slice 8 removes it from the student runtime path.
+
+## Slice 8 student scaffold runtime
+- The Nuxt runner opens a scaffold session with an `attemptId`, then renders only the safe session projection and immutable practice prompt.
+- The browser submits learner evidence only. It never submits correctness, reads a success-check definition, or compares against expected scalar, expression, or answer values.
+- Unsatisfied checks preserve the server-issued current step; satisfied checks advance only by replacing the local projection with the server response.
+- Starting the same authorized session again resumes its server progress, including after a browser reload.

@@ -23,6 +23,7 @@ defineProps<{
   isTerminal: boolean
   isSubmitting: boolean
   feedback: SampleItemFeedback | null
+  scaffoldHref: string | null
 }>()
 
 const emit = defineEmits<{
@@ -105,6 +106,15 @@ const emit = defineEmits<{
         variant="subtle"
         aria-live="polite"
       />
+
+      <div v-if="scaffoldHref" class="mt-4 flex justify-end">
+        <UButton
+          label="Open guided walkthrough"
+          icon="i-lucide-blocks"
+          :to="scaffoldHref"
+          data-testid="open-scaffold"
+        />
+      </div>
     </div>
   </article>
 </template>

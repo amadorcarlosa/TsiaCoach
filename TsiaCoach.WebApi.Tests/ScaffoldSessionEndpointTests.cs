@@ -287,6 +287,77 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
     }
 
     [Test]
+    public async Task CheckAcceptsTypeDiscriminatorAfterProperties()
+    {
+        using HttpClient client = Factory.CreateClient();
+        ScaffoldSessionResponse started = await StartAuthorizedSession(client);
+
+        using HttpResponseMessage response = await PostJson(
+            client,
+            $"/api/scaffold-sessions/{started.SessionId}/checks",
+            """
+            { "parts": [
+              { "semanticEntityId": "entity-n", "type": "semanticQuantity" },
+              { "latentMathId": "latent-second-member", "type": "latentExpression" }
+            ], "type": "joinQuantities" }
+            """);
+        ScaffoldSessionResponse session = await ReadSession(response);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(session.LastCheck!.Satisfied).IsTrue();
+    }
+
+    [Test]
+    public async Task CheckMissingTypeDiscriminatorReturnsBadRequest()
+    {
+        using HttpClient client = Factory.CreateClient();
+        ScaffoldSessionResponse started = await StartAuthorizedSession(client);
+
+        using HttpResponseMessage response = await PostJson(
+            client,
+            $"/api/scaffold-sessions/{started.SessionId}/checks",
+            """{ "parts": [] }""");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+    }
+
+    [Test]
+    public async Task LanguageSession_ReturnsResolvedLearnerResourceAndScene()
+    {
+        using HttpClient client = Factory.CreateClient();
+        ScaffoldSessionResponse session = await StartLanguageSession(client);
+
+        ScaffoldLearnerRodResourceResponse stepRod = session.Resources
+            .OfType<ScaffoldLearnerRodResourceResponse>()
+            .Single(resource => resource.Id == "resource-odd-step-rod");
+        ActiveScaffoldSessionResponse state =
+            (ActiveScaffoldSessionResponse)session.State;
+
+        await Assert.That(stepRod.Length).IsEqualTo(2);
+        await Assert.That(state.CurrentStep.Scene).IsTypeOf<RodGapSceneResponse>();
+    }
+
+    [Test]
+    public async Task ContinuedStep_ReturnsResolvedSourceSceneForReload()
+    {
+        using HttpClient client = Factory.CreateClient();
+        ScaffoldSessionResponse started = await StartLanguageSession(client);
+
+        using HttpResponseMessage response = await PostJson(
+            client,
+            $"/api/scaffold-sessions/{started.SessionId}/checks",
+            CorrectGapTraversalJson());
+        ScaffoldSessionResponse advanced = await ReadSession(response);
+        ActiveScaffoldSessionResponse state =
+            (ActiveScaffoldSessionResponse)advanced.State;
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(state.CurrentStep.Id)
+            .IsEqualTo("step-state-odd-step-length");
+        await Assert.That(state.CurrentStep.Scene).IsTypeOf<RodGapSceneResponse>();
+    }
+
+    [Test]
     public async Task SessionJson_DoesNotExposeSolutionOrHistory()
     {
         using HttpClient client = Factory.CreateClient();
@@ -402,6 +473,18 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         return await ReadSession(response);
     }
 
+    private static async Task<ScaffoldSessionResponse> StartLanguageSession(
+        HttpClient client)
+    {
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        await SubmitAttemptCheck(client, attempt.AttemptId, "answer-a");
+        await SubmitAttemptCheck(client, attempt.AttemptId, "answer-a");
+        using HttpResponseMessage response = await client.PostAsync(
+            $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
+            null);
+        return await ReadSession(response);
+    }
+
     private static async Task CompleteSession(
         HttpClient client,
         string sessionId)
@@ -432,6 +515,16 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         { "type": "joinQuantities", "parts": [
           { "type": "latentExpression", "latentMathId": "latent-second-member" },
           { "type": "semanticQuantity", "semanticEntityId": "entity-n" }
+        ] }
+        """;
+
+    private static string CorrectGapTraversalJson() =>
+        """
+        { "type": "traverseAllGaps", "traversals": [
+          { "from": 1, "to": 3, "resourceId": "resource-odd-step-rod" },
+          { "from": 3, "to": 5, "resourceId": "resource-odd-step-rod" },
+          { "from": 5, "to": 7, "resourceId": "resource-odd-step-rod" },
+          { "from": 7, "to": 9, "resourceId": "resource-odd-step-rod" }
         ] }
         """;
 

@@ -399,32 +399,17 @@ export interface components {
             anchoredByPhraseId: string;
             scaleFactorId: string;
         };
-        /** @enum {unknown} */
-        FitClassification: "flush" | "oneUnitLeftover";
-        FitClassificationEntryRequest: {
-            /** Format: int32 */
-            length: number | string;
-            classification: components["schemas"]["FitClassification"];
-        };
         FoundryDeploymentResponse: {
             name: string;
             displayName: string;
             vendor: components["schemas"]["VendorName"];
-        };
-        GapTraversalRequest: {
-            /** Format: int32 */
-            from: number | string;
-            /** Format: int32 */
-            to: number | string;
-            resourceId: string;
         };
         InstructionalBindingResponse: {
             semanticEntityId: string;
             /** Format: int32 */
             value: number | string;
         };
-        /** @enum {unknown} */
-        IntegerDomain: "integers" | "oddIntegers" | "evenIntegers";
+        JsonElement: unknown;
         LatentMathProvenanceResponse: {
             origin: string;
             anchorPhraseIds: string[];
@@ -556,17 +541,6 @@ export interface components {
             entities: components["schemas"]["SemanticEntityResponse"][];
             edges: components["schemas"]["SemanticEdgeResponse"][];
         };
-        QuantityReferenceRequest: components["schemas"]["QuantityReferenceRequestSemanticQuantityReferenceRequest"] | components["schemas"]["QuantityReferenceRequestLatentExpressionReferenceRequest"];
-        QuantityReferenceRequestLatentExpressionReferenceRequest: {
-            /** @enum {string} */
-            type?: "latentExpression";
-            latentMathId: string;
-        };
-        QuantityReferenceRequestSemanticQuantityReferenceRequest: {
-            /** @enum {string} */
-            type?: "semanticQuantity";
-            semanticEntityId: string;
-        };
         QuantityReferenceResponse: components["schemas"]["QuantityReferenceResponseSemanticQuantityReferenceResponse"] | components["schemas"]["QuantityReferenceResponseLatentExpressionReferenceResponse"];
         QuantityReferenceResponseLatentExpressionReferenceResponse: {
             /** @enum {string} */
@@ -590,10 +564,26 @@ export interface components {
             stepId: string;
             satisfied: boolean;
         };
+        ScaffoldLearnerResourceResponse: components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse"] | components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodSeriesResourceResponse"];
+        ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse: {
+            /** @enum {string} */
+            type?: "rodResource";
+            id: string;
+            /** Format: int32 */
+            length: number | string;
+            multiplicity: string;
+            role: string;
+        };
+        ScaffoldLearnerResourceResponseScaffoldLearnerRodSeriesResourceResponse: {
+            /** @enum {string} */
+            type?: "rodSeriesResource";
+            id: string;
+            lengths: (number | string)[];
+        };
         ScaffoldLearnerStepResponse: {
             id: string;
             prompt: components["schemas"]["ScaffoldPromptResponse"];
-            scene: components["schemas"]["StepSceneResponse"];
+            scene: components["schemas"]["ScaffoldSceneResponse"];
             action: components["schemas"]["LearnerActionResponse"];
         };
         ScaffoldPhaseResponse: {
@@ -669,7 +659,7 @@ export interface components {
             completedStepCount: number | string;
             /** Format: int32 */
             totalStepCount: number | string;
-            resources: components["schemas"]["ScaffoldResourceResponse"][];
+            resources: components["schemas"]["ScaffoldLearnerResourceResponse"][];
             state: components["schemas"]["ScaffoldSessionStateResponse"];
             lastCheck: null | components["schemas"]["ScaffoldLastCheckResponse"];
         };
@@ -689,49 +679,6 @@ export interface components {
             scene: components["schemas"]["StepSceneResponse"];
             action: components["schemas"]["LearnerActionResponse"];
             successCheck: components["schemas"]["SuccessCheckResponse"];
-        };
-        ScaffoldStepSubmissionRequest: components["schemas"]["ScaffoldStepSubmissionRequestMatchEquivalentLengthSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestClassifyByFitSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestNameFitClassificationSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestTraverseAllGapsSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestJoinQuantitiesSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestEnterScalarSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestBuildExpressionSubmissionRequest"] | components["schemas"]["ScaffoldStepSubmissionRequestSelectAnswerChoiceSubmissionRequest"];
-        ScaffoldStepSubmissionRequestBuildExpressionSubmissionRequest: {
-            /** @enum {string} */
-            type?: "buildExpression";
-            mathObjectId: string;
-        };
-        ScaffoldStepSubmissionRequestClassifyByFitSubmissionRequest: {
-            /** @enum {string} */
-            type?: "classifyByFit";
-            classifications: null | components["schemas"]["FitClassificationEntryRequest"][];
-        };
-        ScaffoldStepSubmissionRequestEnterScalarSubmissionRequest: {
-            /** @enum {string} */
-            type?: "enterScalar";
-            /** Format: double */
-            value: number | string;
-        };
-        ScaffoldStepSubmissionRequestJoinQuantitiesSubmissionRequest: {
-            /** @enum {string} */
-            type?: "joinQuantities";
-            parts: null | components["schemas"]["QuantityReferenceRequest"][];
-        };
-        ScaffoldStepSubmissionRequestMatchEquivalentLengthSubmissionRequest: {
-            /** @enum {string} */
-            type?: "matchEquivalentLength";
-            /** Format: int32 */
-            unitRodCount: number | string;
-        };
-        ScaffoldStepSubmissionRequestNameFitClassificationSubmissionRequest: {
-            /** @enum {string} */
-            type?: "nameFitClassification";
-            domain: components["schemas"]["IntegerDomain"];
-        };
-        ScaffoldStepSubmissionRequestSelectAnswerChoiceSubmissionRequest: {
-            /** @enum {string} */
-            type?: "selectAnswerChoice";
-            answerChoiceId: string;
-        };
-        ScaffoldStepSubmissionRequestTraverseAllGapsSubmissionRequest: {
-            /** @enum {string} */
-            type?: "traverseAllGaps";
-            traversals: null | components["schemas"]["GapTraversalRequest"][];
         };
         SemanticEdgeResponse: components["schemas"]["SemanticEdgeResponseSelectsElementResponse"] | components["schemas"]["SemanticEdgeResponseRefersToResponse"] | components["schemas"]["SemanticEdgeResponseDerivesFromResponse"] | components["schemas"]["SemanticEdgeResponseRequestsValueResponse"] | components["schemas"]["SemanticEdgeResponseRequestsOperationResponse"];
         SemanticEdgeResponseDerivesFromResponse: {
@@ -1319,9 +1266,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": null | components["schemas"]["ScaffoldStepSubmissionRequest"];
+                "application/json": components["schemas"]["JsonElement"];
             };
         };
         responses: {

@@ -1,5 +1,10 @@
+using System.Text.Json;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+
+using HttpJsonOptions = Microsoft.AspNetCore.Http.Json.JsonOptions;
 
 using TsiaCoach.Domain.ScaffoldSessions;
 using TsiaCoach.Domain.Scaffolds.Evaluation;
@@ -94,10 +99,11 @@ public static class ScaffoldSessionEndpoints
             NotFound<ProblemDetails>,
             Conflict<ProblemDetails>> Check(
             string sessionId,
-            ScaffoldStepSubmissionRequest? request,
+            JsonElement requestBody,
+            IOptions<HttpJsonOptions> jsonOptions,
             ScaffoldSessionService service)
         {
-            if (request is null)
+            if (requestBody.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
                 return TypedResults.BadRequest(Problem(
                     StatusCodes.Status400BadRequest,
@@ -107,11 +113,18 @@ public static class ScaffoldSessionEndpoints
             ScaffoldStepSubmission submission;
             try
             {
+                ScaffoldStepSubmissionRequest request =
+                    requestBody.Deserialize<ScaffoldStepSubmissionRequest>(
+                        jsonOptions.Value.SerializerOptions)
+                    ?? throw new InvalidOperationException(
+                        "A scaffold submission is required.");
                 submission = ScaffoldStepSubmissionRequestMapper.ToDomain(request);
             }
             catch (Exception exception) when (
                 exception is ArgumentException or
+                JsonException or
                 InvalidOperationException or
+                NotSupportedException or
                 OverflowException)
             {
                 return TypedResults.BadRequest(Problem(
