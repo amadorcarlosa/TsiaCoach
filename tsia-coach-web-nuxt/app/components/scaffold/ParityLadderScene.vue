@@ -65,6 +65,55 @@ const isKnownJoin = computed(() =>
 const baseLabel = computed(() => isKnownJoin.value ? '15' : 'n')
 const baseLength = computed(() => isKnownJoin.value ? 15 : 8)
 
+const joinStageEl = ref<HTMLElement | null>(null)
+const partZeroEl = ref<HTMLElement | null>(null)
+const partOneEl = ref<HTMLElement | null>(null)
+const sumTrainEl = ref<HTMLElement | null>(null)
+
+const firstPartLabel = computed(() => `First part, ${baseLabel.value}`)
+const nextPartLabel = computed(() => `Next part, ${baseLabel.value} plus 2`)
+
+const joinDropZones = useDropZones(joinStageEl)
+joinDropZones.registerZone('joined-train', sumTrainEl, {
+  accepts: pieceId => !joinedParts.value.has(Number(pieceId))
+})
+
+const joinAnnouncer = useDragAnnouncer()
+
+const partZeroDrag = useDraggablePiece({
+  pieceId: '0',
+  el: partZeroEl,
+  boardEl: joinStageEl,
+  zones: joinDropZones,
+  onDropped: () => {
+    const next = new Set(joinedParts.value)
+    next.add(0)
+    joinedParts.value = next
+    clearCheck()
+    partZeroDrag.resetToOrigin()
+  },
+  announce: joinAnnouncer.announce
+})
+
+const partOneDrag = useDraggablePiece({
+  pieceId: '1',
+  el: partOneEl,
+  boardEl: joinStageEl,
+  zones: joinDropZones,
+  onDropped: () => {
+    const next = new Set(joinedParts.value)
+    next.add(1)
+    joinedParts.value = next
+    clearCheck()
+    partOneDrag.resetToOrigin()
+  },
+  announce: joinAnnouncer.announce
+})
+
+const joinActiveZoneId = computed(() =>
+  partZeroDrag.activeZoneId.value ?? partOneDrag.activeZoneId.value
+)
+
 const expectedScalar = computed(() => {
   const check = props.step.successCheck
   return check.type === 'matchesLatentScalar'
@@ -179,13 +228,6 @@ function crossGap(index: number) {
     gapProgress.value += 1
     clearCheck()
   }
-}
-
-function toggleJoinedPart(index: number) {
-  const next = new Set(joinedParts.value)
-  next.has(index) ? next.delete(index) : next.add(index)
-  joinedParts.value = next
-  clearCheck()
 }
 
 function chooseScalar(value: number) {
@@ -401,30 +443,31 @@ watch(() => props.completed, value => {
 
       <div
         v-else-if="actionType === 'joinQuantities'"
+        ref="joinStageEl"
         class="join-stage"
       >
         <div class="join-lane">
           <span class="lane-label">First</span>
-          <button
-            type="button"
+          <div
+            ref="partZeroEl"
             class="quantity-part"
-            :class="{ 'is-selected': joinedParts.has(0) }"
-            @click="toggleJoinedPart(0)"
+            :class="{ 'is-joined': joinedParts.has(0) }"
+            :aria-label="firstPartLabel"
           >
             <ScaffoldRodPiece
               :length="baseLength"
               :label="baseLabel"
               tone="teal"
             />
-          </button>
+          </div>
         </div>
         <div class="join-lane">
           <span class="lane-label">Next</span>
-          <button
-            type="button"
+          <div
+            ref="partOneEl"
             class="quantity-part"
-            :class="{ 'is-selected': joinedParts.has(1) }"
-            @click="toggleJoinedPart(1)"
+            :class="{ 'is-joined': joinedParts.has(1) }"
+            :aria-label="nextPartLabel"
           >
             <ScaffoldRodPiece
               :length="baseLength"
@@ -436,11 +479,15 @@ watch(() => props.completed, value => {
               label="+2"
               tone="red"
             />
-          </button>
+          </div>
         </div>
         <div class="sum-lane" :class="{ 'has-sized-target': joinScene?.showSizedTarget }">
           <span class="lane-label">Sum</span>
-          <div class="joined-train">
+          <div
+            ref="sumTrainEl"
+            class="joined-train"
+            :class="{ 'is-active': joinActiveZoneId === 'joined-train' }"
+          >
             <template v-if="joinedParts.has(0)">
               <ScaffoldRodPiece
                 :length="baseLength"
@@ -461,9 +508,12 @@ watch(() => props.completed, value => {
               />
             </template>
             <span v-if="joinedParts.size === 0" class="empty-lane-copy">
-              Select each part to copy it here.
+              Drag each part here to join it.
             </span>
           </div>
+        </div>
+        <div class="sr-only" aria-live="polite">
+          {{ joinAnnouncer.message }}
         </div>
       </div>
 
@@ -789,19 +839,36 @@ watch(() => props.completed, value => {
 }
 
 .quantity-part {
+  position: relative;
+  z-index: 5;
   display: flex;
   width: fit-content;
   border: 0;
   border-radius: 0.65rem;
   background: transparent;
   padding: 0.25rem;
+  cursor: grab;
+  user-select: none;
   transition: 150ms ease;
 }
 
-.quantity-part:hover,
-.quantity-part.is-selected {
+.quantity-part:hover {
   background: rgb(15 118 110 / 0.12);
   box-shadow: 0 0 0 2px rgb(15 118 110 / 0.35);
+}
+
+.quantity-part:active {
+  cursor: grabbing;
+}
+
+.quantity-part:focus-visible {
+  outline: 3px solid rgb(20 184 166 / 0.42);
+  outline-offset: 3px;
+}
+
+.quantity-part.is-joined {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .sum-lane {
@@ -815,6 +882,16 @@ watch(() => props.completed, value => {
   border: 2px dashed rgb(15 118 110 / 0.34);
   border-radius: 0.65rem;
   padding: 0.4rem;
+}
+
+.joined-train {
+  border-radius: 0.65rem;
+  transition: 160ms ease;
+}
+
+.joined-train.is-active {
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.32);
+  background: rgb(15 118 110 / 0.08);
 }
 
 .single-measure {
@@ -909,6 +986,18 @@ watch(() => props.completed, value => {
 
 .feedback-copy.is-correct { color: var(--color-green-600); }
 .feedback-copy.is-incorrect { color: var(--color-orange-500); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 @media (max-width: 640px) {
   .board-surface {

@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import type { Draggable } from 'gsap/Draggable'
-import { closestZone, hitZone, snapPointForZone, type Rect, type ZoneRect } from '~/utils/drag-geometry'
+import { hitZone, snapPointForZone, type Rect, type ZoneRect } from '~/utils/drag-geometry'
 import { KeyboardDragStateMachine, type KeyboardDragEvent } from './keyboard-drag-state'
 import type { useDropZones } from './useDropZones'
 
@@ -72,24 +72,12 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
       return null
     }
 
-    const pieceCenter = {
-      x: pieceRect.x + pieceRect.width / 2,
-      y: pieceRect.y + pieceRect.height / 2
-    }
-    const nearest = closestZone(pieceCenter, accepting)
-    const zone = nearest ? accepting.find(candidate => candidate.id === nearest.id) : undefined
+    // Only snap into a zone the release position would already pass hitZone
+    // for, so the visual snap and the drop-resolution hit test always agree.
+    const zoneId = hitZone(pieceRect, accepting, 0.5)
+    const zone = zoneId ? accepting.find(candidate => candidate.id === zoneId) : undefined
 
-    if (!zone || !nearest) {
-      return null
-    }
-
-    // A throw only snaps while it is close enough to plausibly target this zone.
-    const snapRadius = Math.hypot(
-      (zone.width + pieceRect.width) / 2,
-      (zone.height + pieceRect.height) / 2
-    )
-
-    if (nearest.distance > snapRadius) {
+    if (!zone) {
       return null
     }
 
@@ -374,8 +362,14 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     }
   })
 
+  function resetToOrigin(onComplete?: () => void) {
+    activeZoneId.value = null
+    animateToOrigin(onComplete)
+  }
+
   return {
     activeZoneId,
-    isKeyboardLifted
+    isKeyboardLifted,
+    resetToOrigin
   }
 }
