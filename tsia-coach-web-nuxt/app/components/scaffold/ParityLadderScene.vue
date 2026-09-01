@@ -851,13 +851,18 @@ watch(() => props.completed, value => {
   position: relative;
   z-index: 5;
   display: flex;
+  min-width: 44px;
+  min-height: 44px;
   width: fit-content;
+  touch-action: none;
   border: 0;
   border-radius: 0.65rem;
   background: transparent;
   padding: 0.25rem;
   cursor: grab;
+  -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   transition: 150ms ease;
 }
 

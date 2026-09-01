@@ -181,6 +181,7 @@ h1 {
   justify-content: center;
   width: 92px;
   height: 68px;
+  touch-action: none;
   gap: 7px;
   border: 0;
   border-radius: 14px;
@@ -189,7 +190,9 @@ h1 {
   cursor: grab;
   font-weight: 700;
   box-shadow: 0 8px 22px rgb(15 23 42 / 0.14);
+  -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .drag-piece:focus-visible {

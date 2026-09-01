@@ -1,4 +1,7 @@
 using TsiaCoach.Domain.Scaffolds;
+using TsiaCoach.Domain.ScaffoldSessions;
+using TsiaCoach.Domain.Scaffolds.Evaluation;
+using TsiaCoach.WebApi.ScaffoldSessions;
 
 namespace TsiaCoach.WebApi.Response;
 
@@ -28,6 +31,21 @@ internal static class ScaffoldResponseMapper
             Scene: ToResponse(step.Scene),
             Action: ToResponse(step.Action),
             SuccessCheck: ToResponse(step.SuccessCheck));
+
+    internal static ScaffoldResourceResponse ToResourceResponse(
+        ScaffoldResource resource) => ToResponse(resource);
+
+    internal static ScaffoldLearnerStepResponse ToLearnerStepResponse(
+        ScaffoldStep step) =>
+        new(
+            Id: step.Id.Value,
+            Prompt: new(
+                Text: step.Prompt.Text,
+                FocusPhraseIds: step.Prompt.FocusPhraseIds
+                    .Select(id => id.Value)
+                    .ToArray()),
+            Scene: ToResponse(step.Scene),
+            Action: ToResponse(step.Action));
 
     private static ScaffoldResourceResponse ToResponse(ScaffoldResource resource) =>
         resource.Value switch
@@ -146,4 +164,86 @@ internal static class ScaffoldResponseMapper
 
     private static InvalidOperationException Unsupported(string kind, object? value) =>
         new($"Unsupported {kind} case: {value?.GetType().Name ?? "null"}.");
+}
+
+internal static class ScaffoldSessionResponseMapper
+{
+    public static ScaffoldSessionResponse ToResponse(
+        ScaffoldSessionContext context)
+    {
+        ScaffoldSession session = context.Session;
+        ScaffoldSessionProgress progress = session.Progress(
+            context.PracticeItem,
+            context.Scaffold);
+
+        ScaffoldSessionStateResponse state = progress.Value switch
+        {
+            ActiveScaffoldSession active => new ActiveScaffoldSessionResponse(
+                FindLearnerStep(context.Scaffold, active.CurrentStepId)),
+            CompletedScaffoldSession => new CompletedScaffoldSessionResponse(),
+            _ => throw new InvalidOperationException("Unsupported scaffold session progress.")
+        };
+
+        ScaffoldLastCheckResponse? lastCheck = session.Checks.Count == 0
+            ? null
+            : ToLastCheck(session, context);
+
+        int completedStepCount = progress.Value switch
+        {
+            ActiveScaffoldSession active => active.CompletedStepCount,
+            CompletedScaffoldSession completed => completed.TotalStepCount,
+            _ => throw new InvalidOperationException("Unsupported scaffold session progress.")
+        };
+
+        int totalStepCount = progress.Value switch
+        {
+            ActiveScaffoldSession active => active.TotalStepCount,
+            CompletedScaffoldSession completed => completed.TotalStepCount,
+            _ => throw new InvalidOperationException("Unsupported scaffold session progress.")
+        };
+
+        return new(
+            SessionId: session.Id.Value,
+            AttemptId: session.AttemptId.Value,
+            PracticeItemId: session.PracticeItemId.Value,
+            ScaffoldId: session.ScaffoldId.Value,
+            EntryStepId: session.EntryStepId.Value,
+            CheckCount: session.Checks.Count,
+            CompletedStepCount: completedStepCount,
+            TotalStepCount: totalStepCount,
+            Resources: context.Scaffold.Resources
+                .Select(ScaffoldResponseMapper.ToResourceResponse)
+                .ToArray(),
+            State: state,
+            LastCheck: lastCheck);
+    }
+
+    private static ScaffoldLearnerStepResponse FindLearnerStep(
+        Scaffold scaffold,
+        TsiaCoach.Domain.ValueObjects.ScaffoldStepId stepId)
+    {
+        ScaffoldStep step = scaffold.Phases
+            .SelectMany(phase => phase.Steps)
+            .SingleOrDefault(candidate => candidate.Id == stepId)
+            ?? throw new InvalidOperationException(
+                $"Scaffold step '{stepId.Value}' does not exist.");
+
+        return ScaffoldResponseMapper.ToLearnerStepResponse(step);
+    }
+
+    private static ScaffoldLastCheckResponse ToLastCheck(
+        ScaffoldSession session,
+        ScaffoldSessionContext context)
+    {
+        ScaffoldCheckResult check = session.Checks[^1];
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            context.Scaffold,
+            context.PracticeItem,
+            check.StepId,
+            check.Submission);
+
+        return new(
+            StepId: check.StepId.Value,
+            Satisfied: evaluation.Value is ScaffoldStepSatisfied);
+    }
 }

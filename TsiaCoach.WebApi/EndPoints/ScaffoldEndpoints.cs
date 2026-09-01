@@ -1,27 +1,24 @@
 using Microsoft.AspNetCore.Http.HttpResults;
-using TsiaCoach.Domain.SampleScaffolds;
 using TsiaCoach.Domain.Scaffolds;
+using TsiaCoach.WebApi.Attempts;
 using TsiaCoach.WebApi.Response;
 
 namespace TsiaCoach.WebApi.EndPoints;
 
 public static class ScaffoldEndpoints
 {
-    private static readonly IReadOnlyList<Scaffold> Scaffolds =
-    [
-        ParityLadderScaffold.Definition
-    ];
-
-    public static RouteGroupBuilder MapScaffolds(this RouteGroupBuilder api)
+    public static RouteGroupBuilder MapScaffolds(
+        this RouteGroupBuilder api,
+        SamplePracticeCatalog catalog)
     {
         RouteGroupBuilder scaffolds = api.MapGroup("/scaffolds");
 
-        scaffolds.MapGet("/", GetAll)
+        scaffolds.MapGet("/", () => GetAll(catalog))
             .WithName("GetScaffolds")
             .WithTags("Scaffolds")
             .Produces<ScaffoldResponse[]>(StatusCodes.Status200OK);
 
-        scaffolds.MapGet("/{id}", GetById)
+        scaffolds.MapGet("/{id}", (string id) => GetById(id, catalog))
             .WithName("GetScaffoldById")
             .WithTags("Scaffolds")
             .Produces<ScaffoldResponse>(StatusCodes.Status200OK)
@@ -30,15 +27,19 @@ public static class ScaffoldEndpoints
         return api;
     }
 
-    private static Ok<ScaffoldResponse[]> GetAll() =>
-        TypedResults.Ok(Scaffolds
+    private static Ok<ScaffoldResponse[]> GetAll(
+        SamplePracticeCatalog catalog) =>
+        TypedResults.Ok(catalog.Scaffolds
             .Select(ScaffoldResponseMapper.ToResponse)
             .ToArray());
 
-    private static Results<Ok<ScaffoldResponse>, NotFound> GetById(string id)
+    private static Results<Ok<ScaffoldResponse>, NotFound> GetById(
+        string id,
+        SamplePracticeCatalog catalog)
     {
-        Scaffold? scaffold = Scaffolds.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id.Value, id, StringComparison.Ordinal));
+        Scaffold? scaffold = catalog.TryFindScaffold(id, out Scaffold found)
+            ? found
+            : null;
 
         return scaffold is null
             ? TypedResults.NotFound()
