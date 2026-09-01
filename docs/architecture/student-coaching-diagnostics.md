@@ -3,6 +3,14 @@
 ## Status
 Accepted
 
+## Slice 6 deterministic scaffold evaluation
+- Learner submissions are modeled separately from authored `LearnerAction` values.
+- `ScaffoldStepEvaluator` derives scaffold-step correctness from the scaffold, practice item, step id, and submitted evidence.
+- Latent scalars, latent expressions, and correct answer ids remain evaluator inputs only.
+- `ScaffoldStepEvaluation` outcomes contain only satisfied/not-satisfied state and no solution-bearing data.
+- Expression evaluation in this slice compares a submitted known `MathObjectId` with the expected latent expression's authored math object.
+- Step authorization, step order enforcement, and append-only scaffold history are deferred to Slice 7.
+
 ## Slice 5 safe path
 - `/sample-Items` now uses `PracticeItemPromptResponse` through Nuxt BFF endpoints at `/api/practice-items` and attempt routes.
 - Server-side attempts drive all correctness and phase transitions.
