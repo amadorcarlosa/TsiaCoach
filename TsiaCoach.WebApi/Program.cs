@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using TsiaCoach.WebApi;
 using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.EndPoints;
+using TsiaCoach.WebApi.Attempts;
 using Azure.Core;
 using Azure.Identity;
 
@@ -40,6 +41,10 @@ builder.Services.AddSingleton<ModelClient>(sp =>
 });
 builder.Services.AddSingleton<AgentFactory>();
 builder.Services.AddSingleton<IAgentExecutor, AgentExecutor>();
+builder.Services.AddProblemDetails();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<SamplePracticeCatalog>();
+builder.Services.AddSingleton<InMemoryAttemptStore>();
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -70,6 +75,10 @@ var api = app.MapGroup("/api");
 api.MapModels();
 api.MapAgents();
 api.MapSampleQuestions();
+api.MapPracticeItems(app.Services.GetRequiredService<SamplePracticeCatalog>());
+api.MapAttempts(
+    app.Services.GetRequiredService<SamplePracticeCatalog>(),
+    app.Services.GetRequiredService<InMemoryAttemptStore>());
 api.MapScaffolds();
 app.Run();
 
