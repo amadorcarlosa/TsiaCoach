@@ -42,4 +42,17 @@ describe('drag geometry', () => {
     expect(hitZone({ x: 400, y: 400, width: 20, height: 20 }, zones, 0.5)).toBeNull()
     expect(hitZone({ x: 90, y: 10, width: 40, height: 60 }, zones, 0.5)).toBeNull()
   })
+
+  it('rejects a zone whose center is nearby but whose overlap is below the threshold', () => {
+    // Piece sits just outside zone 'a' — close by center distance (a plausible
+    // inertia-snap candidate), but it clears less than 50% overlap, so a snap
+    // decision keyed off hitZone must refuse it rather than snap in and then
+    // get rejected on release.
+    const piece = { x: 95, y: 60, width: 50, height: 50 }
+    expect(closestZone({ x: 120, y: 85 }, zones)).toEqual({
+      id: 'a',
+      distance: Math.hypot(70, 45)
+    })
+    expect(hitZone(piece, zones, 0.5)).toBeNull()
+  })
 })
