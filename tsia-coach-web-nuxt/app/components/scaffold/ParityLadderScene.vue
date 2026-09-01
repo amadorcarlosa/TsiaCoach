@@ -33,6 +33,12 @@ const selectedMathObjectId = ref<string | null>(null)
 const selectedAnswerChoiceId = ref<string | null>(null)
 const equivalenceBoardEl = ref<HTMLElement | null>(null)
 const matchBuildZoneEl = ref<HTMLElement | null>(null)
+const joinBoardEl = ref<HTMLElement | null>(null)
+const joinFirstPartEl = ref<HTMLElement | null>(null)
+const joinNextPartEl = ref<HTMLElement | null>(null)
+const joinSumLaneEl = ref<HTMLElement | null>(null)
+const joinFirstPartLabelText = computed(() => props.step.scene.type === 'quantityJoinScene' && props.step.scene.bindings?.length > 0 ? '15' : 'n')
+const joinSecondPartLabelText = computed(() => props.step.scene.type === 'quantityJoinScene' && props.step.scene.bindings?.length > 0 ? '17' : 'n + 2')
 const matchSupplyPieceEl = ref<HTMLElement | null>(null)
 
 const matchDropZones = useDropZones(equivalenceBoardEl)
@@ -52,6 +58,52 @@ const { activeZoneId, resetToOrigin } = useDraggablePiece({
   announce: matchDragAnnouncer.announce,
   announceLabel: 'white rod',
 })
+
+const joinDropZones = useDropZones(joinBoardEl)
+joinDropZones.registerZone('sum-lane', joinSumLaneEl, { accepts: pieceId => !selectedPartIndexes.value.has(Number(pieceId)) })
+const joinDragAnnouncer = useDragAnnouncer()
+const { activeZoneId: joinActiveZoneId0, resetToOrigin: resetJoinFirstToOrigin } = useDraggablePiece({
+  pieceId: '0',
+  el: joinFirstPartEl,
+  boardEl: joinBoardEl,
+  zones: joinDropZones,
+  onDropped: () => joinPartDropped(0, resetJoinFirstToOrigin),
+  announce: message => announceJoinPart(message, 0),
+  announceLabel: `First part, ${joinFirstPartLabelText.value}`,
+})
+const { activeZoneId: joinActiveZoneId1, resetToOrigin: resetJoinNextToOrigin } = useDraggablePiece({
+  pieceId: '1',
+  el: joinNextPartEl,
+  boardEl: joinBoardEl,
+  zones: joinDropZones,
+  onDropped: () => joinPartDropped(1, resetJoinNextToOrigin),
+  announce: message => announceJoinPart(message, 1),
+  announceLabel: `Next part, ${joinSecondPartLabelText.value}`,
+})
+
+const joinSumLaneIsActive = computed(() => (joinActiveZoneId0.value ?? joinActiveZoneId1.value) === 'sum-lane')
+
+function joinPartLabel(index: number): string {
+  if (index === 0) return joinFirstPartLabelText.value
+  if (index === 1) return joinSecondPartLabelText.value
+  return 'n'
+}
+
+function announceJoinPart(message: string, index: number) {
+  if (message.startsWith(index === 0 ? 'picked up First part,' : 'picked up Next part,')) {
+    joinDragAnnouncer.announce(`picked up ${index === 0 ? 'First' : 'Next'} part, ${joinPartLabel(index)}`)
+    return
+  }
+
+  joinDragAnnouncer.announce(message)
+}
+
+function joinPartDropped(index: number, resetToOrigin: () => void) {
+  const next = new Set(selectedPartIndexes.value)
+  next.add(index)
+  selectedPartIndexes.value = next
+  resetToOrigin()
+}
 
 function clearCheck() {
   // no-op placeholder for local check-state reset hooks
@@ -136,12 +188,6 @@ function toggleNumber(length: number) {
   const next = new Set(leftoverSelections.value)
   next.has(length) ? next.delete(length) : next.add(length)
   leftoverSelections.value = next
-}
-
-function togglePart(index: number) {
-  const next = new Set(selectedPartIndexes.value)
-  next.has(index) ? next.delete(index) : next.add(index)
-  selectedPartIndexes.value = next
 }
 
 function createSubmission(): ScaffoldStepSubmission | null {
@@ -252,13 +298,47 @@ watch(() => props.step.id, resetInputs, { immediate: true })
     </div>
 
     <div v-else-if="actionType === 'joinQuantities'" class="board-stage">
-      <p class="stage-label">Select each part that belongs in the sum lane.</p>
-      <div class="join-grid">
-        <button v-for="(_part, index) in joinScene?.parts ?? []" :key="index" type="button" :class="{ selected: selectedPartIndexes.has(index) }" @click="togglePart(index)">
-          <span>Part {{ index + 1 }}</span>
-          <ScaffoldRodPiece :length="index === 0 ? 8 : 10" :label="index === 0 ? (joinScene?.bindings.length ? '15' : 'n') : (joinScene?.bindings.length ? '17' : 'n + 2')" :tone="index === 0 ? 'teal' : 'red'" />
-        </button>
+      <p class="stage-label">Drag the parts into the sum lane.</p>
+      <div ref="joinBoardEl" class="join-layout">
+        <div class="join-source-row">
+          <section class="join-lane">
+            <h2 class="join-lane-label">First</h2>
+            <div class="join-lane-content">
+              <div v-if="joinScene?.parts?.[0]" ref="joinFirstPartEl" class="quantity-part" :class="{ 'is-joined': selectedPartIndexes.has(0) }" :aria-label="`First part, ${joinPartLabel(0)}`">
+                <ScaffoldRodPiece :length="8" :label="joinPartLabel(0)" tone="teal" />
+              </div>
+            </div>
+          </section>
+          <span class="join-plus" aria-hidden="true">+</span>
+          <section class="join-lane">
+            <h2 class="join-lane-label">Next</h2>
+            <div class="join-lane-content">
+              <div v-if="joinScene?.parts?.[1]" ref="joinNextPartEl" class="quantity-part" :class="{ 'is-joined': selectedPartIndexes.has(1) }" :aria-label="`Next part, ${joinPartLabel(1)}`">
+                <ScaffoldRodPiece :length="10" :label="joinPartLabel(1)" tone="red" />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="joinScene?.parts && joinScene.parts.length > 2" class="join-extra-parts">
+          <h2 class="join-lane-label">Extras</h2>
+          <div class="join-extra-content">
+            <ScaffoldRodPiece v-for="(_part, extraIndex) in joinScene.parts.slice(2)" :key="extraIndex" :length="extraIndex % 2 === 0 ? 8 : 10" :label="`n + ${extraIndex + 2}`" tone="ink" />
+          </div>
+        </div>
+
+        <section ref="joinSumLaneEl" class="join-sum-lane" :class="{ 'is-active': joinSumLaneIsActive }">
+          <h2 class="join-lane-label">Sum</h2>
+          <div class="join-sum-content">
+            <template v-for="index in [0, 1]" :key="index">
+              <div v-if="selectedPartIndexes.has(index)" class="quantity-part">
+                <ScaffoldRodPiece :length="index === 0 ? 8 : 10" :label="joinPartLabel(index)" :tone="index === 0 ? 'teal' : 'red'" />
+              </div>
+            </template>
+          </div>
+        </section>
       </div>
+      <div class="sr-only" aria-live="polite">{{ joinDragAnnouncer.message }}</div>
     </div>
 
     <div v-else-if="actionType === 'enterScalar'" class="board-stage">
@@ -322,8 +402,7 @@ watch(() => props.step.id, resetInputs, { immediate: true })
 button.selected { border-color: var(--color-primary-600); background: color-mix(in srgb, var(--color-primary-500) 12%, var(--mt-bg-elevated)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 22%, transparent); }
 .gap-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .gap-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; font: 700 .8rem "JetBrains Mono", monospace; }
-.join-grid, .expression-grid, .answer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
-.join-grid button { display: grid; justify-items: center; gap: 1rem; }
+.expression-grid, .answer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
 .supply-dock {
   display: inline-flex;
   align-items: center;
@@ -388,5 +467,77 @@ button.selected { border-color: var(--color-primary-600); background: color-mix(
 .response-dock { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--mt-border); padding: 1rem; }
 .response-dock p { display: flex; align-items: center; gap: .45rem; margin: 0; color: var(--mt-text-muted); font-size: .78rem; }
 .response-dock .feedback { color: var(--color-warning-700); }
+.join-layout {
+  display: grid;
+  gap: 1rem;
+}
+.join-source-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  justify-items: center;
+  gap: 1rem;
+}
+.join-lane {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: .7rem;
+}
+.join-lane-label {
+  margin: 0;
+  font: 700 .8rem "JetBrains Mono", monospace;
+  color: var(--mt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.join-lane-content {
+  min-height: 5rem;
+  display: grid;
+  place-items: center;
+}
+.join-plus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 1.2rem "JetBrains Mono", monospace;
+  color: var(--mt-text-sub);
+  padding-top: 1.6rem;
+}
+.join-sum-lane {
+  min-height: 5rem;
+  border: 2px dashed color-mix(in srgb, var(--mt-border-strong) 60%, transparent);
+  border-radius: .9rem;
+  background: color-mix(in srgb, var(--mt-bg-elevated) 92%, transparent);
+  padding: .85rem 1rem;
+  display: grid;
+  gap: .7rem;
+  align-content: start;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.join-sum-lane.is-active {
+  border-color: var(--color-primary-600);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-primary-500) 14%, transparent);
+  background: color-mix(in srgb, var(--color-primary-100) 26%, transparent);
+}
+.join-sum-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+}
+.quantity-part.is-joined {
+  opacity: .45;
+}
+.join-extra-parts {
+  display: grid;
+  gap: .7rem;
+  justify-items: center;
+}
+.join-extra-content {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .6rem;
+}
 @media (max-width: 700px) { .rod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .gap-stage, .join-grid, .expression-grid, .answer-grid { grid-template-columns: 1fr; } .response-dock { align-items: stretch; flex-direction: column; } }
 </style>

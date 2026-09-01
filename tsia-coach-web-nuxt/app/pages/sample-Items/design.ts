@@ -29,7 +29,11 @@ export const Styles = {
   AnswerExpression: 'sample-items-answer-expression',
   QuestionActions: 'sample-items-question-actions',
   QuestionHint: 'sample-items-question-hint',
-  Feedback: 'sample-items-feedback'
+  Feedback: 'sample-items-feedback',
+  CoachingCard: 'sample-items-coaching-card',
+  CoachingLabel: 'sample-items-coaching-label',
+  CoachingMessage: 'sample-items-coaching-message',
+  CoachingActions: 'sample-items-coaching-actions'
 } as const
 
 export type Style = typeof Styles[keyof typeof Styles]

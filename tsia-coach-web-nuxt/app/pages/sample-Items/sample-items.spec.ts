@@ -16,7 +16,8 @@ import {
 } from '#shared/types/sample-items'
 import {
   LoadStates,
-  SubmissionStates
+  SubmissionStates,
+  coachingCardView
 } from './sample-items-ui'
 
 function makeToken(
@@ -58,7 +59,13 @@ function makePrompt(id: string, answers: string[]): PracticeItemPrompt {
       sentences: [
         { start: 0, length: `${id} text`.length }
       ],
-      phrases: []
+      phrases: [
+        {
+          id: `${id}-phrase-1`,
+          tokenSpan: { start: 0, length: 1 },
+          characterSpan: { start: 0, length: 2 }
+        }
+      ]
     },
     semantics: {
       entities: [],
@@ -530,5 +537,343 @@ describe('sample item attempt store', () => {
 
     expect(store.focusTarget).toEqual(focusCommand.target)
     expect(store.selectedItem?.id).toBe('item-2')
+  })
+})
+
+function coachableBeforeCheck(itemId: string, attemptId: string): AttemptProjection {
+  return {
+    ...beforeCheckProjection(itemId, attemptId),
+    coachingButton: {
+      type: 'visible',
+      label: 'Help'
+    }
+  } as AttemptProjection
+}
+
+function coachableIncorrect(itemId: string, attemptId: string): AttemptProjection {
+  return {
+    ...incorrectProjection(itemId, attemptId),
+    coachingButton: {
+      type: 'visible',
+      label: 'Diagnosis'
+    }
+  } as AttemptProjection
+}
+
+function coachableCorrect(itemId: string, attemptId: string): AttemptProjection {
+  return {
+    ...correctProjection(itemId, attemptId),
+    coachingButton: {
+      type: 'visible',
+      label: 'Why it works'
+    }
+  } as AttemptProjection
+}
+
+interface CoachingHarnessOptions {
+  startProjection?: (itemId: string, attemptId: string) => AttemptProjection
+  onCoach?: (options: Record<string, any>) => unknown | Promise<unknown>
+  onCheck?: () => unknown
+  onRead?: (attemptId: string) => unknown
+}
+
+function askMove(focusPhraseIds: string[] = []) {
+  return {
+    move: {
+      type: 'askReadingQuestion',
+      message: 'What quantity does the phrase describe?',
+      focusPhraseIds
+    }
+  }
+}
+
+async function createCoachingHarness(options: CoachingHarnessOptions = {}) {
+  const startProjection = options.startProjection ?? coachableBeforeCheck
+  const coachCalls: Array<Record<string, any>> = []
+
+  const fetchMock = vi.fn(async (url: string, requestOptions?: Record<string, any>) => {
+    if (url === '/api/practice-items') {
+      return [makePrompt('item-1', ['a-1', 'a-2']), makePrompt('item-2', ['b-1', 'b-2'])]
+    }
+
+    if (url === '/api/attempts') {
+      const itemId = requestOptions?.body?.practiceItemId
+      return startProjection(itemId, `attempt-${itemId}`)
+    }
+
+    if (url.endsWith('/coach')) {
+      coachCalls.push(requestOptions ?? {})
+      if (options.onCoach) {
+        return options.onCoach(requestOptions ?? {})
+      }
+      return askMove()
+    }
+
+    if (url.endsWith('/checks') && options.onCheck) {
+      return options.onCheck()
+    }
+
+    if (url.startsWith('/api/attempts/') && options.onRead) {
+      return options.onRead(url.slice('/api/attempts/'.length))
+    }
+
+    throw new Error(`Unexpected API call: ${url}`)
+  })
+
+  vi.stubGlobal('$fetch', fetchMock)
+
+  const store = useSampleItemsStore()
+  await store.load()
+
+  return { store, fetchMock, coachCalls }
+}
+
+describe('sample item coaching store', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('requestCoaching_BeforeCheckSendsHelpRequested', async () => {
+    const { store, coachCalls, fetchMock } = await createCoachingHarness()
+
+    await store.requestCoaching()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/attempts/attempt-item-1/coach',
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(coachCalls[0]?.body).toEqual({ event: 'helpRequested' })
+    expect(store.coachingState).toBe('shown')
+    expect(store.coachingMove).toMatchObject({ type: 'askReadingQuestion' })
+  })
+
+  it('requestCoaching_AfterIncorrectSendsDiagnosisRequested', async () => {
+    const { store, coachCalls } = await createCoachingHarness({
+      startProjection: coachableIncorrect
+    })
+
+    await store.requestCoaching()
+
+    expect(coachCalls[0]?.body).toEqual({ event: 'diagnosisRequested' })
+  })
+
+  it('requestCoaching_AfterCorrectSendsExplainCorrect', async () => {
+    const { store, coachCalls } = await createCoachingHarness({
+      startProjection: coachableCorrect
+    })
+
+    await store.requestCoaching()
+
+    expect(coachCalls[0]?.body).toEqual({ event: 'explainCorrect' })
+  })
+
+  it('requestCoaching_SendsNoModelInstructionsOrHistory', async () => {
+    const { store, coachCalls } = await createCoachingHarness()
+
+    await store.requestCoaching()
+
+    const body = coachCalls[0]?.body as Record<string, unknown>
+    expect(Object.keys(body)).toEqual(['event'])
+    for (const forbidden of [
+      'model', 'instructions', 'history', 'phase',
+      'misconception', 'suggestedStepId', 'correctAnswerId'
+    ]) {
+      expect(body).not.toHaveProperty(forbidden)
+    }
+  })
+
+  it('requestCoaching_RequiresVisibleServerButton', async () => {
+    const { store, coachCalls } = await createCoachingHarness({
+      startProjection: beforeCheckProjection
+    })
+
+    await store.requestCoaching()
+
+    expect(coachCalls).toHaveLength(0)
+    expect(store.coachingState).toBe('idle')
+  })
+
+  it('requestCoaching_DeduplicatesConcurrentRequests', async () => {
+    const deferred = createDeferred<unknown>()
+    const { store, coachCalls } = await createCoachingHarness({
+      onCoach: () => deferred.promise
+    })
+
+    const first = store.requestCoaching()
+    const second = store.requestCoaching()
+
+    expect(coachCalls).toHaveLength(1)
+
+    deferred.resolve(askMove())
+    await Promise.all([first, second])
+
+    expect(coachCalls).toHaveLength(1)
+    expect(store.coachingState).toBe('shown')
+  })
+
+  it('requestCoaching_StoresValidatedMovePerItem', async () => {
+    const { store } = await createCoachingHarness()
+
+    await store.requestCoaching()
+    expect(store.coachingMove).not.toBeNull()
+
+    await store.selectItem('item-2')
+    expect(store.coachingMove).toBeNull()
+    expect(store.coachingState).toBe('idle')
+  })
+
+  it('requestCoaching_IgnoresResponseAfterPhaseChanges', async () => {
+    const deferred = createDeferred<unknown>()
+    const { store } = await createCoachingHarness({
+      onCoach: () => deferred.promise,
+      onCheck: () => coachableIncorrect('item-1', 'attempt-item-1')
+    })
+
+    const pending = store.requestCoaching()
+
+    store.selectAnswer('a-2')
+    await store.submitSelectedAnswer()
+
+    deferred.resolve(askMove())
+    await pending
+
+    expect(store.coachingMove).toBeNull()
+    expect(store.attemptProjection?.phase.type).toBe(AttemptPhaseKinds.AfterIncorrectCheck)
+  })
+
+  it('successfulAnswerCheck_ClearsPreviousCoachingMove', async () => {
+    const { store } = await createCoachingHarness({
+      onCheck: () => coachableCorrect('item-1', 'attempt-item-1')
+    })
+
+    await store.requestCoaching()
+    expect(store.coachingMove).not.toBeNull()
+
+    store.selectAnswer('a-1')
+    await store.submitSelectedAnswer()
+
+    expect(store.coachingMove).toBeNull()
+    expect(store.coachingState).toBe('idle')
+  })
+
+  it('itemNavigation_DoesNotLeakCoachingMoveBetweenItems', async () => {
+    const { store } = await createCoachingHarness()
+
+    await store.requestCoaching()
+    const firstMove = store.coachingMove
+    expect(firstMove).not.toBeNull()
+
+    await store.selectItem('item-2')
+    expect(store.coachingMove).toBeNull()
+
+    await store.selectItem('item-1')
+    expect(store.coachingMove).toEqual(firstMove)
+  })
+
+  it('coachingFailure_PreservesAttemptProjection', async () => {
+    const { store } = await createCoachingHarness({
+      onCoach: () => {
+        const error = new Error('bad gateway') as Error & { statusCode: number }
+        error.statusCode = 502
+        throw error
+      }
+    })
+
+    const projectionBefore = store.attemptProjection
+
+    await store.requestCoaching()
+
+    expect(store.attemptProjection).toBe(projectionBefore)
+    expect(store.coachingState).toBe('error')
+    expect(store.coachingError).toBe('Coaching is temporarily unavailable.')
+  })
+
+  it('coachingFailure_AllowsExplicitRetry', async () => {
+    let failNext = true
+    const { store, coachCalls } = await createCoachingHarness({
+      onCoach: () => {
+        if (failNext) {
+          failNext = false
+          throw new Error('network down')
+        }
+        return askMove()
+      }
+    })
+
+    await store.requestCoaching()
+    expect(store.coachingState).toBe('error')
+    expect(store.coachingError).toBe('Could not reach the coach.')
+
+    await store.retryCoaching()
+
+    expect(coachCalls).toHaveLength(2)
+    expect(store.coachingState).toBe('shown')
+    expect(store.coachingMove).not.toBeNull()
+  })
+
+  it('coaching409_RefreshesAttemptProjection', async () => {
+    const refreshed = coachableIncorrect('item-1', 'attempt-item-1')
+    const { store } = await createCoachingHarness({
+      onCoach: () => {
+        const error = new Error('conflict') as Error & { statusCode: number }
+        error.statusCode = 409
+        throw error
+      },
+      onRead: () => refreshed
+    })
+
+    await store.requestCoaching()
+
+    expect(store.attemptProjection).toEqual(refreshed)
+    expect(store.coachingState).toBe('error')
+    expect(store.coachingError).toBe('This item changed. Ask the coach again.')
+  })
+
+  it('suggestScaffold_UsesAttemptIdNotSuggestedStepId', async () => {
+    const { store } = await createCoachingHarness({
+      startProjection: coachableIncorrect,
+      onCoach: () => ({
+        move: {
+          type: 'suggestScaffold',
+          message: 'A short walkthrough can help.',
+          focusPhraseIds: [],
+          suggestedStepId: 'step-secret-entry'
+        }
+      })
+    })
+
+    await store.requestCoaching()
+
+    const view = coachingCardView(store.coachingMove, store.attemptProjection!.attemptId)
+    expect(view?.walkthroughHref).toBe('/scaffolds/attempt-item-1')
+    expect(JSON.stringify(view)).not.toContain('step-secret-entry')
+  })
+
+  it('coachingFocus_UsesFirstKnownPhrase', async () => {
+    const { store } = await createCoachingHarness({
+      onCoach: () => askMove(['foreign-phrase', 'item-1-phrase-1'])
+    })
+
+    await store.requestCoaching()
+
+    expect(store.focusTarget).toEqual({
+      kind: 'phrase',
+      id: 'item-1-phrase-1'
+    })
+  })
+
+  it('coachingFocus_IgnoresForeignPhraseId', async () => {
+    const { store } = await createCoachingHarness({
+      onCoach: () => askMove(['foreign-phrase', 'item-2-phrase-1'])
+    })
+
+    await store.requestCoaching()
+
+    expect(store.focusTarget).toBeNull()
+    expect(store.coachingState).toBe('shown')
   })
 })

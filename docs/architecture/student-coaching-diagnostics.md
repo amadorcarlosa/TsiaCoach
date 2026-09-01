@@ -69,3 +69,13 @@ After an incorrect check, the policy projects the latest misconception to its au
 - The browser submits learner evidence only. It never submits correctness, reads a success-check definition, or compares against expected scalar, expression, or answer values.
 - Unsatisfied checks preserve the server-issued current step; satisfied checks advance only by replacing the local projection with the server response.
 - Starting the same authorized session again resumes its server progress, including after a browser reload.
+
+## Slice 9 phase-scoped student coaching agent
+- `POST /api/attempts/{attemptId}/coach` accepts only a coaching event from the browser: `helpRequested`, `diagnosisRequested`, or `explainCorrect`.
+- The attempt phase, phase/event legality, diagnosis, hint level, scaffold route, scaffold-step authorization, and available provenance facts are derived on the server.
+- Model-facing context is built from explicit phase allow-lists. Before-check context contains prompt text, safe tokens, and authorized phrases; incorrect-check context contains the latest server diagnosis and only the exact authorized scaffold entry when one exists; correct-check context contains the source-first why-it-works projection.
+- Model output is treated as untrusted input. It must parse as one strict JSON object, use only a phase-authorized move, stay within message and ID allow-lists, and contain no unexpected properties.
+- Suggested scaffold steps are pinned to the deterministic coaching policy route and are allowed only after an escalated authorized `ScaffoldEntry`.
+- The coaching agent does not mutate attempts or scaffold sessions.
+- No executable model tools are introduced in this slice; the phase-specific capability set is only an output allow-list.
+- The generic `/api/agent` endpoint remains separate and is not used by the student flow.
