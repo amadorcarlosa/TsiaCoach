@@ -85,7 +85,8 @@ const { activeZoneId } = useDraggablePiece({
   onCancelled: () => {
     statusMessage.value = 'cancelled'
   },
-  announce: announcer.announce
+  announce: announcer.announce,
+  announceLabel: 'teal piece'
 })
 </script>
 

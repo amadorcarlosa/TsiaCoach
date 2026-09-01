@@ -68,13 +68,17 @@ const baseLength = computed(() => isKnownJoin.value ? 15 : 8)
 const joinStageEl = ref<HTMLElement | null>(null)
 const partZeroEl = ref<HTMLElement | null>(null)
 const partOneEl = ref<HTMLElement | null>(null)
-const sumTrainEl = ref<HTMLElement | null>(null)
+const sumLaneEl = ref<HTMLElement | null>(null)
 
 const firstPartLabel = computed(() => `First part, ${baseLabel.value}`)
 const nextPartLabel = computed(() => `Next part, ${baseLabel.value} plus 2`)
 
 const joinDropZones = useDropZones(joinStageEl)
-joinDropZones.registerZone('joined-train', sumTrainEl, {
+// The zone is the whole Sum lane, not the train inside it: an empty train
+// hugs its content (~20px tall), so no piece could ever reach the 50% overlap
+// hitZone needs. The lane keeps a stable min-height taller than a piece, so the
+// first drop is reachable and the zone geometry stops moving as rods are added.
+joinDropZones.registerZone('joined-train', sumLaneEl, {
   accepts: pieceId => !joinedParts.value.has(Number(pieceId))
 })
 
@@ -92,7 +96,8 @@ const partZeroDrag = useDraggablePiece({
     clearCheck()
     partZeroDrag.resetToOrigin()
   },
-  announce: joinAnnouncer.announce
+  announce: joinAnnouncer.announce,
+  announceLabel: firstPartLabel.value
 })
 
 const partOneDrag = useDraggablePiece({
@@ -107,7 +112,8 @@ const partOneDrag = useDraggablePiece({
     clearCheck()
     partOneDrag.resetToOrigin()
   },
-  announce: joinAnnouncer.announce
+  announce: joinAnnouncer.announce,
+  announceLabel: nextPartLabel.value
 })
 
 const joinActiveZoneId = computed(() =>
@@ -481,13 +487,16 @@ watch(() => props.completed, value => {
             />
           </div>
         </div>
-        <div class="sum-lane" :class="{ 'has-sized-target': joinScene?.showSizedTarget }">
+        <div
+          ref="sumLaneEl"
+          class="sum-lane"
+          :class="{
+            'has-sized-target': joinScene?.showSizedTarget,
+            'is-active': joinActiveZoneId === 'joined-train'
+          }"
+        >
           <span class="lane-label">Sum</span>
-          <div
-            ref="sumTrainEl"
-            class="joined-train"
-            :class="{ 'is-active': joinActiveZoneId === 'joined-train' }"
-          >
+          <div class="joined-train">
             <template v-if="joinedParts.has(0)">
               <ScaffoldRodPiece
                 :length="baseLength"
@@ -874,7 +883,14 @@ watch(() => props.completed, value => {
 .sum-lane {
   min-height: 5.2rem;
   border-top: 1px solid rgb(24 50 58 / 0.22);
+  border-radius: 0.65rem;
   padding-top: 1.25rem;
+  transition: 160ms ease;
+}
+
+.sum-lane.is-active {
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.32);
+  background: rgb(15 118 110 / 0.08);
 }
 
 .sum-lane.has-sized-target .joined-train {
@@ -882,16 +898,6 @@ watch(() => props.completed, value => {
   border: 2px dashed rgb(15 118 110 / 0.34);
   border-radius: 0.65rem;
   padding: 0.4rem;
-}
-
-.joined-train {
-  border-radius: 0.65rem;
-  transition: 160ms ease;
-}
-
-.joined-train.is-active {
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.32);
-  background: rgb(15 118 110 / 0.08);
 }
 
 .single-measure {

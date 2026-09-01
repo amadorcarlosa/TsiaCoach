@@ -16,6 +16,8 @@ export interface DraggablePieceOptions {
   onPickedUp?: () => void
   onCancelled?: () => void
   announce?: (message: string) => void
+  /** Human-readable name used in pickup announcements instead of pieceId. */
+  announceLabel?: string
 }
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
@@ -37,6 +39,10 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
   let originalTouchAction = ''
   let originalTabIndex: number | null = null
   let originalRole: string | null = null
+
+  function pickupLabel(): string {
+    return options.announceLabel ?? options.pieceId
+  }
 
   function numeric(value: string | number): number {
     return typeof value === 'number' ? value : Number.parseFloat(value) || 0
@@ -186,7 +192,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     pendingReleaseRect = null
     activeZoneId.value = null
     options.onPickedUp?.()
-    options.announce?.(`picked up ${options.pieceId}`)
+    options.announce?.(`picked up ${pickupLabel()}`)
   }
 
   function handleKeyboardEvent(event: KeyboardDragEvent) {
@@ -195,7 +201,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
       activeZoneId.value = null
       animateLifted(true)
       options.onPickedUp?.()
-      options.announce?.(`picked up ${options.pieceId}`)
+      options.announce?.(`picked up ${pickupLabel()}`)
     } else if (event.type === 'over-zone') {
       activeZoneId.value = event.zoneId
       animateToZone(event.zoneId)
@@ -216,24 +222,30 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
 
     if (isActivation) {
       event.preventDefault()
-      keyboard.setZones(acceptingZones().map(zone => zone.id))
 
       if (!keyboard.isLifted) {
+        // Refresh zone geometry at pickup: rects are otherwise only updated by
+        // ResizeObserver, so a zone measured before layout settled would make
+        // the cycle list and the later snap decision run on stale rects.
+        options.zones.measure()
+        keyboard.setZones(acceptingZones().map(zone => zone.id))
         handleKeyboardEvent(keyboard.handle('pickup')!)
-      } else {
-        const dropEvent = keyboard.handle('drop')
+        return
+      }
 
-        if (dropEvent) {
-          handleKeyboardEvent(dropEvent)
-        } else {
-          keyboard.reset()
-          isKeyboardLifted.value = false
-          activeZoneId.value = null
-          animateToOrigin(() => {
-            options.onRejected?.()
-            options.announce?.('rejected')
-          })
-        }
+      keyboard.setZones(acceptingZones().map(zone => zone.id))
+      const dropEvent = keyboard.handle('drop')
+
+      if (dropEvent) {
+        handleKeyboardEvent(dropEvent)
+      } else {
+        keyboard.reset()
+        isKeyboardLifted.value = false
+        activeZoneId.value = null
+        animateToOrigin(() => {
+          options.onRejected?.()
+          options.announce?.('rejected')
+        })
       }
       return
     }
@@ -310,6 +322,9 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
           y: value => snapCoordinate('y', value)
         },
         onPress: () => {
+          // Same reason as the keyboard pickup: measure before any snap or hit
+          // test reads zone rects, so resolution always uses live geometry.
+          options.zones.measure()
           announcePointerPickup()
         },
         onDragStart: () => {

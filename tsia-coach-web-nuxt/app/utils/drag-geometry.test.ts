@@ -43,6 +43,21 @@ describe('drag geometry', () => {
     expect(hitZone({ x: 90, y: 10, width: 40, height: 60 }, zones, 0.5)).toBeNull()
   })
 
+  it('cannot reach the threshold against a zone shorter than half the piece', () => {
+    // Regression: the join scene registered the content-hugging `.joined-train`
+    // as its drop zone. While empty the train measures ~20px tall against a
+    // ~52px piece, so even a perfectly centred piece tops out below 0.5 and no
+    // pointer drop could ever join the first part. Registering the Sum lane —
+    // which holds a min-height taller than a piece — makes the first drop
+    // reachable.
+    const piece = { x: 0, y: 0, width: 206, height: 52 }
+    const emptyTrain: ZoneRect = { id: 'train', x: 0, y: 16, width: 774, height: 20 }
+    const sumLane: ZoneRect = { id: 'lane', x: 0, y: 0, width: 774, height: 83 }
+
+    expect(hitZone(piece, [emptyTrain], 0.5)).toBeNull()
+    expect(hitZone(piece, [sumLane], 0.5)).toBe('lane')
+  })
+
   it('rejects a zone whose center is nearby but whose overlap is below the threshold', () => {
     // Piece sits just outside zone 'a' — close by center distance (a plausible
     // inertia-snap candidate), but it clears less than 50% overlap, so a snap
