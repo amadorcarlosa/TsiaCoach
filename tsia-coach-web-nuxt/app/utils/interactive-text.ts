@@ -1,7 +1,7 @@
 import type {
   AnswerChoice,
   CharacterSpan,
-  SampleItem
+  InteractiveTextItem
 } from '#shared/types/sample-items'
 import type { FocusTarget } from '~/pages/sample-Items/sample-items-ui'
 
@@ -67,7 +67,7 @@ function canMerge(
 }
 
 export function createInteractiveTextSegments(
-  item: SampleItem,
+  item: InteractiveTextItem,
   characterSpan: CharacterSpan
 ): InteractiveTextSegment[] {
   const requestedRange = normalizeCharacterSpan(characterSpan)
@@ -140,14 +140,14 @@ export function createInteractiveTextSegments(
 }
 
 export function createAnswerSegments(
-  item: SampleItem,
+  item: InteractiveTextItem,
   answer: AnswerChoice
 ): InteractiveTextSegment[] {
   return createInteractiveTextSegments(item, answer.contentCharacterSpan)
 }
 
 export function sliceSourceText(
-  item: SampleItem,
+  item: InteractiveTextItem,
   span: CharacterSpan
 ): string {
   const normalized = normalizeCharacterSpan(span)

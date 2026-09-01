@@ -136,6 +136,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/practice-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPracticeItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/practice-items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPracticeItemById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StartAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attempts/{attemptId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAttempt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attempts/{attemptId}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckAttemptAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scaffolds": {
         parameters: {
             query?: never;
@@ -199,11 +279,64 @@ export interface components {
             answerChoiceId: string;
             mathObjectId: string;
         };
+        AttemptPhaseResponse: components["schemas"]["AttemptPhaseResponseBeforeCheckResponse"] | components["schemas"]["AttemptPhaseResponseAfterIncorrectCheckResponse"] | components["schemas"]["AttemptPhaseResponseAfterCorrectCheckResponse"];
+        AttemptPhaseResponseAfterCorrectCheckResponse: {
+            /** @enum {string} */
+            type?: "afterCorrectCheck";
+            selectedAnswerId: string;
+        };
+        AttemptPhaseResponseAfterIncorrectCheckResponse: {
+            /** @enum {string} */
+            type?: "afterIncorrectCheck";
+            selectedAnswerId: string;
+            misconceptionCode: string;
+            purpose: string;
+            route: components["schemas"]["CoachingRouteResponse"];
+            /** Format: int32 */
+            routeStreak: number | string;
+            hintLevel: string;
+        };
+        AttemptPhaseResponseBeforeCheckResponse: {
+            /** @enum {string} */
+            type?: "beforeCheck";
+        };
+        AttemptProjectionResponse: {
+            attemptId: string;
+            practiceItemId: string;
+            /** Format: int32 */
+            checkCount: number | string;
+            phase: components["schemas"]["AttemptPhaseResponse"];
+            coachingButton: components["schemas"]["CoachingButtonResponse"];
+        };
         CharacterSpanResponse: {
             /** Format: int32 */
             start: number | string;
             /** Format: int32 */
             length: number | string;
+        };
+        CheckAnswerRequest: {
+            selectedAnswerId: string;
+        };
+        CoachingButtonResponse: components["schemas"]["CoachingButtonResponseVisibleCoachingButtonResponse"] | components["schemas"]["CoachingButtonResponseHiddenCoachingButtonResponse"];
+        CoachingButtonResponseHiddenCoachingButtonResponse: {
+            /** @enum {string} */
+            type?: "hidden";
+        };
+        CoachingButtonResponseVisibleCoachingButtonResponse: {
+            /** @enum {string} */
+            type?: "visible";
+            label: string;
+        };
+        CoachingRouteResponse: components["schemas"]["CoachingRouteResponseScaffoldEntryRouteResponse"] | components["schemas"]["CoachingRouteResponseNoScaffoldAuthoredRouteResponse"];
+        CoachingRouteResponseNoScaffoldAuthoredRouteResponse: {
+            /** @enum {string} */
+            type?: "noScaffoldAuthored";
+        };
+        CoachingRouteResponseScaffoldEntryRouteResponse: {
+            /** @enum {string} */
+            type?: "scaffoldEntry";
+            scaffoldId: string;
+            entryStepId: string;
         };
         DerivationOperationResponse: components["schemas"]["DerivationOperationResponseScaleByResponse"] | components["schemas"]["DerivationOperationResponseIncrementByResponse"];
         DerivationOperationResponseIncrementByResponse: {
@@ -329,6 +462,13 @@ export interface components {
             span: components["schemas"]["TokenSpanResponse"];
             characterSpan: components["schemas"]["CharacterSpanResponse"];
         };
+        PracticeItemPromptResponse: {
+            id: string;
+            text: components["schemas"]["TextStructureResponse"];
+            semantics: components["schemas"]["PromptSemanticModelResponse"];
+            mathematics: components["schemas"]["MathematicsResponse"];
+            interaction: components["schemas"]["PromptMultipleChoiceInteractionResponse"];
+        };
         PracticeItemResponse: {
             id: string;
             text: components["schemas"]["TextStructureResponse"];
@@ -343,6 +483,14 @@ export interface components {
             status?: null | number | string;
             detail?: null | string;
             instance?: null | string;
+        };
+        PromptMultipleChoiceInteractionResponse: {
+            answers: components["schemas"]["AnswerChoiceResponse"][];
+            answerMathBindings: components["schemas"]["AnswerMathBindingResponse"][];
+        };
+        PromptSemanticModelResponse: {
+            entities: components["schemas"]["SemanticEntityResponse"][];
+            edges: components["schemas"]["SemanticEdgeResponse"][];
         };
         QuantityReferenceResponse: components["schemas"]["QuantityReferenceResponseSemanticQuantityReferenceResponse"] | components["schemas"]["QuantityReferenceResponseLatentExpressionReferenceResponse"];
         QuantityReferenceResponseLatentExpressionReferenceResponse: {
@@ -499,6 +647,9 @@ export interface components {
             id: string;
             span: components["schemas"]["TokenSpanResponse"];
             characterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
+        StartAttemptRequest: {
+            practiceItemId: string;
         };
         StepSceneResponse: components["schemas"]["StepSceneResponseFreshSceneResponse"] | components["schemas"]["StepSceneResponseContinuedSceneResponse"];
         StepSceneResponseContinuedSceneResponse: {
@@ -686,6 +837,190 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetPracticeItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeItemPromptResponse"][];
+                };
+            };
+        };
+    };
+    GetPracticeItemById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeItemPromptResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAttemptRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptProjectionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptProjectionResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CheckAttemptAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptProjectionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };

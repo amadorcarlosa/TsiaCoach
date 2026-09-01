@@ -12,3 +12,17 @@ export default defineNuxtPlugin(() => {
     },
   }
 })
+
+declare module '#app' {
+  interface NuxtApp {
+    $gsap: typeof gsap
+    $Draggable: typeof Draggable
+  }
+}
+
+declare module 'vue' {
+  interface ComponentCustomProperties {
+    $gsap: typeof gsap
+    $Draggable: typeof Draggable
+  }
+}

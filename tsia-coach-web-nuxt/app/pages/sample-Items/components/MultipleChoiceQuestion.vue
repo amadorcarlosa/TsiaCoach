@@ -1,28 +1,27 @@
 <script setup lang="ts">
 import type {
-  MultipleChoiceInteraction,
-  SampleItem
+  PromptMultipleChoiceInteraction,
+  PracticeItemPrompt
 } from '#shared/types/sample-items'
 import type { InteractiveTextSegment } from '~/utils/interactive-text'
-import {
-  SubmissionStates,
-  type FocusTarget,
+import type {
+  FocusTarget,
   type SampleItemAnswerView,
-  type SampleItemFeedback,
-  type SubmissionState
+  SampleItemFeedback,
 } from '../sample-items-ui'
 import { Styles } from '../design'
 import SampleItemsAnswerChoices from './AnswerChoices.vue'
 
 defineProps<{
-  practiceItem: SampleItem
-  interaction: MultipleChoiceInteraction
+  practiceItem: PracticeItemPrompt
+  interaction: PromptMultipleChoiceInteraction
   itemPosition: number
   stemSegments: InteractiveTextSegment[]
   answers: SampleItemAnswerView[]
   selectedAnswerId: string | null
   focusTarget: FocusTarget | null
-  submissionState: SubmissionState
+  isTerminal: boolean
+  isSubmitting: boolean
   feedback: SampleItemFeedback | null
 }>()
 
@@ -37,7 +36,7 @@ const emit = defineEmits<{
   <article
     :class="Styles.QuestionCard"
     :data-practice-item-id="practiceItem.id"
-    :data-interaction-type="interaction.type"
+    data-interaction-type="prompt"
   >
     <header :class="Styles.QuestionHeader">
       <div :class="Styles.QuestionHeaderLayout">
@@ -75,6 +74,7 @@ const emit = defineEmits<{
         :answers="answers"
         :selected-answer-id="selectedAnswerId"
         :focus-target="focusTarget"
+        :is-disabled="isTerminal || isSubmitting"
         @select="emit('selectAnswer', $event)"
         @focus="emit('focus', $event)"
       />
@@ -89,8 +89,8 @@ const emit = defineEmits<{
           icon="i-lucide-arrow-right"
           trailing
           size="lg"
-          :loading="submissionState === SubmissionStates.Submitting"
-          :disabled="!selectedAnswerId"
+          :loading="isSubmitting"
+          :disabled="isTerminal || !selectedAnswerId"
           @click="emit('submit')"
         />
       </div>

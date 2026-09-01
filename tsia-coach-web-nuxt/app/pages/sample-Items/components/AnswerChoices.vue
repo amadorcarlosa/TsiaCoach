@@ -10,6 +10,7 @@ defineProps<{
   answers: SampleItemAnswerView[]
   selectedAnswerId: string | null
   focusTarget: FocusTarget | null
+  isDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -38,6 +39,7 @@ const emit = defineEmits<{
       :aria-checked="answer.id === selectedAnswerId"
       :data-answer-choice-id="answer.id"
       :data-math-object-id="answer.mathObjectId"
+      :disabled="isDisabled"
       @click="emit('select', answer.id)"
       @focus="emit('focus', { kind: FocusTargetKinds.Answer, id: answer.id })"
       @pointerenter="emit('focus', { kind: FocusTargetKinds.Answer, id: answer.id })"

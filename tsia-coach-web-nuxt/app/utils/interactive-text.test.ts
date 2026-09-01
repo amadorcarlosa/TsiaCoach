@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SampleItem } from '#shared/types/sample-items'
+import type { PracticeItemPrompt } from '#shared/types/sample-items'
 import {
   createAnswerSegments,
   createInteractiveTextSegments
@@ -22,8 +22,7 @@ const item = {
   },
   semantics: {
     entities: [],
-    edges: [],
-    latentFacts: []
+    edges: []
   },
   mathematics: {
     objects: [{
@@ -41,7 +40,6 @@ const item = {
     ]
   },
   interaction: {
-    type: 'multipleChoice',
     answers: [{
       id: 'answer-d',
       labelSpan: { start: 39, length: 2 },
@@ -52,10 +50,9 @@ const item = {
     answerMathBindings: [{
       answerChoiceId: 'answer-d',
       mathObjectId: 'math-answer-d'
-    }],
-    correctAnswerId: 'answer-d'
+    }]
   }
-} as SampleItem
+} as PracticeItemPrompt
 
 describe('createInteractiveTextSegments', () => {
   it('preserves the exact authored source slice including spaces', () => {

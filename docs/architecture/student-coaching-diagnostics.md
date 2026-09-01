@@ -3,6 +3,14 @@
 ## Status
 Accepted
 
+## Slice 5 safe path
+- `/sample-Items` now uses `PracticeItemPromptResponse` through Nuxt BFF endpoints at `/api/practice-items` and attempt routes.
+- Server-side attempts drive all correctness and phase transitions.
+- Practice item prompt payloads on the student surface no longer expose answer keys or `latentFacts` (`correctAnswerId` and `semantics.latentFacts` are no longer sent to the student page).
+- Feedback now comes from returned attempt `phase` (`beforeCheck`, `afterIncorrectCheck`, `afterCorrectCheck`) and transport state only.
+- The scaffold walkthrough is still backed by the legacy solution-bearing prompt contract via `/api/sample-items` and the legacy `PracticeItemResponse`; its direct `QuestionInteractionResponse` remains unchanged.
+- Removal of the scaffold exposure remains deferred to server-side scaffold evaluation/session slices.
+
 ## Diagnostic model
 - Practice items author `AnswerChoiceId → MisconceptionCode`.
 - `PracticeItem.Evaluate` derives `CheckOutcome`.

@@ -4,6 +4,7 @@ import type { CharacterSpan } from '#shared/types/sample-items'
 import {
   LoadStates,
   SubmissionStates,
+  feedbackFor,
   type SampleItemFeedback
 } from './sample-items-ui'
 import {
@@ -32,10 +33,11 @@ const {
   loadState,
   loadError,
   submissionState,
-  submittedAnswerIsCorrect,
+  submissionError,
   answerMathObjectIds,
-  selectedMultipleChoiceInteraction
+  selectedInteraction
 } = storeToRefs(store)
+const { attemptProjection } = storeToRefs(store)
 
 await store.load()
 
@@ -65,7 +67,7 @@ const stemSegments = computed(() => {
 
 const answerViews = computed(() => {
   const item = selectedItem.value
-  const interaction = selectedMultipleChoiceInteraction.value
+  const interaction = selectedInteraction.value
 
   if (!item || !interaction) {
     return []
@@ -85,23 +87,16 @@ const itemPosition = computed(() => {
 })
 
 const feedback = computed<SampleItemFeedback | null>(() => {
-  if (submissionState.value !== SubmissionStates.Submitted) {
-    return null
+  if (submissionError.value) {
+    return {
+      color: 'error',
+      icon: 'i-lucide-triangle-alert',
+      title: 'Could not submit answer',
+      description: submissionError.value,
+    }
   }
 
-  return submittedAnswerIsCorrect.value
-    ? {
-        color: 'success',
-        icon: 'i-lucide-circle-check',
-        title: 'Correct',
-        description: 'That expression represents the requested quantity.'
-      }
-    : {
-        color: 'warning',
-        icon: 'i-lucide-lightbulb',
-        title: 'Try another expression',
-        description: 'Trace the quantities in the question, then choose again.'
-      }
+  return feedbackFor(attemptProjection.value, submissionState.value)
 })
 </script>
 
@@ -156,27 +151,20 @@ const feedback = computed<SampleItemFeedback | null>(() => {
         />
 
         <SampleItemsMultipleChoiceQuestion
-          v-if="selectedMultipleChoiceInteraction"
+          v-if="selectedInteraction"
           :practice-item="selectedItem"
-          :interaction="selectedMultipleChoiceInteraction"
+          :interaction="selectedInteraction"
           :item-position="itemPosition"
           :stem-segments="stemSegments"
           :answers="answerViews"
           :selected-answer-id="selectedAnswerId"
           :focus-target="focusTarget"
-          :submission-state="submissionState"
           :feedback="feedback"
+          :is-terminal="store.isAttemptTerminal"
+          :is-submitting="submissionState === SubmissionStates.Submitting"
           @select-answer="store.selectAnswer"
           @focus="store.focus"
           @submit="store.submitSelectedAnswer"
-        />
-
-        <UAlert
-          v-else
-          color="warning"
-          icon="i-lucide-blocks"
-          title="Unsupported question structure"
-          :description="`No renderer is registered for the '${selectedItem.interaction.type ?? 'unknown'}' interaction.`"
         />
       </template>
 

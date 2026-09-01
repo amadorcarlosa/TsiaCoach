@@ -203,6 +203,17 @@
   border-color: var(--color-primary-400);
 }
 
+.sample-items-answer-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.sample-items-answer-choice:disabled:hover {
+  transform: none;
+  box-shadow: var(--mt-shadow-sm);
+  border-color: var(--mt-border);
+}
+
 .sample-items-answer-label {
   display: grid;
   width: 2.25rem;
