@@ -1,6 +1,11 @@
 import type { InteractiveTextSegment } from '~/utils/interactive-text'
-import type { AttemptProjection } from '#shared/types/sample-items'
-import { AttemptPhaseKinds } from '#shared/types/sample-items'
+import type { AttemptProjection, CoachingButton } from '#shared/types/sample-items'
+import { AttemptPhaseKinds, isVisibleCoachingButton } from '#shared/types/sample-items'
+import type { CoachMoveResponse } from '#shared/types/coaching'
+import {
+  isAskReadingQuestionMove,
+  isSuggestScaffoldMove
+} from '#shared/types/coaching'
 
 export const FocusTargetKinds = {
   Token: 'token',
@@ -52,6 +57,57 @@ export interface SampleItemFeedback {
   icon: string
   title: string
   description: string
+}
+
+export function visibleCoachingButtonLabel(
+  button: CoachingButton | null | undefined
+): string | null {
+  return button && isVisibleCoachingButton(button) ? button.label : null
+}
+
+export interface CoachingCardView {
+  role: 'question' | 'message'
+  message: string
+  ariaLive: 'polite'
+  walkthroughHref: string | null
+}
+
+export function coachingCardView(
+  move: CoachMoveResponse | null,
+  attemptId: string | null
+): CoachingCardView | null {
+  if (!move) {
+    return null
+  }
+
+  return {
+    role: isAskReadingQuestionMove(move) ? 'question' : 'message',
+    message: move.message,
+    ariaLive: 'polite',
+    walkthroughHref: isSuggestScaffoldMove(move) && attemptId
+      ? `/scaffolds/${encodeURIComponent(attemptId)}`
+      : null
+  }
+}
+
+export interface CoachingErrorView {
+  title: string
+  description: string
+  retryLabel: string
+  ariaLive: 'polite'
+}
+
+export function coachingErrorView(error: string | null): CoachingErrorView | null {
+  if (!error) {
+    return null
+  }
+
+  return {
+    title: 'Coaching is unavailable',
+    description: error,
+    retryLabel: 'Retry',
+    ariaLive: 'polite'
+  }
 }
 
 export function feedbackFor(

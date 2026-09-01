@@ -25,7 +25,7 @@ public static class AttemptProjectionMapper
         {
             BeforeCheckResponse => new VisibleCoachingButtonResponse("Help"),
             AfterIncorrectCheckResponse => new VisibleCoachingButtonResponse("Diagnosis"),
-            AfterCorrectCheckResponse => new HiddenCoachingButtonResponse(),
+            AfterCorrectCheckResponse => new VisibleCoachingButtonResponse("Why it works"),
             _ => throw new InvalidOperationException("Unsupported attempt projection phase.")
         };
 

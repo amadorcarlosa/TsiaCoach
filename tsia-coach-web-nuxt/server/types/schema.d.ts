@@ -104,6 +104,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/attempts/{attemptId}/coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CoachAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sample-questions": {
         parameters: {
             query?: never;
@@ -385,6 +401,41 @@ export interface components {
             type?: "scaffoldEntry";
             scaffoldId: string;
             entryStepId: string;
+        };
+        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskReadingQuestionResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"];
+        CoachMoveResponseAskReadingQuestionResponse: {
+            /** @enum {string} */
+            type?: "askReadingQuestion";
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseDiagnoseDifferenceResponse: {
+            /** @enum {string} */
+            type?: "diagnoseDifference";
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseExplainWhyResponse: {
+            /** @enum {string} */
+            type?: "explainWhy";
+            provenanceFactIds: string[];
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseSuggestScaffoldResponse: {
+            /** @enum {string} */
+            type?: "suggestScaffold";
+            suggestedStepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
+        /** @enum {unknown} */
+        CoachTurnEvent: "helpRequested" | "diagnosisRequested" | "explainCorrect";
+        CoachTurnRequest: {
+            event: components["schemas"]["CoachTurnEvent"];
+        };
+        CoachTurnResponse: {
+            move: components["schemas"]["CoachMoveResponse"];
         };
         DerivationOperationResponse: components["schemas"]["DerivationOperationResponseScaleByResponse"] | components["schemas"]["DerivationOperationResponseIncrementByResponse"];
         DerivationOperationResponseIncrementByResponse: {
@@ -888,6 +939,86 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CoachAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoachTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoachTurnResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Client Closed Request */
+            499: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

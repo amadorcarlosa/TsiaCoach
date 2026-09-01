@@ -172,14 +172,16 @@ public sealed class AttemptEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task CorrectCheck_ReturnsAfterCorrectWithHiddenButton()
+    public async Task AfterCorrectProjection_ShowsWhyItWorksButton()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartProjection(client);
         AttemptProjectionResponse projection = await Check(client, attempt.AttemptId, "answer-d");
 
         await Assert.That(projection.Phase).IsTypeOf<AfterCorrectCheckResponse>();
-        await Assert.That(projection.CoachingButton).IsTypeOf<HiddenCoachingButtonResponse>();
+        await Assert.That(projection.CoachingButton).IsTypeOf<VisibleCoachingButtonResponse>();
+        await Assert.That(((VisibleCoachingButtonResponse)projection.CoachingButton).Label)
+            .IsEqualTo("Why it works");
     }
 
     [Test]

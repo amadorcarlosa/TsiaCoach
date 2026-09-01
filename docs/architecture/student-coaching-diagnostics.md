@@ -79,3 +79,13 @@ After an incorrect check, the policy projects the latest misconception to its au
 - The coaching agent does not mutate attempts or scaffold sessions.
 - No executable model tools are introduced in this slice; the phase-specific capability set is only an output allow-list.
 - The generic `/api/agent` endpoint remains separate and is not used by the student flow.
+
+## Slice 10 Nuxt student coaching integration
+- The visible coaching control comes from `AttemptProjectionResponse.CoachingButton`; the student surface renders the server-issued label and renders no control when the button is hidden. `AfterCorrectCheck` now projects a visible "Why it works" button (a presentation change only; the domain phase and attempt invariants are unchanged).
+- The browser derives the coaching event from the returned phase (`beforeCheck` → `helpRequested`, `afterIncorrectCheck` → `diagnosisRequested`, `afterCorrectCheck` → `explainCorrect`) and sends only `{ "event": ... }` through the Nitro proxy `POST /api/attempts/{attemptId}/coach`. The proxy validates the body with a strict schema and never forwards model, instructions, history, phase, misconception, step, or answer-key data.
+- Coaching state (`idle`/`requesting`/`shown`/`error`) is stored per attempt session inside the existing sample-items store. Repeated requests replace the previous move; no client chat transcript exists.
+- In-flight responses are discarded when the attempt ID, check count, or phase type changed while the request was pending, and concurrent requests for the same attempt are deduplicated.
+- The browser renders only the four validated move types (`askReadingQuestion`, `diagnoseDifference`, `suggestScaffold`, `explainWhy`) as plain interpolated text with `aria-live="polite"`. Misconception codes, phase purposes, and provenance fact IDs are never rendered.
+- Returned `focusPhraseIds` drive the existing semantic phrase highlighting; the first phrase ID that exists in the current prompt is focused and foreign IDs are ignored.
+- The walkthrough action appears only when the validated move is `suggestScaffold` and always navigates by `/scaffolds/{attemptId}`. The client never sends or uses `suggestedStepId`; the scaffold-session endpoint independently derives and authorizes the entry step. The previous unconditional escalated-projection scaffold link on the sample-items page is removed.
+- Upstream `409`, `429`, and `502` statuses surface as student-safe messages with an explicit Retry action; a `409` also refreshes the attempt projection. Raw provider or model output never reaches the UI, and the client never auto-retries model requests.

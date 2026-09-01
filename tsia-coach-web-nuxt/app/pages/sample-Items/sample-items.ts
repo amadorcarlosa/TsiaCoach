@@ -4,8 +4,12 @@ import type { AttemptProjection, MathNode, PracticeItemPrompt, PromptMultipleCho
 import {
   isAfterCorrectCheckPhase,
   isAfterIncorrectCheckPhase,
-  isBeforeCheckPhase
+  isBeforeCheckPhase,
+  isVisibleCoachingButton
 } from '#shared/types/sample-items'
+import type { CoachMoveResponse, CoachTurnEvent } from '#shared/types/coaching'
+import { AttemptPhaseKinds } from '#shared/types/sample-items'
+import { CoachTurnEvents } from '#shared/types/coaching'
 import {
   FocusTargetKinds,
   LoadStates,
@@ -16,12 +20,17 @@ import {
   type SubmissionState
 } from './sample-items-ui'
 
+export type CoachingState = 'idle' | 'requesting' | 'shown' | 'error'
+
 interface AttemptSession {
   attemptId: string | null
   projection: AttemptProjection | null
   selectedAnswerId: string | null
   submissionState: SubmissionState
   submissionError: string | null
+  coachingState: CoachingState
+  coachingMove: CoachMoveResponse | null
+  coachingError: string | null
 }
 
 export {
@@ -48,6 +57,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
 
   const attemptSessions = ref<Record<string, AttemptSession>>({})
   const startAttemptInFlight = new Map<string, Promise<AttemptProjection>>()
+  const coachingInFlight = new Map<string, Promise<void>>()
 
   const selectedItem = computed(() =>
     items.value.find(item => item.id === selectedItemId.value) ?? null
@@ -122,6 +132,23 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     ]) ?? []
   ))
 
+  const coachingButton = computed(() => {
+    const button = attemptProjection.value?.coachingButton
+    return button && isVisibleCoachingButton(button) ? button : null
+  })
+
+  const coachingState = computed<CoachingState>(() =>
+    selectedSession.value?.coachingState ?? 'idle'
+  )
+
+  const coachingMove = computed(() =>
+    selectedSession.value?.coachingMove ?? null
+  )
+
+  const coachingError = computed(() =>
+    selectedSession.value?.coachingError ?? null
+  )
+
   const isAttemptTerminal = computed(() =>
     isAfterCorrectCheckPhase(attemptProjection.value)
   )
@@ -145,7 +172,10 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       projection: null,
       selectedAnswerId: null,
       submissionState: SubmissionStates.Idle,
-      submissionError: null
+      submissionError: null,
+      coachingState: 'idle',
+      coachingMove: null,
+      coachingError: null
     }
 
     attemptSessions.value[itemId] = created
@@ -307,6 +337,169 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     focusTarget.value = null
   }
 
+  function coachingEventFor(projection: AttemptProjection): CoachTurnEvent | null {
+    switch (projection.phase.type) {
+      case AttemptPhaseKinds.BeforeCheck:
+        return CoachTurnEvents.HelpRequested
+      case AttemptPhaseKinds.AfterIncorrectCheck:
+        return CoachTurnEvents.DiagnosisRequested
+      case AttemptPhaseKinds.AfterCorrectCheck:
+        return CoachTurnEvents.ExplainCorrect
+      default:
+        return null
+    }
+  }
+
+  function firstKnownPhraseId(itemId: string, phraseIds: readonly string[]): string | null {
+    const item = items.value.find(candidate => candidate.id === itemId)
+    if (!item) {
+      return null
+    }
+
+    const known = new Set(item.text.phrases.map(phrase => phrase.id))
+    return phraseIds.find(id => known.has(id)) ?? null
+  }
+
+  function clearCoachingFor(itemId: string) {
+    const session = attemptSessions.value[itemId]
+    if (!session) {
+      return
+    }
+
+    session.coachingState = 'idle'
+    session.coachingMove = null
+    session.coachingError = null
+  }
+
+  function clearCoaching() {
+    const itemId = selectedItemId.value
+    if (itemId) {
+      clearCoachingFor(itemId)
+    }
+  }
+
+  async function requestCoaching(): Promise<void> {
+    const itemId = selectedItemId.value
+    const session = itemId ? attemptSessions.value[itemId] ?? null : null
+    const projection = session?.projection
+
+    if (!itemId || !session || !projection || !session.attemptId) {
+      return
+    }
+
+    const button = projection.coachingButton
+    if (!isVisibleCoachingButton(button)) {
+      return
+    }
+
+    const event = coachingEventFor(projection)
+    if (!event) {
+      return
+    }
+
+    const existing = coachingInFlight.get(itemId)
+    if (existing) {
+      return existing
+    }
+
+    const capturedAttemptId = session.attemptId
+    const capturedCheckCount = projection.checkCount
+    const capturedPhaseType = projection.phase.type
+
+    session.coachingState = 'requesting'
+    session.coachingError = null
+
+    function isStale(): boolean {
+      const current = attemptSessions.value[itemId!]
+      const currentProjection = current?.projection
+
+      return !current
+        || !currentProjection
+        || current.attemptId !== capturedAttemptId
+        || currentProjection.checkCount !== capturedCheckCount
+        || currentProjection.phase.type !== capturedPhaseType
+    }
+
+    const request = (async () => {
+      try {
+        const turn = await $fetch<{ move: CoachMoveResponse }>(
+          `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
+          {
+            method: 'POST',
+            body: { event }
+          }
+        )
+
+        if (isStale()) {
+          return
+        }
+
+        const current = attemptSessions.value[itemId]!
+        current.coachingMove = turn.move
+        current.coachingState = 'shown'
+        current.coachingError = null
+
+        const focusPhraseId = firstKnownPhraseId(itemId, turn.move.focusPhraseIds)
+        if (focusPhraseId && selectedItemId.value === itemId) {
+          focusTarget.value = { kind: FocusTargetKinds.Phrase, id: focusPhraseId }
+        }
+      } catch (error) {
+        const statusCode = (error as { statusCode?: number; status?: number }).statusCode
+          ?? (error as { status?: number }).status
+
+        if (statusCode === 409) {
+          try {
+            const refreshed = await $fetch<AttemptProjection>(
+              `/api/attempts/${encodeURIComponent(capturedAttemptId)}`
+            )
+            const current = attemptSessions.value[itemId]
+            if (current && current.attemptId === capturedAttemptId) {
+              current.projection = refreshed
+            }
+          } catch {
+            // Keep the last known projection when the refresh also fails.
+          }
+        }
+
+        if (isStale() && statusCode !== 409) {
+          return
+        }
+
+        const current = attemptSessions.value[itemId]
+        if (!current) {
+          return
+        }
+
+        current.coachingState = 'error'
+        current.coachingError = statusCode === 409
+          ? 'This item changed. Ask the coach again.'
+          : statusCode === 429
+            ? 'The coach is busy. Try again in a moment.'
+            : statusCode === 502
+              ? 'Coaching is temporarily unavailable.'
+              : 'Could not reach the coach.'
+      } finally {
+        coachingInFlight.delete(itemId)
+      }
+    })()
+
+    coachingInFlight.set(itemId, request)
+    return request
+  }
+
+  async function retryCoaching(): Promise<void> {
+    const itemId = selectedItemId.value
+    if (itemId) {
+      const session = attemptSessions.value[itemId]
+      if (session) {
+        session.coachingError = null
+        session.coachingState = 'idle'
+      }
+    }
+
+    return requestCoaching()
+  }
+
   async function submitSelectedAnswer() {
     const itemId = selectedItem.value?.id
     const answerId = selectedAnswerId.value
@@ -352,6 +545,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       session.projection = projection
       session.submissionState = SubmissionStates.Submitted
       session.selectedAnswerId = answerId
+      clearCoachingFor(itemId)
     } catch (error) {
       session.projection = previousProjection
       setSessionSubmissionState(itemId, SubmissionStates.Error)
@@ -387,6 +581,13 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     loadError,
     submissionState,
     submissionError,
+    coachingButton,
+    coachingState,
+    coachingMove,
+    coachingError,
+    requestCoaching,
+    retryCoaching,
+    clearCoaching,
     ensureAttemptForItem,
     load,
     selectItem,

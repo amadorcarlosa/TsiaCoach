@@ -4,6 +4,7 @@ using TsiaCoach.WebApi;
 using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.EndPoints;
 using TsiaCoach.WebApi.Attempts;
+using TsiaCoach.WebApi.CoachingAgents;
 using TsiaCoach.WebApi.ScaffoldSessions;
 using Azure.Core;
 using Azure.Identity;
@@ -42,6 +43,11 @@ builder.Services.AddSingleton<ModelClient>(sp =>
 });
 builder.Services.AddSingleton<AgentFactory>();
 builder.Services.AddSingleton<IAgentExecutor, AgentExecutor>();
+builder.Services.AddOptions<CoachingAgentOptions>()
+    .Bind(builder.Configuration.GetSection("CoachingAgent"));
+builder.Services.AddSingleton<CoachingAgentDefinitionFactory>();
+builder.Services.AddSingleton<ICoachingAgentRunner, CoachingAgentRunner>();
+builder.Services.AddSingleton<CoachingTurnService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<SamplePracticeCatalog>();
@@ -87,6 +93,7 @@ api.MapPracticeItems(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapAttempts(
     app.Services.GetRequiredService<SamplePracticeCatalog>(),
     app.Services.GetRequiredService<InMemoryAttemptStore>());
+api.MapCoaching();
 api.MapScaffolds(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapScaffoldSessions(app.Services.GetRequiredService<ScaffoldSessionService>());
 app.Run();

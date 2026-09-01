@@ -3,6 +3,7 @@ import type {
   PromptMultipleChoiceInteraction,
   PracticeItemPrompt
 } from '#shared/types/sample-items'
+import type { CoachMoveResponse } from '#shared/types/coaching'
 import type { InteractiveTextSegment } from '~/utils/interactive-text'
 import type {
   FocusTarget,
@@ -11,6 +12,7 @@ import type {
 } from '../sample-items-ui'
 import { Styles } from '../design'
 import SampleItemsAnswerChoices from './AnswerChoices.vue'
+import SampleItemsCoachingCard from './CoachingCard.vue'
 
 defineProps<{
   practiceItem: PracticeItemPrompt
@@ -23,13 +25,19 @@ defineProps<{
   isTerminal: boolean
   isSubmitting: boolean
   feedback: SampleItemFeedback | null
-  scaffoldHref: string | null
+  coachingButtonLabel: string | null
+  isCoachingRequesting: boolean
+  coachingMove: CoachMoveResponse | null
+  coachingError: string | null
+  coachingAttemptId: string | null
 }>()
 
 const emit = defineEmits<{
   selectAnswer: [answerId: string]
   focus: [target: FocusTarget]
   submit: []
+  requestCoaching: []
+  retryCoaching: []
 }>()
 </script>
 
@@ -86,6 +94,18 @@ const emit = defineEmits<{
         </p>
 
         <UButton
+          v-if="coachingButtonLabel"
+          :label="coachingButtonLabel"
+          icon="i-lucide-message-circle-question"
+          variant="outline"
+          size="lg"
+          data-testid="coaching-button"
+          :loading="isCoachingRequesting"
+          :disabled="isCoachingRequesting"
+          @click="emit('requestCoaching')"
+        />
+
+        <UButton
           label="Check answer"
           icon="i-lucide-arrow-right"
           trailing
@@ -107,14 +127,12 @@ const emit = defineEmits<{
         aria-live="polite"
       />
 
-      <div v-if="scaffoldHref" class="mt-4 flex justify-end">
-        <UButton
-          label="Open guided walkthrough"
-          icon="i-lucide-blocks"
-          :to="scaffoldHref"
-          data-testid="open-scaffold"
-        />
-      </div>
+      <SampleItemsCoachingCard
+        :move="coachingMove"
+        :error="coachingError"
+        :attempt-id="coachingAttemptId"
+        @retry="emit('retryCoaching')"
+      />
     </div>
   </article>
 </template>

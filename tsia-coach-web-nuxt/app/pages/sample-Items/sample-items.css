@@ -270,6 +270,32 @@
   margin-top: 1.25rem;
 }
 
+.sample-items-coaching-card {
+  margin-top: 1.25rem;
+  border: 1px solid var(--ui-border, #d9d4c8);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.sample-items-coaching-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.sample-items-coaching-message {
+  margin-top: 0.5rem;
+  line-height: 1.75rem;
+}
+
+.sample-items-coaching-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 @keyframes sample-items-spin {
   to {
     transform: rotate(360deg);

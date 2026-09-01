@@ -2,13 +2,10 @@
 import { storeToRefs } from 'pinia'
 import type { CharacterSpan } from '#shared/types/sample-items'
 import {
-  isAfterIncorrectCheckPhase,
-  isScaffoldEntryRoute,
-} from '#shared/types/sample-items'
-import {
   LoadStates,
   SubmissionStates,
   feedbackFor,
+  visibleCoachingButtonLabel,
   type SampleItemFeedback
 } from './sample-items-ui'
 import {
@@ -41,7 +38,12 @@ const {
   answerMathObjectIds,
   selectedInteraction
 } = storeToRefs(store)
-const { attemptProjection } = storeToRefs(store)
+const {
+  attemptProjection,
+  coachingState,
+  coachingMove,
+  coachingError
+} = storeToRefs(store)
 
 await callOnce('sample-items-load', () => store.load())
 
@@ -103,18 +105,9 @@ const feedback = computed<SampleItemFeedback | null>(() => {
   return feedbackFor(attemptProjection.value, submissionState.value)
 })
 
-const scaffoldHref = computed(() => {
-  const projection = attemptProjection.value
-  if (
-    !isAfterIncorrectCheckPhase(projection)
-    || projection.phase.hintLevel !== 'escalated'
-    || !isScaffoldEntryRoute(projection.phase.route)
-  ) {
-    return null
-  }
-
-  return `/scaffolds/${encodeURIComponent(projection.attemptId)}`
-})
+const coachingButtonLabel = computed(() =>
+  visibleCoachingButtonLabel(attemptProjection.value?.coachingButton ?? null)
+)
 </script>
 
 <template>
@@ -177,12 +170,18 @@ const scaffoldHref = computed(() => {
           :selected-answer-id="selectedAnswerId"
           :focus-target="focusTarget"
           :feedback="feedback"
-          :scaffold-href="scaffoldHref"
+          :coaching-button-label="coachingButtonLabel"
+          :is-coaching-requesting="coachingState === 'requesting'"
+          :coaching-move="coachingMove"
+          :coaching-error="coachingError"
+          :coaching-attempt-id="attemptProjection?.attemptId ?? null"
           :is-terminal="store.isAttemptTerminal"
           :is-submitting="submissionState === SubmissionStates.Submitting"
           @select-answer="store.selectAnswer"
           @focus="store.focus"
           @submit="store.submitSelectedAnswer"
+          @request-coaching="store.requestCoaching"
+          @retry-coaching="store.retryCoaching"
         />
       </template>
 
