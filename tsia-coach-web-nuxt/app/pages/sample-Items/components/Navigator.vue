@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SampleItem } from '#shared/types/sample-items'
+import type { PracticeItemPrompt } from '#shared/types/sample-items'
 import { Styles } from '../design'
 
 defineProps<{
-  items: SampleItem[]
+  items: PracticeItemPrompt[]
   selectedItemId: string | null
 }>()
 

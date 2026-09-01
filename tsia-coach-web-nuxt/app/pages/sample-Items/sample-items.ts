@@ -369,6 +369,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     selectedItemId,
     selectedItem,
     selectedInteraction,
+    attemptSessions,
     selectedAnswerId,
     selectedAnswer,
     isAttemptTerminal,

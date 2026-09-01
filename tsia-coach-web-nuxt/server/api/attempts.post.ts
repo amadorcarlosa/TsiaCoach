@@ -1,5 +1,7 @@
-import type { StartAttemptRequest } from '#server/types/schema'
+import type { components } from '#server/types/schema'
 import { startAttempt } from '#server/utils/attempts'
+
+type StartAttemptRequest = components['schemas']['StartAttemptRequest']
 
 /**
  * POST /api/attempts

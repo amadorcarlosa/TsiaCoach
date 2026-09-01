@@ -16,7 +16,7 @@
       <div
         ref="zoneAEl"
         class="drop-zone zone-a"
-        :class="{ 'is-active': drag.activeZoneId === 'zone-a' }"
+        :class="{ 'is-active': activeZoneId === 'zone-a' }"
         aria-label="Zone A"
       >
         <span class="zone-kicker">Target 01</span>
@@ -26,7 +26,7 @@
       <div
         ref="zoneBEl"
         class="drop-zone zone-b"
-        :class="{ 'is-active': drag.activeZoneId === 'zone-b' }"
+        :class="{ 'is-active': activeZoneId === 'zone-b' }"
         aria-label="Zone B"
       >
         <span class="zone-kicker">Target 02</span>
@@ -68,7 +68,7 @@ dropZones.registerZone('zone-a', zoneAEl, { accepts: pieceId => pieceId === 'pie
 dropZones.registerZone('zone-b', zoneBEl, { accepts: pieceId => pieceId === 'piece-1' })
 
 const announcer = useDragAnnouncer()
-const drag = useDraggablePiece({
+const { activeZoneId } = useDraggablePiece({
   pieceId: 'piece-1',
   el: pieceEl,
   boardEl,

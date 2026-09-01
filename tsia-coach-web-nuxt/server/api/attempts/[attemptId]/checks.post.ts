@@ -1,5 +1,7 @@
 import { checkAttempt } from '#server/utils/attempts'
-import type { CheckAnswerRequest } from '#server/types/schema'
+import type { components } from '#server/types/schema'
+
+type CheckAnswerRequest = components['schemas']['CheckAnswerRequest']
 
 /**
  * POST /api/attempts/:attemptId/checks

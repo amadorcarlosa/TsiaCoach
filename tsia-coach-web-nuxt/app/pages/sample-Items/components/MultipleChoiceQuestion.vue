@@ -6,8 +6,8 @@ import type {
 import type { InteractiveTextSegment } from '~/utils/interactive-text'
 import type {
   FocusTarget,
-  type SampleItemAnswerView,
-  SampleItemFeedback,
+  SampleItemAnswerView,
+  SampleItemFeedback
 } from '../sample-items-ui'
 import { Styles } from '../design'
 import SampleItemsAnswerChoices from './AnswerChoices.vue'
@@ -90,7 +90,7 @@ const emit = defineEmits<{
           trailing
           size="lg"
           :loading="isSubmitting"
-          :disabled="isTerminal || !selectedAnswerId"
+          :disabled="isTerminal || isSubmitting || !selectedAnswerId"
           @click="emit('submit')"
         />
       </div>

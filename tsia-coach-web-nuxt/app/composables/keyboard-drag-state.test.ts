@@ -25,4 +25,15 @@ describe('KeyboardDragStateMachine', () => {
     expect(machine.isLifted).toBe(false)
     expect(machine.handle('drop')).toBeNull()
   })
+
+  it('resets state on drop when no accepting zone is active', () => {
+    const machine = new KeyboardDragStateMachine()
+    machine.setZones(['zone-a'])
+
+    expect(machine.handle('pickup')).toEqual({ type: 'picked-up' })
+    expect(machine.handle('drop')).toBeNull()
+    expect(machine.isLifted).toBe(false)
+    expect(machine.handle('next')).toBeNull()
+    expect(machine.handle('pickup')).toEqual({ type: 'picked-up' })
+  })
 })

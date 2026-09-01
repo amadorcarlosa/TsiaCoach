@@ -60,6 +60,11 @@ export class KeyboardDragStateMachine {
       return { type: 'dropped', zoneId }
     }
 
+    if (action === 'drop') {
+      this.reset()
+      return null
+    }
+
     return null
   }
 

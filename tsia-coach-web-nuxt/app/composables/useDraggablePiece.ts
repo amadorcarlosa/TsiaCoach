@@ -238,6 +238,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
         if (dropEvent) {
           handleKeyboardEvent(dropEvent)
         } else {
+          keyboard.reset()
           isKeyboardLifted.value = false
           activeZoneId.value = null
           animateToOrigin(() => {
@@ -325,6 +326,12 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
         },
         onDragStart: () => {
           announcePointerPickup()
+        },
+        onClick: () => {
+          pointerPickedUp = false
+        },
+        onRelease: () => {
+          pointerPickedUp = false
         },
         onDragEnd: function (this: Draggable) {
           pendingReleaseRect = readPieceRect()

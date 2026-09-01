@@ -39,7 +39,7 @@ const {
 } = storeToRefs(store)
 const { attemptProjection } = storeToRefs(store)
 
-await store.load()
+await callOnce('sample-items-load', () => store.load())
 
 const stemCharacterSpan = computed<CharacterSpan | null>(() => {
   const sentences = selectedItem.value?.text.sentences ?? []

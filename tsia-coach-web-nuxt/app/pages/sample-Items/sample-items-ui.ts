@@ -48,7 +48,7 @@ export interface SampleItemAnswerView {
 }
 
 export interface SampleItemFeedback {
-  color: 'success' | 'warning'
+  color: 'success' | 'warning' | 'error'
   icon: string
   title: string
   description: string
