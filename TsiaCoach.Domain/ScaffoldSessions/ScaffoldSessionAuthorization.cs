@@ -31,10 +31,16 @@ public union ScaffoldSessionAuthorization(
 
 public static class ScaffoldSessionAuthorizer
 {
+    /// <param name="probeRoute">
+    /// The latest recorded probe route for the attempt, if any. It decides the
+    /// entry before a check; after an incorrect check the misconception route
+    /// is more specific and wins.
+    /// </param>
     public static ScaffoldSessionAuthorization Authorize(
         Attempt attempt,
         PracticeItem practiceItem,
-        CoachingPolicy coachingPolicy)
+        CoachingPolicy coachingPolicy,
+        ProbeRoute? probeRoute = null)
     {
         if (!coachingPolicy.HasScaffold)
         {
@@ -42,11 +48,20 @@ public static class ScaffoldSessionAuthorizer
                 ScaffoldSessionDenialReason.NoScaffoldAuthored);
         }
 
+        if (probeRoute is not null && probeRoute.AttemptId != attempt.Id)
+        {
+            throw new InvalidOperationException(
+                $"Probe route for attempt '{probeRoute.AttemptId.Value}' cannot authorize " +
+                $"attempt '{attempt.Id.Value}'.");
+        }
+
         CoachingPhase phase = attempt.Phase(practiceItem);
 
         return phase.Value switch
         {
-            BeforeCheck => FloorGrant(attempt, practiceItem, coachingPolicy),
+            BeforeCheck => probeRoute is null
+                ? FloorGrant(attempt, practiceItem, coachingPolicy)
+                : ProbedGrant(attempt, practiceItem, coachingPolicy, probeRoute),
             AfterCorrectCheck => FloorGrant(attempt, practiceItem, coachingPolicy),
             AfterIncorrectCheck => RoutedGrant(attempt, practiceItem, coachingPolicy),
             _ => throw new InvalidOperationException(
@@ -68,6 +83,24 @@ public static class ScaffoldSessionAuthorizer
             PracticeItemId: practiceItem.Id,
             ScaffoldId: floor.ScaffoldId,
             EntryStepId: floor.EntryStepId);
+    }
+
+    private static ScaffoldSessionAuthorization ProbedGrant(
+        Attempt attempt,
+        PracticeItem practiceItem,
+        CoachingPolicy coachingPolicy,
+        ProbeRoute probeRoute)
+    {
+        // Re-derive from the authored shape so a stored step id can never
+        // outrank the policy.
+        ScaffoldEntry entry = coachingPolicy.EntryForShape(probeRoute.ShapeId);
+
+        return new ScaffoldSessionGrant(
+            AttemptId: attempt.Id,
+            AuthorizedByCheckResultId: null,
+            PracticeItemId: practiceItem.Id,
+            ScaffoldId: entry.ScaffoldId,
+            EntryStepId: entry.EntryStepId);
     }
 
     private static ScaffoldSessionAuthorization RoutedGrant(

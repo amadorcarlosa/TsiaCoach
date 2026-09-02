@@ -4,11 +4,17 @@ using TsiaCoach.WebApi.Response;
 
 namespace TsiaCoach.WebApi.CoachingAgents;
 
+/// <summary>
+/// Treats model output as untrusted input. Exactly one JSON object, a move
+/// from the phase allow-list, ids from the authorized sets only. A
+/// <c>routeToStep</c> reply carries a bare shape id; the student-facing step
+/// and message come from the authored resolution, never from the model.
+/// </summary>
 public static class CoachTurnValidator
 {
     public const int MaxMessageLength = 600;
 
-    private static readonly ISet<string> ExpectedProperties =
+    private static readonly ISet<string> MessageMoveProperties =
         new HashSet<string>(StringComparer.Ordinal)
         {
             "move",
@@ -16,6 +22,13 @@ public static class CoachTurnValidator
             "focusPhraseIds",
             "suggestedStepId",
             "provenanceFactIds"
+        };
+
+    private static readonly ISet<string> RouteMoveProperties =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "move",
+            "shapeId"
         };
 
     public static CoachTurnValidationResult Validate(
@@ -29,15 +42,51 @@ public static class CoachTurnValidator
         }
 
         JsonElement root = document.RootElement;
-        if (!HasOnlyExpectedProperties(root))
-        {
-            return CoachTurnValidationResult.Invalid("unexpectedProperty");
-        }
 
         if (!TryReadString(root, "move", out string? move) ||
             !definition.AllowedMoves.Contains(move))
         {
             return CoachTurnValidationResult.Invalid("moveMissingOrNotAllowed");
+        }
+
+        return move == CoachContractNames.RouteToStep
+            ? ValidateRouteToStep(root, definition)
+            : ValidateMessageMove(root, move, definition);
+    }
+
+    private static CoachTurnValidationResult ValidateRouteToStep(
+        JsonElement root,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, RouteMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
+        }
+
+        if (!TryReadString(root, "shapeId", out string? shapeId) ||
+            definition.AuthorizedProbeShapes is null ||
+            !definition.AuthorizedProbeShapes.TryGetValue(shapeId, out ProbeShapeResolution? resolution))
+        {
+            return CoachTurnValidationResult.Invalid("unauthorizedProbeShapeId");
+        }
+
+        return CoachTurnValidationResult.Valid(
+            new CoachTurnResponse(
+                new RouteToStepResponse(
+                    resolution.Message,
+                    resolution.FocusPhraseIds,
+                    resolution.StepId)),
+            resolvedProbeShapeId: shapeId);
+    }
+
+    private static CoachTurnValidationResult ValidateMessageMove(
+        JsonElement root,
+        string move,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, MessageMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
         }
 
         if (!TryReadString(root, "message", out string? message) ||
@@ -94,8 +143,6 @@ public static class CoachTurnValidator
 
         CoachMoveResponse responseMove = move switch
         {
-            CoachContractNames.AskReadingQuestion =>
-                new AskReadingQuestionResponse(message, focusPhraseIds),
             CoachContractNames.DiagnoseDifference =>
                 new DiagnoseDifferenceResponse(message, focusPhraseIds),
             CoachContractNames.SuggestScaffold =>
@@ -148,12 +195,12 @@ public static class CoachTurnValidator
         }
     }
 
-    private static bool HasOnlyExpectedProperties(JsonElement root)
+    private static bool HasOnlyProperties(JsonElement root, ISet<string> expected)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (JsonProperty property in root.EnumerateObject())
         {
-            if (!ExpectedProperties.Contains(property.Name) ||
+            if (!expected.Contains(property.Name) ||
                 !seen.Add(property.Name))
             {
                 return false;
@@ -235,11 +282,13 @@ public static class CoachTurnValidator
 public sealed record CoachTurnValidationResult(
     bool IsValid,
     CoachTurnResponse? Response,
-    string? FailureReason)
+    string? FailureReason,
+    string? ResolvedProbeShapeId = null)
 {
     public static CoachTurnValidationResult Valid(
-        CoachTurnResponse response) =>
-        new(true, response, null);
+        CoachTurnResponse response,
+        string? resolvedProbeShapeId = null) =>
+        new(true, response, null, resolvedProbeShapeId);
 
     public static CoachTurnValidationResult Invalid(
         string failureReason = "unknown") =>

@@ -20,6 +20,7 @@ internal static class ScaffoldResponseMapper
         new(
             Id: step.Id.Value,
             Purpose: ContractName(step.Purpose),
+            EntryOnly: step.EntryOnly,
             Prompt: new(
                 Text: step.Prompt.Text,
                 FocusPhraseIds: step.Prompt.FocusPhraseIds
@@ -58,6 +59,21 @@ internal static class ScaffoldResponseMapper
                 Id: value.Id.Value,
                 Lengths: value.Lengths.Select(length => length.Value).ToArray()),
             _ => throw Unsupported("scaffold learner resource", resource.Value)
+        };
+
+    internal static ScaffoldStepEvidenceResponse? ToEvidenceResponse(
+        ScaffoldStepSubmission? submission) =>
+        submission?.Value switch
+        {
+            null => null,
+            PlacePiecesSubmission value => new PlacePiecesEvidenceResponse(
+                value.Pieces
+                    .Select(piece => new PlacedPieceResponse(piece.Length, piece.X, piece.Y))
+                    .ToArray()),
+            MoveRowsSubmission value => new MoveRowsEvidenceResponse(value.MovedRows),
+            SelectRowsSubmission value => new SelectRowsEvidenceResponse(value.Rows),
+            // One-shot moves have nothing to resume.
+            _ => null
         };
 
     private static ScaffoldResourceResponse ToResponse(ScaffoldResource resource) =>
@@ -105,6 +121,21 @@ internal static class ScaffoldResponseMapper
                     .ToArray(),
                 ShowSizedTarget: value.ShowSizedTarget),
             AnswerChoiceScene => new AnswerChoiceSceneResponse(),
+            GridScene value => new GridSceneResponse(
+                Cols: value.Cols,
+                Rows: value.Rows,
+                Reference: value.Reference
+                    .Select(piece => new GridPieceResponse(
+                        Kind: ContractName(piece.Kind),
+                        Length: piece.Length,
+                        X: piece.X,
+                        Y: piece.Y,
+                        Symbol: piece.Symbol))
+                    .ToArray(),
+                TargetRows: value.TargetRows
+                    .Select(row => new GridRowResponse(row.Y, row.Start, row.Length))
+                    .ToArray(),
+                UnitLines: value.UnitLines),
             _ => throw Unsupported("scaffold scene", scene.Value)
         };
 
@@ -131,6 +162,9 @@ internal static class ScaffoldResponseMapper
                 ContractName(value.Reading)),
             BuildExpression => new BuildExpressionActionResponse(),
             SelectAnswerChoice => new SelectAnswerChoiceActionResponse(),
+            PlacePieces value => new PlacePiecesActionResponse(value.AllowedLengths),
+            MoveRows value => new MoveRowsActionResponse(value.CompareColumn),
+            SelectRows => new SelectRowsActionResponse(),
             _ => throw Unsupported("learner action", action.Value)
         };
 
@@ -151,6 +185,13 @@ internal static class ScaffoldResponseMapper
             MatchesLatentExpression value => new MatchesLatentExpressionCheckResponse(
                 value.ExpectedExpressionId.Value),
             MatchesCorrectAnswer => new MatchesCorrectAnswerCheckResponse(),
+            MatchesRowCompositions value => new MatchesRowCompositionsCheckResponse(value.StepLength),
+            MatchesRowPartition value => new MatchesRowPartitionCheckResponse(value.ExpectedMovedRows),
+            MatchesRowSelection value => new MatchesRowSelectionCheckResponse(
+                SelectableRows: value.SelectableRows,
+                RequiredCount: value.RequiredCount,
+                Rule: ContractName(value.Rule),
+                ExpectedRows: value.ExpectedRows),
             _ => throw Unsupported("success check", check.Value)
         };
 
@@ -212,7 +253,9 @@ internal static class ScaffoldSessionResponseMapper
         {
             ActiveScaffoldSession active => new ActiveScaffoldSessionResponse(
                 ScaffoldResponseMapper.ToLearnerStepResponse(
-                    context.Scaffold.Step(active.CurrentStepId))),
+                    context.Scaffold.Step(active.CurrentStepId)),
+                ScaffoldResponseMapper.ToEvidenceResponse(
+                    session.CurrentStepEvidence(context.PracticeItem, context.Scaffold))),
             CompletedScaffoldSession => new CompletedScaffoldSessionResponse(),
             _ => throw new InvalidOperationException("Unsupported scaffold session progress.")
         };
@@ -264,8 +307,17 @@ internal static class ScaffoldSessionResponseMapper
             check.StepId,
             check.Submission);
 
+        string outcome = evaluation.Value switch
+        {
+            ScaffoldStepSatisfied => "complete",
+            ScaffoldStepAccepted => "accepted",
+            ScaffoldStepNotSatisfied => "rejected",
+            _ => throw new InvalidOperationException("Unsupported scaffold step evaluation.")
+        };
+
         return new(
             StepId: check.StepId.Value,
-            Satisfied: evaluation.Value is ScaffoldStepSatisfied);
+            Satisfied: evaluation.Value is ScaffoldStepSatisfied,
+            Outcome: outcome);
     }
 }

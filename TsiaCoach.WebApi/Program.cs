@@ -53,6 +53,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<SamplePracticeCatalog>();
 builder.Services.AddSingleton<InMemoryAttemptStore>();
+builder.Services.AddSingleton<InMemoryProbeRouteStore>();
 builder.Services.AddSingleton<InMemoryScaffoldSessionStore>();
 builder.Services.AddSingleton<ScaffoldSessionService>();
 

@@ -54,15 +54,35 @@ public sealed record Scaffold(
         throw new InvalidOperationException(
             $"Scaffold step '{stepId.Value}' does not exist in scaffold '{Id.Value}'.");
     }
+
+    /// <summary>
+    /// The steps a session traverses from an entry: the entry itself, then
+    /// every later step that is not entry-only. Entry-only steps are landing
+    /// points for a routed student and are skipped in ordinary progress.
+    /// </summary>
+    public IReadOnlyList<ScaffoldStep> PathFrom(ScaffoldStepId entryStepId)
+    {
+        int entryIndex = IndexOf(entryStepId);
+
+        return Steps
+            .Skip(entryIndex)
+            .Where((step, offset) => offset == 0 || !step.EntryOnly)
+            .ToArray();
+    }
 }
 
+/// <param name="EntryOnly">
+/// True for a side step that only a routed student lands on, such as the
+/// contrast pair after the pattern question. Ordinary progress skips it.
+/// </param>
 public sealed record ScaffoldStep(
     ScaffoldStepId Id,
     ScaffoldPhasePurpose Purpose,
     ScaffoldPrompt Prompt,
     ScaffoldScene Scene,
     LearnerAction Action,
-    SuccessCheck SuccessCheck
+    SuccessCheck SuccessCheck,
+    bool EntryOnly = false
 );
 
 public sealed record ScaffoldPrompt(

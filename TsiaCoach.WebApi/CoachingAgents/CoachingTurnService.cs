@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using TsiaCoach.Domain.Attempts;
 using TsiaCoach.Domain.Coaching;
+using TsiaCoach.Domain.ValueObjects;
 using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.Attempts;
 using TsiaCoach.WebApi.Request;
@@ -24,21 +25,30 @@ public sealed record CoachingTurnResult(
     CoachingTurnResultKind Kind,
     CoachTurnResponse? Response = null);
 
+/// <summary>
+/// One coaching turn. Before a check, Help serves the authored probe with no
+/// model call, and a probe answer is classified by the model into one
+/// authored shape, whose route is recorded and returned. After a check the
+/// phase-scoped diagnosis and explanation turns run as before.
+/// </summary>
 public sealed class CoachingTurnService(
     SamplePracticeCatalog catalog,
     InMemoryAttemptStore attemptStore,
+    InMemoryProbeRouteStore probeRouteStore,
     CoachingAgentDefinitionFactory definitionFactory,
     ICoachingAgentRunner runner,
     ICoachingMoveRecorder moveRecorder,
     TimeProvider timeProvider,
     ILogger<CoachingTurnService> logger)
 {
+    public const int MaxProbeAnswerLength = 500;
+
     public async Task<CoachingTurnResult> RunAsync(
         AttemptId attemptId,
-        CoachTurnEvent requestedEvent,
+        CoachTurnRequest request,
         CancellationToken cancellationToken)
     {
-        if (!Enum.IsDefined(requestedEvent))
+        if (request is null || !Enum.IsDefined(request.Event) || !HasWellFormedAnswer(request))
         {
             return new(CoachingTurnResultKind.BadRequest);
         }
@@ -53,18 +63,24 @@ public sealed class CoachingTurnService(
             ?? throw new InvalidOperationException(
                 "Attempt phase projection returned no value.");
 
-        if (!IsLegalEvent(phase, requestedEvent))
+        if (!IsLegalEvent(phase, request.Event, entry.CoachingPolicy))
         {
             return new(CoachingTurnResultKind.Conflict);
+        }
+
+        if (request.Event == CoachTurnEvent.HelpRequested)
+        {
+            return ServeProbe(attempt, entry, request.Event);
         }
 
         CoachingAgentDefinition definition = definitionFactory.Create(
             attempt,
             entry,
-            requestedEvent);
+            request.Event,
+            request.Answer);
 
         long startedAt = Stopwatch.GetTimestamp();
-        string eventName = CoachContractNames.EventName(requestedEvent);
+        string eventName = CoachContractNames.EventName(request.Event);
 
         logger.LogInformation(
             "Starting coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model}",
@@ -128,11 +144,23 @@ public sealed class CoachingTurnService(
             return new(CoachingTurnResultKind.InvalidModelOutput);
         }
 
+        CoachTurnResponse response = validation.Response!;
+
+        if (validation.ResolvedProbeShapeId is string shapeId &&
+            response.Move is RouteToStepResponse route)
+        {
+            probeRouteStore.Record(new ProbeRoute(
+                AttemptId: attempt.Id,
+                ShapeId: new ProbeShapeId(shapeId),
+                EntryStepId: new ScaffoldStepId(route.StepId),
+                RoutedAt: timeProvider.GetUtcNow()));
+        }
+
         moveRecorder.Record(CreateRecord(
             attempt,
-            definition,
-            requestedEvent,
-            validation.Response!));
+            definition.Phase,
+            request.Event,
+            response));
 
         logger.LogInformation(
             "Completed coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model} with move {MoveKind} in {ElapsedMilliseconds} ms",
@@ -140,24 +168,55 @@ public sealed class CoachingTurnService(
             definition.Phase,
             eventName,
             definition.Model,
-            MoveKind(validation.Response!.Move),
+            MoveKind(response.Move),
             Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
-        return new(CoachingTurnResultKind.Succeeded, validation.Response);
+        return new(CoachingTurnResultKind.Succeeded, response);
+    }
+
+    private CoachingTurnResult ServeProbe(
+        Attempt attempt,
+        PracticeItemCatalogEntry entry,
+        CoachTurnEvent requestedEvent)
+    {
+        ProbeQuestion probe = entry.CoachingPolicy.Probe
+            ?? throw new InvalidOperationException(
+                $"Practice item '{entry.Item.Id.Value}' has no authored probe.");
+
+        var response = new CoachTurnResponse(
+            new AskProbeResponse(
+                probe.Text,
+                probe.FocusPhraseIds.Select(id => id.Value).ToArray()));
+
+        moveRecorder.Record(CreateRecord(
+            attempt,
+            CoachContractNames.BeforeCheck,
+            requestedEvent,
+            response));
+
+        logger.LogInformation(
+            "Served authored probe for attempt {AttemptId} phase {Phase} event {Event}",
+            attempt.Id.Value,
+            CoachContractNames.BeforeCheck,
+            CoachContractNames.EventName(requestedEvent));
+
+        return new(CoachingTurnResultKind.Succeeded, response);
     }
 
     private CoachingMoveRecord CreateRecord(
         Attempt attempt,
-        CoachingAgentDefinition definition,
+        string phase,
         CoachTurnEvent requestedEvent,
         CoachTurnResponse response)
     {
-        (string moveKind, string? suggestedStepId, IReadOnlyList<string> provenanceFactIds) =
+        (string moveKind, string? stepId, IReadOnlyList<string> provenanceFactIds) =
             response.Move switch
             {
-                AskReadingQuestionResponse =>
-                    (CoachContractNames.AskReadingQuestion, (string?)null,
+                AskProbeResponse =>
+                    (CoachContractNames.AskProbe, (string?)null,
                         (IReadOnlyList<string>)[]),
+                RouteToStepResponse route =>
+                    (CoachContractNames.RouteToStep, route.StepId, []),
                 DiagnoseDifferenceResponse =>
                     (CoachContractNames.DiagnoseDifference, null, []),
                 SuggestScaffoldResponse suggest =>
@@ -173,22 +232,30 @@ public sealed class CoachingTurnService(
             AttemptId: attempt.Id.Value,
             PracticeItemId: attempt.PracticeItemId.Value,
             CheckCount: attempt.Checks.Count,
-            Phase: definition.Phase,
+            Phase: phase,
             RequestedEvent: CoachContractNames.EventName(requestedEvent),
             MoveKind: moveKind,
             FocusPhraseIds: response.Move.FocusPhraseIds,
-            SuggestedStepId: suggestedStepId,
+            SuggestedStepId: stepId,
             ProvenanceFactIds: provenanceFactIds,
             RecordedAt: timeProvider.GetUtcNow());
     }
 
+    private static bool HasWellFormedAnswer(CoachTurnRequest request) =>
+        request.Event == CoachTurnEvent.ProbeAnswered
+            ? !string.IsNullOrWhiteSpace(request.Answer) &&
+              request.Answer.Length <= MaxProbeAnswerLength
+            : request.Answer is null;
+
     private static bool IsLegalEvent(
         object phase,
-        CoachTurnEvent requestedEvent) =>
+        CoachTurnEvent requestedEvent,
+        CoachingPolicy policy) =>
         phase switch
         {
             BeforeCheck =>
-                requestedEvent == CoachTurnEvent.HelpRequested,
+                policy.Probe is not null &&
+                requestedEvent is CoachTurnEvent.HelpRequested or CoachTurnEvent.ProbeAnswered,
             AfterIncorrectCheck =>
                 requestedEvent == CoachTurnEvent.DiagnosisRequested,
             AfterCorrectCheck =>
@@ -217,7 +284,8 @@ public sealed class CoachingTurnService(
     private static string MoveKind(CoachMoveResponse move) =>
         move switch
         {
-            AskReadingQuestionResponse => CoachContractNames.AskReadingQuestion,
+            AskProbeResponse => CoachContractNames.AskProbe,
+            RouteToStepResponse => CoachContractNames.RouteToStep,
             DiagnoseDifferenceResponse => CoachContractNames.DiagnoseDifference,
             SuggestScaffoldResponse => CoachContractNames.SuggestScaffold,
             ExplainWhyResponse => CoachContractNames.ExplainWhy,

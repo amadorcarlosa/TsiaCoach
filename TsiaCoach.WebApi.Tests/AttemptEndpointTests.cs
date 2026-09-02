@@ -23,6 +23,17 @@ public sealed class AttemptEndpointTests : ApiTestBase
     }
 
     [Test]
+    public async Task StartAttempt_ItemWithoutProbeHidesHelp()
+    {
+        using HttpClient client = Factory.CreateClient();
+        using HttpResponseMessage response = await Start(client, "practice-item-sample-2");
+        AttemptProjectionResponse projection = await ReadProjection(response);
+
+        await Assert.That(projection.Phase).IsTypeOf<BeforeCheckResponse>();
+        await Assert.That(projection.CoachingButton).IsTypeOf<HiddenCoachingButtonResponse>();
+    }
+
+    [Test]
     public async Task StartAttempt_ReturnsReadableLocation()
     {
         using HttpClient client = Factory.CreateClient();

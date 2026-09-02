@@ -27,7 +27,8 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
         IReadOnlyList<CoachingMoveRecord> records = Recorder.Snapshot();
         await Assert.That(records.Count).IsEqualTo(1);
         await Assert.That(records[0].MoveKind)
-            .IsEqualTo(CoachContractNames.AskReadingQuestion);
+            .IsEqualTo(CoachContractNames.AskProbe);
+        await Assert.That(records[0].SuggestedStepId).IsNull();
     }
 
     [Test]
@@ -109,6 +110,29 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
     }
 
     [Test]
+    public async Task RoutedProbe_RecordsRouteButNeverTheAnswerText()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        Runner.Result = CoachingAgentRunResult.FromText(
+            """{"move":"routeToStep","shapeId":"structural"}""");
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        CoachingMoveRecord record = Recorder.Snapshot().Single();
+        await Assert.That(record.MoveKind).IsEqualTo(CoachContractNames.RouteToStep);
+        await Assert.That(record.RequestedEvent).IsEqualTo(CoachContractNames.ProbeAnswered);
+        await Assert.That(record.SuggestedStepId).IsEqualTo("step-select-consecutive-odds");
+        string serialized = JsonSerializer.Serialize(record);
+        await Assert.That(serialized).DoesNotContain("one left over after pairing");
+        await Assert.That(serialized).DoesNotContain("structural");
+    }
+
+    [Test]
     public async Task BadRequest_DoesNotRecordMove()
     {
         using HttpClient client = Factory.CreateClient();
@@ -164,7 +188,7 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
         using HttpResponseMessage response = await Coach(
             client,
             attempt.AttemptId,
-            """{ "event": "helpRequested" }""");
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadGateway);
         await Assert.That(Recorder.Snapshot()).IsEmpty();
@@ -181,7 +205,7 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
         using HttpResponseMessage response = await Coach(
             client,
             attempt.AttemptId,
-            """{ "event": "helpRequested" }""");
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
 
         await Assert.That(response.StatusCode)
             .IsEqualTo(HttpStatusCode.TooManyRequests);
@@ -199,7 +223,7 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
         using HttpResponseMessage response = await Coach(
             client,
             attempt.AttemptId,
-            """{ "event": "helpRequested" }""");
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
 
         await Assert.That((int)response.StatusCode).IsEqualTo(499);
         await Assert.That(Recorder.Snapshot()).IsEmpty();
@@ -216,7 +240,7 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
         using HttpResponseMessage response = await Coach(
             client,
             attempt.AttemptId,
-            """{ "event": "helpRequested" }""");
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadGateway);
         await Assert.That(Recorder.Snapshot()).IsEmpty();
@@ -311,7 +335,7 @@ public sealed class CoachingMoveRecorderTests : CoachApiTestBase
             CheckCount: 0,
             Phase: CoachContractNames.BeforeCheck,
             RequestedEvent: CoachContractNames.HelpRequested,
-            MoveKind: CoachContractNames.AskReadingQuestion,
+            MoveKind: CoachContractNames.AskProbe,
             FocusPhraseIds: [],
             SuggestedStepId: null,
             ProvenanceFactIds: [],

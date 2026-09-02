@@ -14,7 +14,7 @@ public sealed class CoachingAgentRunnerTests : AgentApiTestBase
     {
         Executor.Result = new AgentReply(
             new Reply(
-                AskJson(),
+                RouteJson(),
                 InputTokens: null,
                 OutputTokens: null));
 
@@ -24,7 +24,7 @@ public sealed class CoachingAgentRunnerTests : AgentApiTestBase
         using HttpResponseMessage response = await Coach(
             client,
             attempt.AttemptId,
-            """{ "event": "helpRequested" }""");
+            """{ "event": "probeAnswered", "answer": "one left over after pairing" }""");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
         await Assert.That(Executor.LastResponseFormat)
@@ -50,8 +50,8 @@ public sealed class CoachingAgentRunnerTests : AgentApiTestBase
             $"/api/attempts/{attemptId}/coach",
             new StringContent(json, Encoding.UTF8, "application/json"));
 
-    private static string AskJson() =>
+    private static string RouteJson() =>
         """
-        {"move":"askReadingQuestion","message":"Which phrase describes how the two integers are related?","focusPhraseIds":["phrase-ordered-step"],"suggestedStepId":null,"provenanceFactIds":[]}
+        {"move":"routeToStep","shapeId":"structural"}
         """;
 }

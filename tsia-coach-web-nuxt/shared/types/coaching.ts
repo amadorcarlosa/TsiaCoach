@@ -10,8 +10,11 @@ export type CoachTurnResponse =
 export type CoachMoveResponse =
     components['schemas']['CoachMoveResponse']
 
-export type AskReadingQuestionResponse =
-    components['schemas']['CoachMoveResponseAskReadingQuestionResponse']
+export type AskProbeResponse =
+    components['schemas']['CoachMoveResponseAskProbeResponse']
+
+export type RouteToStepResponse =
+    components['schemas']['CoachMoveResponseRouteToStepResponse']
 
 export type DiagnoseDifferenceResponse =
     components['schemas']['CoachMoveResponseDiagnoseDifferenceResponse']
@@ -26,12 +29,17 @@ export type CoachTurnEvent = CoachTurnRequest['event']
 
 export const CoachTurnEvents = {
     HelpRequested: 'helpRequested',
+    ProbeAnswered: 'probeAnswered',
     DiagnosisRequested: 'diagnosisRequested',
     ExplainCorrect: 'explainCorrect'
 } as const
 
+/** Upper bound the server enforces on a probe answer; mirrored for the input. */
+export const MaxProbeAnswerLength = 500
+
 export const CoachMoveKinds = {
-    AskReadingQuestion: 'askReadingQuestion',
+    AskProbe: 'askProbe',
+    RouteToStep: 'routeToStep',
     DiagnoseDifference: 'diagnoseDifference',
     SuggestScaffold: 'suggestScaffold',
     ExplainWhy: 'explainWhy'
@@ -40,10 +48,16 @@ export const CoachMoveKinds = {
 export type CoachMoveKind =
     typeof CoachMoveKinds[keyof typeof CoachMoveKinds]
 
-export function isAskReadingQuestionMove(
+export function isAskProbeMove(
     move: CoachMoveResponse,
-): move is AskReadingQuestionResponse {
-    return move.type === CoachMoveKinds.AskReadingQuestion
+): move is AskProbeResponse {
+    return move.type === CoachMoveKinds.AskProbe
+}
+
+export function isRouteToStepMove(
+    move: CoachMoveResponse,
+): move is RouteToStepResponse {
+    return move.type === CoachMoveKinds.RouteToStep
 }
 
 export function isDiagnoseDifferenceMove(

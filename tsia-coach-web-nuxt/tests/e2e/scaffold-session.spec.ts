@@ -98,6 +98,50 @@ test('help before any check opens the walkthrough at the floor step', async ({ p
   await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
 })
 
+async function dragPiece(page: Page, length: number, targetX: number, targetY: number) {
+  const supply = page.locator(`[data-step-id="step-rebuild-from-twos-and-ones"] .supply-piece[data-length="${length}"]`)
+  const box = await supply.boundingBox()
+  if (!box) throw new Error('supply piece not visible')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + 40, { steps: 4 })
+  await page.mouse.move(targetX, targetY, { steps: 12 })
+  await page.mouse.up()
+}
+
+test('a legal drop stays, a rule-breaking drop reverts, and the board survives a reload', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  const board = page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')
+  await expect(board).toBeVisible()
+  const grid = await board.locator('.grid').boundingBox()
+  if (!grid) throw new Error('grid not visible')
+  const unit = 28
+
+  // A red two on the 4, from column 1: legal and accepted.
+  const accepted = page.waitForResponse('**/checks')
+  await dragPiece(page, 2, grid.x + 1 * unit + unit, grid.y + 4 * unit + unit / 2)
+  await accepted
+  await expect(board.locator('[data-role="placed"][data-length="2"][data-y="4"]')).toHaveCount(1)
+
+  // A white on the 4 breaks "as many twos as fit": shown, then taken back.
+  const rejected = page.waitForResponse('**/checks')
+  await dragPiece(page, 1, grid.x + 3 * unit + unit / 2, grid.y + 4 * unit + unit / 2)
+  await rejected
+  await expect(board.locator('[data-role="placed"][data-length="1"]')).toHaveCount(0, { timeout: 3000 })
+  await expect(board.locator('[data-role="placed"]')).toHaveCount(1)
+
+  await page.reload()
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"] [data-role="placed"][data-length="2"][data-y="4"]')).toHaveCount(1)
+})
+
 test('an item without a scaffold shows a safe error', async ({ page, request }) => {
   const started = await request.post('/api/attempts', {
     data: { practiceItemId: 'practice-item-sample-2' },

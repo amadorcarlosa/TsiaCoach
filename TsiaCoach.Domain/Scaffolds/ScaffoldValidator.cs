@@ -202,8 +202,70 @@ public static class ScaffoldValidator
             case AnswerChoiceScene:
                 break;
 
+            case GridScene grid:
+                ValidateGrid(stepId, grid);
+                break;
+
             default:
                 throw Unsupported("scaffold scene", step.Scene.Value);
+        }
+    }
+
+    private static void ValidateGrid(ScaffoldStepId stepId, GridScene grid)
+    {
+        if (grid.Cols <= 0 || grid.Rows <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Grid scene in step '{stepId.Value}' must have positive dimensions.");
+        }
+
+        foreach (GridPiece piece in grid.Reference)
+        {
+            if (piece.Length <= 0 ||
+                piece.X < 0 || piece.Y < 0 ||
+                piece.X + piece.Length > grid.Cols || piece.Y >= grid.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"Grid scene in step '{stepId.Value}' has a reference piece outside the grid.");
+            }
+
+            if (piece.Kind == PieceKind.Rod && (piece.Length < 1 || piece.Length > 10))
+            {
+                throw new InvalidOperationException(
+                    $"Grid scene in step '{stepId.Value}' has a rod of length {piece.Length}.");
+            }
+        }
+
+        GridPiece[] pieces = grid.Reference.ToArray();
+        for (int i = 0; i < pieces.Length; i++)
+        {
+            for (int j = i + 1; j < pieces.Length; j++)
+            {
+                if (pieces[i].Y == pieces[j].Y &&
+                    pieces[i].X < pieces[j].X + pieces[j].Length &&
+                    pieces[j].X < pieces[i].X + pieces[i].Length)
+                {
+                    throw new InvalidOperationException(
+                        $"Grid scene in step '{stepId.Value}' has overlapping reference pieces.");
+                }
+            }
+        }
+
+        var targetRowYs = new HashSet<int>();
+        foreach (GridRow row in grid.TargetRows)
+        {
+            if (row.Length <= 0 || row.Start < 0 || row.Y < 0 ||
+                row.Start + row.Length > grid.Cols || row.Y >= grid.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"Grid scene in step '{stepId.Value}' has a target row outside the grid.");
+            }
+
+            if (!targetRowYs.Add(row.Y))
+            {
+                throw new InvalidOperationException(
+                    $"Grid scene in step '{stepId.Value}' has two target rows on row {row.Y}.");
+            }
         }
     }
 
@@ -229,6 +291,20 @@ public static class ScaffoldValidator
                 actionValue.Reading == checkValue.Reading,
             (BuildExpression, MatchesLatentExpression) => true,
             (SelectAnswerChoice, MatchesCorrectAnswer) => true,
+            (PlacePieces place, MatchesRowCompositions compositions) =>
+                place.AllowedLengths.Count > 0 &&
+                place.AllowedLengths.Contains(compositions.StepLength) &&
+                place.AllowedLengths.Contains(1) &&
+                compositions.StepLength > 1,
+            (MoveRows, MatchesRowPartition) => true,
+            (SelectRows, MatchesRowSelection selection) =>
+                selection.RequiredCount > 0 &&
+                selection.Rule switch
+                {
+                    SelectionRule.ExactSet => selection.ExpectedRows.Count == selection.RequiredCount,
+                    SelectionRule.AdjacentInList => selection.RequiredCount == 2,
+                    _ => false
+                },
             _ => false
         };
 
@@ -272,6 +348,59 @@ public static class ScaffoldValidator
         else if (action is JoinQuantities)
         {
             _ = RequireScene<QuantityJoinScene>(step);
+        }
+        else if (action is PlacePieces)
+        {
+            GridScene grid = RequireScene<GridScene>(step);
+            if (grid.TargetRows.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Scaffold step '{step.Id.Value}' places pieces but its grid has no target rows.");
+            }
+        }
+        else if (action is MoveRows move && check is MatchesRowPartition partition)
+        {
+            GridScene grid = RequireScene<GridScene>(step);
+            HashSet<int> referenceRows = grid.Reference.Select(piece => piece.Y).ToHashSet();
+            foreach (int row in partition.ExpectedMovedRows)
+            {
+                if (!referenceRows.Contains(row))
+                {
+                    throw new InvalidOperationException(
+                        $"Scaffold step '{step.Id.Value}' expects row {row} to move but nothing is on it.");
+                }
+            }
+
+            int widestTrain = grid.Reference
+                .GroupBy(piece => piece.Y)
+                .Max(row => row.Max(piece => piece.X + piece.Length) - row.Min(piece => piece.X));
+            if (move.CompareColumn < 0 || move.CompareColumn + widestTrain > grid.Cols)
+            {
+                throw new InvalidOperationException(
+                    $"Scaffold step '{step.Id.Value}' compare column {move.CompareColumn} does not fit the widest train.");
+            }
+        }
+        else if (action is SelectRows && check is MatchesRowSelection selection)
+        {
+            GridScene grid = RequireScene<GridScene>(step);
+            HashSet<int> referenceRows = grid.Reference.Select(piece => piece.Y).ToHashSet();
+            foreach (int row in selection.SelectableRows)
+            {
+                if (!referenceRows.Contains(row))
+                {
+                    throw new InvalidOperationException(
+                        $"Scaffold step '{step.Id.Value}' lets row {row} be selected but nothing is on it.");
+                }
+            }
+
+            foreach (int row in selection.ExpectedRows)
+            {
+                if (!selection.SelectableRows.Contains(row))
+                {
+                    throw new InvalidOperationException(
+                        $"Scaffold step '{step.Id.Value}' expects row {row}, which is not selectable.");
+                }
+            }
         }
 
         if (check is MatchesLatentScalar scalar)

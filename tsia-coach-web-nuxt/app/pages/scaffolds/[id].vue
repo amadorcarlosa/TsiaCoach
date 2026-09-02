@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { isActiveScaffoldSession, isCompletedScaffoldSession } from '#shared/types/scaffolds'
+import { isActiveScaffoldSession, isCompletedScaffoldSession, isGridScene } from '#shared/types/scaffolds'
 import ScaffoldQuestionContext from '~/components/scaffold/QuestionContext.vue'
+import ScaffoldGridScene from '~/components/scaffold/GridScene.vue'
 import {
   ScaffoldSessionLoadStates,
   useScaffoldSessionStore,
@@ -39,6 +40,10 @@ const completedSession = computed(() =>
   isCompletedScaffoldSession(session.value) ? session.value : null,
 )
 const currentStep = computed(() => activeSession.value?.state.currentStep ?? null)
+const currentEvidence = computed(() => activeSession.value?.state.evidence ?? null)
+const gridScene = computed(() =>
+  currentStep.value && isGridScene(currentStep.value.scene) ? currentStep.value.scene : null,
+)
 const completedCount = computed(() => Number(session.value?.completedStepCount ?? 0))
 const totalCount = computed(() => Number(session.value?.totalStepCount ?? 0))
 </script>
@@ -97,7 +102,19 @@ const totalCount = computed(() => Number(session.value?.totalStepCount ?? 0))
           <UBadge color="neutral" variant="subtle" class="font-mono">{{ currentStep.action.type }}</UBadge>
         </div>
 
+        <ScaffoldGridScene
+          v-if="gridScene"
+          :key="currentStep.id"
+          :step="currentStep"
+          :scene="gridScene"
+          :evidence="currentEvidence"
+          :last-check="session.lastCheck"
+          :checking="checking"
+          :error="checkError"
+          @submit="store.submit"
+        />
         <ScaffoldParityLadderScene
+          v-else
           :key="currentStep.id"
           :resources="session.resources"
           :step="currentStep"

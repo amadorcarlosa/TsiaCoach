@@ -46,6 +46,75 @@ public sealed class CoachingPolicyTests
     }
 
     [Test]
+    public async Task Probe_ShapesRouteOntoThePath()
+    {
+        CoachingPolicy policy = PracticeItemOneCoachingPolicy.Definition;
+
+        await Assert.That(policy.Probe).IsNotNull();
+        await Assert.That(policy.Probe!.Text).Contains("what makes a number odd");
+        foreach (ProbeAnswerShape shape in policy.Probe.Shapes)
+        {
+            await Assert.That(ParityLadderScaffold.Definition.ContainsStep(shape.EntryStepId)).IsTrue();
+            await Assert.That(policy.EntryForShape(shape.Id).EntryStepId).IsEqualTo(shape.EntryStepId);
+        }
+
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.NoAnswerShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.LookupRuleShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.StructuralShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
+    }
+
+    [Test]
+    public async Task EntryForShape_RejectsUnknownShape()
+    {
+        await AssertInvalid(() => _ = PracticeItemOneCoachingPolicy.Definition
+            .EntryForShape(new ProbeShapeId("shape-not-authored")));
+    }
+
+    [Test]
+    public async Task Create_RejectsProbeShapeOffThePath()
+    {
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with
+        {
+            Shapes =
+            [
+                new ProbeAnswerShape(
+                    new ProbeShapeId("structural"),
+                    "Structural.",
+                    new ScaffoldStepId("step-not-on-path"),
+                    "Go.")
+            ]
+        };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+    }
+
+    [Test]
+    public async Task Create_RejectsDuplicateProbeShape()
+    {
+        ProbeAnswerShape shape = PracticeItemOneCoachingPolicy.Probe.Shapes[0];
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with
+        {
+            Shapes = [shape, shape]
+        };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+    }
+
+    [Test]
+    public async Task Create_RejectsProbeWithoutShapes()
+    {
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with { Shapes = [] };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+    }
+
+    [Test]
     public async Task PracticeItemOnePolicy_CoversEveryAuthoredMisconception()
     {
         CoachingPolicy policy = PracticeItemOneCoachingPolicy.Definition;
@@ -96,6 +165,7 @@ public sealed class CoachingPolicyTests
             .IsEquivalentTo(PracticeItemTwo.Item.Distractors.Values.Distinct());
         await Assert.That(policy.HasScaffold).IsFalse();
         await Assert.That(policy.FloorEntry()).IsNull();
+        await Assert.That(policy.Probe).IsNull();
     }
 
     [Test]
@@ -118,7 +188,7 @@ public sealed class CoachingPolicyTests
         map.Remove(new("ordinary-step-in-sum"));
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
     }
 
     [Test]
@@ -128,7 +198,7 @@ public sealed class CoachingPolicyTests
         map[new("foreign-misconception")] = ParityLadderScaffold.JoinAndReadSumStepId;
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
     }
 
     [Test]
@@ -140,7 +210,7 @@ public sealed class CoachingPolicyTests
         };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), foreignScaffold));
+            PracticeItemOne.Item, ItemOneMap(), foreignScaffold, PracticeItemOneCoachingPolicy.Probe));
     }
 
     [Test]
@@ -150,7 +220,7 @@ public sealed class CoachingPolicyTests
         map[new("stopped-at-second-integer")] = new ScaffoldStepId("step-not-on-path");
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
     }
 
     [Test]
@@ -158,7 +228,7 @@ public sealed class CoachingPolicyTests
     {
         Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
         CoachingPolicy policy = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition);
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe);
 
         map[new("ordinary-step-and-missing-sum")] = ParityLadderScaffold.JoinAndReadSumStepId;
 

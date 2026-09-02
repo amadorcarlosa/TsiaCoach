@@ -64,6 +64,12 @@ internal static class ScaffoldSessionTestData
             RepresentationGrant(attempt),
             ParityLadderScaffold.Definition);
 
+    public static ScaffoldSession StartFloorSession() =>
+        ScaffoldSession.Start(
+            new ScaffoldSessionId($"session-test-{Guid.NewGuid():N}"),
+            FloorGrant(),
+            ParityLadderScaffold.Definition);
+
     public static ScaffoldStepSubmission IncorrectJoinSubmission() =>
         new JoinQuantitiesSubmission(
         [
@@ -77,24 +83,24 @@ internal static class ScaffoldSessionTestData
             new SemanticQuantityReference(PracticeItemOne.N.Id)
         ]);
 
-    public static ScaffoldStepSubmission CorrectClassificationSubmission() =>
-        new ClassifyByFitSubmission(
-            Enumerable.Range(1, 10)
-                .Select(length => new FitClassificationEntry(
-                    new UnitLength(length),
-                    length % 2 == 0
-                        ? FitClassification.Flush
-                        : FitClassification.OneUnitLeftover))
-                .ToArray());
+    /// <summary>Every row 1 to 10 rebuilt as floor(n / 2) reds then n mod 2 whites, from column 1.</summary>
+    public static PlacePiecesSubmission CompleteRebuildSubmission() =>
+        new(Enumerable.Range(1, 10)
+            .SelectMany(n => ParityLadderScaffold.Composition(n, startX: 1, y: n))
+            .Select(piece => new PlacedPiece(piece.Length, piece.X, piece.Y))
+            .ToArray());
 
-    public static ScaffoldStepSubmission CorrectGapTraversalSubmission() =>
-        new TraverseAllGapsSubmission(
-        [
-            new(new UnitLength(1), new UnitLength(3), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(3), new UnitLength(5), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(5), new UnitLength(7), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(7), new UnitLength(9), ParityLadderScaffold.OddStepRodId)
-        ]);
+    public static ScaffoldStepSubmission SortEvensSubmission() =>
+        new MoveRowsSubmission([2, 4, 6, 8, 10]);
+
+    public static ScaffoldStepSubmission SelectThreeAndFiveSubmission() =>
+        new SelectRowsSubmission([3, 5]);
+
+    public static ScaffoldStepSubmission FillTheGapSubmission() =>
+        new PlacePiecesSubmission([new PlacedPiece(2, 4, 3)]);
+
+    public static ScaffoldStepSubmission NameTheSmallerSubmission() =>
+        new SelectRowsSubmission([3]);
 
     /// <summary>Submissions that satisfy the path from the join step to the end.</summary>
     public static IReadOnlyList<ScaffoldStepSubmission> RepresentationSubmissions() =>
@@ -104,12 +110,14 @@ internal static class ScaffoldSessionTestData
         new EnterScalarSubmission(2m)
     ];
 
-    /// <summary>Submissions that satisfy the whole path from the floor.</summary>
+    /// <summary>Submissions that satisfy the whole path from the floor, skipping entry-only steps.</summary>
     public static IReadOnlyList<ScaffoldStepSubmission> FullPathSubmissions() =>
     [
-        CorrectClassificationSubmission(),
-        new NameFitClassificationSubmission(IntegerDomain.OddIntegers),
-        CorrectGapTraversalSubmission(),
+        CompleteRebuildSubmission(),
+        SortEvensSubmission(),
+        SelectThreeAndFiveSubmission(),
+        FillTheGapSubmission(),
+        NameTheSmallerSubmission(),
         .. RepresentationSubmissions()
     ];
 

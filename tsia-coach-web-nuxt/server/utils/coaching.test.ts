@@ -22,8 +22,8 @@ function stubNitroGlobals() {
 
 const validMove = {
   move: {
-    type: 'askReadingQuestion',
-    message: 'What does the phrase describe?',
+    type: 'askProbe',
+    message: 'What makes a number odd?',
     focusPhraseIds: ['phrase-1']
   }
 }
@@ -71,6 +71,33 @@ describe('coaching proxy contract', () => {
     expect(options.body).not.toHaveProperty('misconception')
     expect(options.body).not.toHaveProperty('suggestedStepId')
     expect(options.body).not.toHaveProperty('correctAnswerId')
+  })
+
+  it('coachAttemptProxy_ForwardsProbeAnswerOnlyForProbeAnswered', async () => {
+    const rawFetch = vi.fn<RawFetch>(async () => ({
+      status: 200,
+      _data: { move: { type: 'routeToStep', message: 'Go.', focusPhraseIds: [], stepId: 'step-x' } }
+    }))
+
+    vi.stubGlobal('$fetch', { raw: rawFetch })
+    const { coachAttempt, parseCoachTurnRequest } = await import('#server/utils/coaching')
+
+    await coachAttempt({} as any, 'attempt-1', parseCoachTurnRequest({
+      event: 'probeAnswered',
+      answer: 'one left over'
+    }))
+
+    const [, options] = rawFetch.mock.calls[0] as [string, { body: Record<string, unknown> }]
+    expect(options.body).toEqual({ event: 'probeAnswered', answer: 'one left over' })
+
+    expect(() => parseCoachTurnRequest({ event: 'probeAnswered' }))
+      .toThrowError(expect.objectContaining({ statusCode: 400 }))
+    expect(() => parseCoachTurnRequest({ event: 'probeAnswered', answer: '   ' }))
+      .toThrowError(expect.objectContaining({ statusCode: 400 }))
+    expect(() => parseCoachTurnRequest({ event: 'probeAnswered', answer: 'x'.repeat(501) }))
+      .toThrowError(expect.objectContaining({ statusCode: 400 }))
+    expect(() => parseCoachTurnRequest({ event: 'helpRequested', answer: 'odd' }))
+      .toThrowError(expect.objectContaining({ statusCode: 400 }))
   })
 
   it('coachAttemptProxy_RejectsUnexpectedRequestFields', async () => {

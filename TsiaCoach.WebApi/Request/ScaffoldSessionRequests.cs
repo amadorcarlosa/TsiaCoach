@@ -17,6 +17,9 @@ namespace TsiaCoach.WebApi.Request;
 [JsonDerivedType(typeof(EnterScalarSubmissionRequest), "enterScalar")]
 [JsonDerivedType(typeof(BuildExpressionSubmissionRequest), "buildExpression")]
 [JsonDerivedType(typeof(SelectAnswerChoiceSubmissionRequest), "selectAnswerChoice")]
+[JsonDerivedType(typeof(PlacePiecesSubmissionRequest), "placePieces")]
+[JsonDerivedType(typeof(MoveRowsSubmissionRequest), "moveRows")]
+[JsonDerivedType(typeof(SelectRowsSubmissionRequest), "selectRows")]
 public abstract record ScaffoldStepSubmissionRequest;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -78,6 +81,27 @@ public sealed record BuildExpressionSubmissionRequest(
 public sealed record SelectAnswerChoiceSubmissionRequest(
     string AnswerChoiceId) : ScaffoldStepSubmissionRequest;
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PlacedPieceRequest(
+    int Length,
+    int X,
+    int Y);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PlacePiecesSubmissionRequest(
+    IReadOnlyList<PlacedPieceRequest>? Pieces)
+    : ScaffoldStepSubmissionRequest;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MoveRowsSubmissionRequest(
+    IReadOnlyList<int>? MovedRows)
+    : ScaffoldStepSubmissionRequest;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SelectRowsSubmissionRequest(
+    IReadOnlyList<int>? Rows)
+    : ScaffoldStepSubmissionRequest;
+
 internal static class ScaffoldStepSubmissionRequestMapper
 {
     public static ScaffoldStepSubmission ToDomain(
@@ -129,6 +153,19 @@ internal static class ScaffoldStepSubmissionRequestMapper
             SelectAnswerChoiceSubmissionRequest value =>
                 new SelectAnswerChoiceSubmission(
                     RequireId(value.AnswerChoiceId, "answerChoiceId", id => new AnswerChoiceId(id))),
+            PlacePiecesSubmissionRequest value =>
+                new PlacePiecesSubmission(
+                    RequireCollection(value.Pieces, "pieces")
+                        .Select(entry =>
+                        {
+                            PlacedPieceRequest item = RequireEntry(entry, "pieces");
+                            return new PlacedPiece(item.Length, item.X, item.Y);
+                        })
+                        .ToArray()),
+            MoveRowsSubmissionRequest value =>
+                new MoveRowsSubmission(RequireCollection(value.MovedRows, "movedRows")),
+            SelectRowsSubmissionRequest value =>
+                new SelectRowsSubmission(RequireCollection(value.Rows, "rows")),
             _ => throw new InvalidOperationException(
                 $"Unsupported scaffold submission request '{request.GetType().Name}'.")
         };

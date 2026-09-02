@@ -86,19 +86,34 @@ describe('coaching view helpers', () => {
     expect(visibleCoachingButtonLabel(null)).toBeNull()
   })
 
-  it('askReadingQuestion_RendersPlainText', () => {
+  it('askProbe_RendersQuestionWithAnswerInput', () => {
     const view = coachingCardView({
-      type: 'askReadingQuestion',
-      message: 'What does <b>this year</b> refer to?',
+      type: 'askProbe',
+      message: 'What makes a number <b>odd</b>?',
       focusPhraseIds: ['phrase-1']
     } as CoachMoveResponse, 'attempt-1')
 
     expect(view).toEqual({
       role: 'question',
-      message: 'What does <b>this year</b> refer to?',
+      message: 'What makes a number <b>odd</b>?',
       ariaLive: 'polite',
+      probeInput: true,
       walkthroughHref: null
     })
+  })
+
+  it('routeToStep_RendersAuthoredMessageAndWalkthroughWithoutStepId', () => {
+    const view = coachingCardView({
+      type: 'routeToStep',
+      message: 'Right, one left over.',
+      focusPhraseIds: [],
+      stepId: 'step-hidden-entry'
+    } as CoachMoveResponse, 'attempt-1')
+
+    expect(view?.role).toBe('message')
+    expect(view?.probeInput).toBe(false)
+    expect(view?.walkthroughHref).toBe('/scaffolds/attempt-1')
+    expect(JSON.stringify(view)).not.toContain('step-hidden-entry')
   })
 
   it('diagnoseDifference_RendersPlainText', () => {
@@ -112,6 +127,7 @@ describe('coaching view helpers', () => {
       role: 'message',
       message: 'Your choice stops after the second integer.',
       ariaLive: 'polite',
+      probeInput: false,
       walkthroughHref: null
     })
     expect(JSON.stringify(view)).not.toContain('misconception')
@@ -157,7 +173,7 @@ describe('coaching view helpers', () => {
 
   it('coachingMessage_IsAnnouncedPolitely', () => {
     const view = coachingCardView({
-      type: 'askReadingQuestion',
+      type: 'askProbe',
       message: 'Read the first sentence again.',
       focusPhraseIds: []
     } as CoachMoveResponse, 'attempt-1')

@@ -9,46 +9,87 @@ namespace TsiaCoach.WebApi.Tests;
 
 public sealed class CoachingAgentDefinitionTests
 {
+    private const string StructuralAnswer = "there is one left over when you pair them up";
+
     [Test]
-    public async Task BeforeCheckDefinition_ContainsOnlySafePromptContext()
+    public async Task ProbeDefinition_ContainsQuestionShapesAndStudentAnswerOnly()
     {
         CoachingAgentDefinition definition = CreateDefinition(
             AttemptFor(CatalogEntry("practice-item-sample-1").Item),
             "practice-item-sample-1",
-            CoachTurnEvent.HelpRequested);
+            CoachTurnEvent.ProbeAnswered,
+            StructuralAnswer);
 
         await Assert.That(definition.Phase)
             .IsEqualTo(CoachContractNames.BeforeCheck);
-        await Assert.That(definition.AllowedMoves.Count).IsEqualTo(1);
-        await Assert.That(definition.AllowedMoves.Contains(
-                CoachContractNames.AskReadingQuestion))
-            .IsTrue();
+        await Assert.That(definition.AllowedMoves)
+            .IsEquivalentTo(new[] { CoachContractNames.RouteToStep });
         await Assert.That(definition.Prompt)
-            .Contains("\"safeTokens\"");
+            .Contains("what makes a number odd");
         await Assert.That(definition.Prompt)
-            .Contains("\"authorizedPhrases\"");
-        await Assert.That(definition.Prompt)
-            .Contains("two consecutive odd integers");
-        await Assert.That(definition.Prompt)
-            .Contains("Ask one reading question");
+            .Contains("\"studentAnswer\": \"" + StructuralAnswer + "\"");
+        foreach (string shapeId in new[] { "no-answer", "wrong-answer", "lookup-rule", "structural" })
+        {
+            await Assert.That(definition.Prompt).Contains($"\"id\": \"{shapeId}\"");
+        }
+
+        await Assert.That(definition.AuthorizedProbeShapes).IsNotNull();
+        await Assert.That(definition.AuthorizedProbeShapes!.Count).IsEqualTo(4);
+        await Assert.That(definition.AuthorizedProbeShapes["structural"].StepId)
+            .IsEqualTo("step-select-consecutive-odds");
+        await Assert.That(definition.AuthorizedProbeShapes["lookup-rule"].StepId)
+            .IsEqualTo("step-rebuild-from-twos-and-ones");
     }
 
     [Test]
-    public async Task BeforeCheckDefinition_ExcludesSolutionDiagnosticsAndRoute()
+    public async Task ProbeDefinition_KeepsStepIdsAndRouteMessagesOffTheModelContext()
     {
         CoachingAgentDefinition definition = CreateDefinition(
             AttemptFor(CatalogEntry("practice-item-sample-1").Item),
             "practice-item-sample-1",
-            CoachTurnEvent.HelpRequested);
+            CoachTurnEvent.ProbeAnswered,
+            StructuralAnswer);
 
         await AssertPromptExcludes(
             definition,
+            "step-",
+            "Let's start at the beginning",
             "correctAnswerId",
             "misconceptionCode",
             "authorizedScaffoldEntry",
             "successCheck",
             "latent-",
-            "distractor");
+            "distractor",
+            "safeTokens");
+    }
+
+    [Test]
+    public async Task ProbeDefinition_RequiresAnAnswer()
+    {
+        await AssertInvalid(() => CreateDefinition(
+            AttemptFor(CatalogEntry("practice-item-sample-1").Item),
+            "practice-item-sample-1",
+            CoachTurnEvent.ProbeAnswered,
+            "   "));
+    }
+
+    [Test]
+    public async Task HelpBeforeCheck_HasNoModelTurn()
+    {
+        await AssertInvalid(() => CreateDefinition(
+            AttemptFor(CatalogEntry("practice-item-sample-1").Item),
+            "practice-item-sample-1",
+            CoachTurnEvent.HelpRequested));
+    }
+
+    [Test]
+    public async Task ProbeDefinition_RejectsItemWithoutProbe()
+    {
+        await AssertInvalid(() => CreateDefinition(
+            AttemptFor(CatalogEntry("practice-item-sample-2").Item),
+            "practice-item-sample-2",
+            CoachTurnEvent.ProbeAnswered,
+            StructuralAnswer));
     }
 
     [Test]
@@ -72,6 +113,7 @@ public sealed class CoachingAgentDefinitionTests
             .Contains("\"routeStreak\": 1");
         await Assert.That(definition.Prompt)
             .Contains("\"selectedAnswerText\": \"n + 2\"");
+        await Assert.That(definition.AuthorizedProbeShapes).IsNull();
     }
 
     [Test]
@@ -186,13 +228,16 @@ public sealed class CoachingAgentDefinitionTests
         CoachingAgentDefinition definition = CreateDefinition(
             AttemptFor(entry.Item),
             "practice-item-sample-1",
-            CoachTurnEvent.HelpRequested);
+            CoachTurnEvent.ProbeAnswered,
+            StructuralAnswer);
 
         await Assert.That(definition.Model).IsEqualTo("gpt-5.6-sol");
         await Assert.That(definition.SystemPrompt)
             .Contains("server-provided coaching context");
         await Assert.That(definition.SystemPrompt)
-            .Contains("Return exactly one JSON object");
+            .Contains("untrusted student text");
+        await Assert.That(definition.SystemPrompt)
+            .Contains("\"routeToStep\"");
     }
 
     [Test]
@@ -202,7 +247,8 @@ public sealed class CoachingAgentDefinitionTests
         CoachingAgentDefinition definition = CreateDefinition(
             AttemptFor(entry.Item),
             "practice-item-sample-1",
-            CoachTurnEvent.HelpRequested);
+            CoachTurnEvent.ProbeAnswered,
+            StructuralAnswer);
 
         await Assert.That(definition.Prompt)
             .DoesNotContain("previous student chat");
@@ -213,7 +259,8 @@ public sealed class CoachingAgentDefinitionTests
     private static CoachingAgentDefinition CreateDefinition(
         Attempt attempt,
         string practiceItemId,
-        CoachTurnEvent requestedEvent)
+        CoachTurnEvent requestedEvent,
+        string? probeAnswer = null)
     {
         var factory = new CoachingAgentDefinitionFactory(
             Options.Create(new CoachingAgentOptions
@@ -224,7 +271,8 @@ public sealed class CoachingAgentDefinitionTests
         return factory.Create(
             attempt,
             CatalogEntry(practiceItemId),
-            requestedEvent);
+            requestedEvent,
+            probeAnswer);
     }
 
     private static PracticeItemCatalogEntry CatalogEntry(string practiceItemId)
@@ -264,5 +312,21 @@ public sealed class CoachingAgentDefinitionTests
             await Assert.That(definition.Prompt)
                 .DoesNotContain(value);
         }
+    }
+
+    private static async Task AssertInvalid(Func<CoachingAgentDefinition> create)
+    {
+        InvalidOperationException? exception = null;
+
+        try
+        {
+            _ = create();
+        }
+        catch (InvalidOperationException caught)
+        {
+            exception = caught;
+        }
+
+        await Assert.That(exception is not null).IsTrue();
     }
 }

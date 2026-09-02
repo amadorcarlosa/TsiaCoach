@@ -8,9 +8,9 @@ using TsiaCoach.Domain.ValueObjects;
 namespace TsiaCoach.Domain.Coaching;
 
 /// <summary>
-/// Authored routing from a check's misconception code to a step id on the
-/// item's scaffold path. The policy is an index into the path; it never
-/// searches for a step by purpose.
+/// Authored routing into the item's scaffold path: a probe whose answer
+/// shapes map to step ids, and a map from misconception code to step id.
+/// The policy is an index into the path; it never searches for a step.
 /// </summary>
 public sealed class CoachingPolicy
 {
@@ -22,23 +22,29 @@ public sealed class CoachingPolicy
 
     public IReadOnlySet<MisconceptionCode> AuthoredCodes { get; }
 
+    /// <summary>The authored help probe. Null when the item has no scaffold.</summary>
+    public ProbeQuestion? Probe { get; }
+
     private CoachingPolicy(
         PracticeItemId practiceItemId,
         IReadOnlySet<MisconceptionCode> authoredCodes,
         IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
-        Scaffold? scaffold)
+        Scaffold? scaffold,
+        ProbeQuestion? probe)
     {
         PracticeItemId = practiceItemId;
         AuthoredCodes = authoredCodes;
         EntryStepByCode = new ReadOnlyDictionary<MisconceptionCode, ScaffoldStepId>(
             new Dictionary<MisconceptionCode, ScaffoldStepId>(entryStepByCode));
         this.scaffold = scaffold;
+        Probe = probe;
     }
 
     public static CoachingPolicy CreateWithScaffold(
         PracticeItem practiceItem,
         IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
-        Scaffold scaffold)
+        Scaffold scaffold,
+        ProbeQuestion probe)
     {
         if (scaffold is null)
         {
@@ -46,13 +52,14 @@ public sealed class CoachingPolicy
                 "CreateWithScaffold requires an authored scaffold; use CreateWithoutScaffold when none exists.");
         }
 
-        CoachingPolicyValidator.Validate(practiceItem, entryStepByCode, scaffold);
+        CoachingPolicyValidator.Validate(practiceItem, entryStepByCode, scaffold, probe);
 
         return new CoachingPolicy(
             practiceItem.Id,
             entryStepByCode.Keys.ToHashSet(),
             entryStepByCode,
-            scaffold);
+            scaffold,
+            probe);
     }
 
     public static CoachingPolicy CreateWithoutScaffold(PracticeItem practiceItem) =>
@@ -60,7 +67,8 @@ public sealed class CoachingPolicy
             practiceItem.Id,
             practiceItem.Distractors.Values.ToHashSet(),
             new Dictionary<MisconceptionCode, ScaffoldStepId>(),
-            scaffold: null);
+            scaffold: null,
+            probe: null);
 
     public bool HasScaffold => scaffold is not null;
 
@@ -76,6 +84,18 @@ public sealed class CoachingPolicy
         return scaffold is null
             ? new CoachingRoute(new NoScaffoldAuthored())
             : new CoachingRoute(new ScaffoldEntry(scaffold.Id, EntryStepByCode[misconception]));
+    }
+
+    /// <summary>Resolves a probe answer shape to its authored entry.</summary>
+    public ScaffoldEntry EntryForShape(ProbeShapeId shapeId)
+    {
+        if (scaffold is null || Probe is null)
+        {
+            throw new InvalidOperationException(
+                $"Practice item '{PracticeItemId.Value}' has no probe to route from.");
+        }
+
+        return new ScaffoldEntry(scaffold.Id, Probe.Shape(shapeId).EntryStepId);
     }
 
     /// <summary>

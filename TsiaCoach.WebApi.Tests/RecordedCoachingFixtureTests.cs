@@ -27,19 +27,32 @@ public sealed class RecordedCoachingFixtureTests
         new(Options.Create(new CoachingAgentOptions { Model = OfflineModel }));
 
     [Test]
-    public async Task RecordedFixture_BeforeCheckProducesAllowListedReadingQuestion()
+    public async Task RecordedFixture_StructuralProbeAnswerRoutesToConsecutiveOdds()
     {
-        RecordedFixture fixture = BeforeCheckFixture();
+        RecordedFixture fixture = StructuralProbeFixture();
         (CoachingAgentDefinition definition, CoachTurnValidationResult result) =
             Run(fixture);
 
         await Assert.That(definition.AllowedMoves).IsEquivalentTo(
-            new[] { CoachContractNames.AskReadingQuestion });
+            new[] { CoachContractNames.RouteToStep });
         await Assert.That(definition.AuthorizedSuggestedStepId).IsNull();
-        await Assert.That(definition.AuthorizedProvenanceFactIds).IsEmpty();
         await Assert.That(result.IsValid).IsTrue();
-        await Assert.That(result.Response!.Move)
-            .IsTypeOf<AskReadingQuestionResponse>();
+        var move = (RouteToStepResponse)result.Response!.Move;
+        await Assert.That(move.StepId).IsEqualTo("step-select-consecutive-odds");
+        await Assert.That(move.Message).Contains("one left over after pairing");
+        await Assert.That(result.ResolvedProbeShapeId).IsEqualTo("structural");
+    }
+
+    [Test]
+    public async Task RecordedFixture_LookupRuleProbeAnswerRoutesToFloor()
+    {
+        RecordedFixture fixture = LookupRuleProbeFixture();
+        (_, CoachTurnValidationResult result) = Run(fixture);
+
+        await Assert.That(result.IsValid).IsTrue();
+        var move = (RouteToStepResponse)result.Response!.Move;
+        await Assert.That(move.StepId).IsEqualTo("step-rebuild-from-twos-and-ones");
+        await Assert.That(move.Message).Contains("That rule works");
     }
 
     [Test]
@@ -84,9 +97,9 @@ public sealed class RecordedCoachingFixtureTests
     }
 
     [Test]
-    public async Task RecordedFixture_DifferentPurposeResetsScaffoldCapability()
+    public async Task RecordedFixture_DifferentRouteResetsScaffoldCapability()
     {
-        RecordedFixture fixture = DifferentPurposeFixture();
+        RecordedFixture fixture = DifferentRouteFixture();
         (CoachingAgentDefinition definition, CoachTurnValidationResult result) =
             Run(fixture);
 
@@ -193,20 +206,31 @@ public sealed class RecordedCoachingFixtureTests
     [Test]
     public async Task RecordedFixtures_NegativeCompanionsAreRejectedByProductionValidator()
     {
-        // Unknown move.
-        (CoachingAgentDefinition beforeCheck, _) = Run(BeforeCheckFixture());
+        // Unknown move on the probe classification.
+        (CoachingAgentDefinition probe, _) = Run(StructuralProbeFixture());
         await Assert.That(CoachTurnValidator.Validate(
             """
             {"move":"revealAnswer","message":"Here it is.","focusPhraseIds":[],"suggestedStepId":null,"provenanceFactIds":[]}
             """,
-            beforeCheck).IsValid).IsFalse();
+            probe).IsValid).IsFalse();
 
-        // Foreign phrase ID.
+        // Foreign shape id.
+        await Assert.That(CoachTurnValidator.Validate(
+            """{"move":"routeToStep","shapeId":"shape-not-authored"}""",
+            probe).IsValid).IsFalse();
+
+        // Model tries to write the route itself.
+        await Assert.That(CoachTurnValidator.Validate(
+            """{"move":"routeToStep","shapeId":"structural","stepId":"step-name-bar-count"}""",
+            probe).IsValid).IsFalse();
+
+        // Foreign phrase ID on a diagnosis.
+        (CoachingAgentDefinition initial, _) = Run(InitialIncorrectFixture());
         await Assert.That(CoachTurnValidator.Validate(
             """
-            {"move":"askReadingQuestion","message":"Look here.","focusPhraseIds":["phrase-not-authored"],"suggestedStepId":null,"provenanceFactIds":[]}
+            {"move":"diagnoseDifference","message":"Look here.","focusPhraseIds":["phrase-not-authored"],"suggestedStepId":null,"provenanceFactIds":[]}
             """,
-            beforeCheck).IsValid).IsFalse();
+            initial).IsValid).IsFalse();
 
         // Foreign scaffold step on an escalated route.
         (CoachingAgentDefinition escalated, _) = Run(EscalatedScaffoldFixture());
@@ -223,7 +247,6 @@ public sealed class RecordedCoachingFixtureTests
             correct).IsValid).IsFalse();
 
         // Scaffold suggestion before escalation.
-        (CoachingAgentDefinition initial, _) = Run(InitialIncorrectFixture());
         await Assert.That(CoachTurnValidator.Validate(
             SuggestJson("step-join-and-read-sum"),
             initial).IsValid).IsFalse();
@@ -235,17 +258,26 @@ public sealed class RecordedCoachingFixtureTests
         CoachTurnEvent RequestedEvent,
         Func<CoachingAgentDefinition, string> ModelJson,
         Type ExpectedMove,
-        string ExpectedMoveName);
+        string ExpectedMoveName,
+        string? ProbeAnswer = null);
 
-    private static RecordedFixture BeforeCheckFixture() => new(
+    private static RecordedFixture StructuralProbeFixture() => new(
         ItemWithScaffold,
         [],
-        CoachTurnEvent.HelpRequested,
-        _ => """
-            {"move":"askReadingQuestion","message":"Which phrase names the requested value?","focusPhraseIds":["phrase-target"],"suggestedStepId":null,"provenanceFactIds":[]}
-            """,
-        typeof(AskReadingQuestionResponse),
-        CoachContractNames.AskReadingQuestion);
+        CoachTurnEvent.ProbeAnswered,
+        _ => """{"move":"routeToStep","shapeId":"structural"}""",
+        typeof(RouteToStepResponse),
+        CoachContractNames.RouteToStep,
+        ProbeAnswer: "you can't pair them up, one is always left over");
+
+    private static RecordedFixture LookupRuleProbeFixture() => new(
+        ItemWithScaffold,
+        [],
+        CoachTurnEvent.ProbeAnswered,
+        _ => """{"move":"routeToStep","shapeId":"lookup-rule"}""",
+        typeof(RouteToStepResponse),
+        CoachContractNames.RouteToStep,
+        ProbeAnswer: "it ends in 1 3 5 7 or 9");
 
     private static RecordedFixture InitialIncorrectFixture() => new(
         ItemWithScaffold,
@@ -263,7 +295,7 @@ public sealed class RecordedCoachingFixtureTests
         typeof(SuggestScaffoldResponse),
         CoachContractNames.SuggestScaffold);
 
-    private static RecordedFixture DifferentPurposeFixture() => new(
+    private static RecordedFixture DifferentRouteFixture() => new(
         ItemWithScaffold,
         ["answer-b", "answer-a"],
         CoachTurnEvent.DiagnosisRequested,
@@ -297,10 +329,11 @@ public sealed class RecordedCoachingFixtureTests
 
     private static IEnumerable<RecordedFixture> AllFixtures()
     {
-        yield return BeforeCheckFixture();
+        yield return StructuralProbeFixture();
+        yield return LookupRuleProbeFixture();
         yield return InitialIncorrectFixture();
         yield return EscalatedScaffoldFixture();
-        yield return DifferentPurposeFixture();
+        yield return DifferentRouteFixture();
         yield return NoScaffoldFixture();
         yield return CorrectFirstCheckFixture();
         yield return CorrectAfterRevisionFixture();
@@ -319,7 +352,8 @@ public sealed class RecordedCoachingFixtureTests
         CoachingAgentDefinition definition = DefinitionFactory.Create(
             attempt,
             entry,
-            fixture.RequestedEvent);
+            fixture.RequestedEvent,
+            fixture.ProbeAnswer);
         CoachTurnValidationResult result = CoachTurnValidator.Validate(
             fixture.ModelJson(definition),
             definition);
@@ -361,12 +395,10 @@ public sealed class RecordedCoachingFixtureTests
 
     private static string ExplainJson(CoachingAgentDefinition definition)
     {
-        string factId = definition.AuthorizedProvenanceFactIds
-            .OrderBy(id => id, StringComparer.Ordinal)
-            .First();
+        string factId = definition.AuthorizedProvenanceFactIds.First();
 
         return $$"""
-            {"move":"explainWhy","message":"The source facts combine into the simplified requested value.","focusPhraseIds":["phrase-target"],"suggestedStepId":null,"provenanceFactIds":["{{factId}}"]}
+            {"move":"explainWhy","message":"The source facts combine into the simplified sum.","focusPhraseIds":["phrase-target"],"suggestedStepId":null,"provenanceFactIds":["{{factId}}"]}
             """;
     }
 }
