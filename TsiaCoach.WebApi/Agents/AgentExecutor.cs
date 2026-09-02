@@ -30,13 +30,22 @@ public sealed class AgentExecutor : IAgentExecutor
         AIAgent agent,
         string model,
         IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatResponseFormat? responseFormat = null)
     {
         try
         {
+            AgentRunOptions? options = responseFormat is null
+                ? null
+                : new AgentRunOptions
+                {
+                    ResponseFormat = responseFormat
+                };
+
             FrameworkAgentResponse result =
                 await agent.RunAsync(
                     messages,
+                    options: options,
                     cancellationToken: cancellationToken);
 
             return new AgentReply(
@@ -106,7 +115,26 @@ public sealed class AgentExecutor : IAgentExecutor
                 model,
                 _openAiEndpoint);
         }
+        catch (AnthropicApiException exception)
+        {
+            return ProviderRejectedReply((int)exception.StatusCode, exception.Message);
+        }
+        catch (RequestFailedException exception)
+        {
+            return ProviderRejectedReply(exception.Status, exception.Message);
+        }
+        catch (ClientResultException exception)
+        {
+            return ProviderRejectedReply(exception.Status, exception.Message);
+        }
     }
+
+    private static AgentReply ProviderRejectedReply(
+        int status,
+        string detail) =>
+        new(
+            new AgentError(
+                new ProviderRejected(status, detail)));
 
     private static AgentReply CancelledReply() =>
         new(

@@ -25,48 +25,48 @@ public static class CoachTurnValidator
         using JsonDocument? document = ParseSingleJsonObject(modelText);
         if (document is null)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("malformedJson");
         }
 
         JsonElement root = document.RootElement;
         if (!HasOnlyExpectedProperties(root))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
         }
 
         if (!TryReadString(root, "move", out string? move) ||
             !definition.AllowedMoves.Contains(move))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("moveMissingOrNotAllowed");
         }
 
         if (!TryReadString(root, "message", out string? message) ||
             string.IsNullOrWhiteSpace(message) ||
             message.Length > MaxMessageLength)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidMessage");
         }
 
         if (!TryReadStringArray(root, "focusPhraseIds", out string[] focusPhraseIds) ||
             focusPhraseIds.Any(id => !definition.AuthorizedFocusPhraseIds.Contains(id)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidFocusPhraseIds");
         }
 
         if (!TryReadOptionalString(root, "suggestedStepId", out string? suggestedStepId))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidSuggestedStepId");
         }
 
         if (!TryReadStringArray(root, "provenanceFactIds", out string[] provenanceFactIds))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidProvenanceFactIds");
         }
 
         if (move != CoachContractNames.SuggestScaffold &&
             suggestedStepId is not null)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unexpectedSuggestedStepId");
         }
 
         if (move == CoachContractNames.SuggestScaffold &&
@@ -77,19 +77,19 @@ public static class CoachTurnValidator
                  definition.AuthorizedSuggestedStepId,
                  StringComparison.Ordinal)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unauthorizedSuggestedStepId");
         }
 
         if (move != CoachContractNames.ExplainWhy &&
             provenanceFactIds.Length > 0)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unexpectedProvenanceFactIds");
         }
 
         if (move == CoachContractNames.ExplainWhy &&
             provenanceFactIds.Any(id => !definition.AuthorizedProvenanceFactIds.Contains(id)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unauthorizedProvenanceFactIds");
         }
 
         CoachMoveResponse responseMove = move switch
@@ -234,12 +234,14 @@ public static class CoachTurnValidator
 
 public sealed record CoachTurnValidationResult(
     bool IsValid,
-    CoachTurnResponse? Response)
+    CoachTurnResponse? Response,
+    string? FailureReason)
 {
     public static CoachTurnValidationResult Valid(
         CoachTurnResponse response) =>
-        new(true, response);
+        new(true, response, null);
 
-    public static CoachTurnValidationResult Invalid() =>
-        new(false, null);
+    public static CoachTurnValidationResult Invalid(
+        string failureReason = "unknown") =>
+        new(false, null, failureReason);
 }

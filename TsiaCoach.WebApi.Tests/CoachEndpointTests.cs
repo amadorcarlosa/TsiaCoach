@@ -250,6 +250,25 @@ public sealed class CoachEndpointTests : CoachApiTestBase
     }
 
     [Test]
+    public async Task Coach_ProviderRejectionReturns502()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        Runner.Result = CoachingAgentRunResult.FromError(
+            new AgentError(new ProviderRejected(400, "invalid_request_error")));
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "helpRequested" }""");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadGateway);
+        string body = await response.Content.ReadAsStringAsync();
+        await Assert.That(body).DoesNotContain("invalid_request_error");
+        await Assert.That(Runner.CallCount).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task Coach_CancellationUsesExistingCancellationMapping()
     {
         using HttpClient client = Factory.CreateClient();

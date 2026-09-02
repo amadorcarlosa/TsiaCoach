@@ -89,3 +89,29 @@ After an incorrect check, the policy projects the latest misconception to its au
 - Returned `focusPhraseIds` drive the existing semantic phrase highlighting; the first phrase ID that exists in the current prompt is focused and foreign IDs are ignored.
 - The walkthrough action appears only when the validated move is `suggestScaffold` and always navigates by `/scaffolds/{attemptId}`. The client never sends or uses `suggestedStepId`; the scaffold-session endpoint independently derives and authorizes the entry step. The previous unconditional escalated-projection scaffold link on the sample-items page is removed.
 - Upstream `409`, `429`, and `502` statuses surface as student-safe messages with an explicit Retry action; a `409` also refreshes the attempt projection. Raw provider or model output never reaches the UI, and the client never auto-retries model requests.
+
+## Slice 9B coaching move recorder and recorded fixtures
+
+### Recorder
+
+- `ICoachingMoveRecorder` is a single thread-safe singleton (`InMemoryCoachingMoveRecorder`) registered in `Program.cs`. `Record` appends atomically under a lock; `Snapshot` returns an immutable point-in-time copy.
+- `CoachingTurnService` records one `CoachingMoveRecord` only after the full success path: the attempt and practice item are found, the requested event is legal for the server-derived phase, the provider call succeeds, the response parses, and `CoachTurnValidator` accepts the move. Nothing is recorded for bad requests, unknown attempts, phase conflicts, provider failures, rate limits, cancellations, or invalid model output.
+- Recording never alters the public coach response and never mutates the attempt or any scaffold session. Repeated successful requests create separate records.
+- A record contains server-derived facts only: record ID, attempt ID, practice item ID, check count, derived phase, requested coaching event, validated move kind, validated focus phrase IDs, authorized suggested step ID (suggest-scaffold moves only), authorized provenance fact IDs (explain-why moves only), and a server timestamp from `TimeProvider`.
+- A record never contains: model instructions or system prompt, model-facing context, raw or rejected model output, the coach message text, correct answers, distractor tables, latent solution values, scaffold success checks, or client conversation history.
+
+### Recorded coaching fixture matrix
+
+`RecordedCoachingFixtureTests` replays the production attempt derivation (`Attempt.Phase`), coaching policy, `CoachingAgentDefinitionFactory`, and `CoachTurnValidator` fully in-process — no web host, network, model provider, or credentials. Each fixture pairs a practice item, submitted answer history, requested event, and fake model JSON with the expected move and authorization.
+
+| Fixture | Item | Answer history | Event | Expected move | Authorization |
+| --- | --- | --- | --- | --- | --- |
+| Before check | sample-1 | (none) | `helpRequested` | `askReadingQuestion` | authored phrase IDs only |
+| First incorrect | sample-1 | `answer-b` | `diagnosisRequested` | `diagnoseDifference` | no scaffold step (initial hint) |
+| Repeated same purpose | sample-1 | `answer-b`, `answer-b` | `diagnosisRequested` | `suggestScaffold` | exactly `step-join-known-quantities` |
+| Different purpose resets | sample-1 | `answer-b`, `answer-a` | `diagnosisRequested` | `diagnoseDifference` | streak reset, no scaffold step |
+| No scaffold authored | sample-2 | `answer-b`, `answer-b` | `diagnosisRequested` | `diagnoseDifference` | scaffold suggestion rejected |
+| Correct on first check | sample-1 | `answer-d` | `explainCorrect` | `explainWhy` | authorized provenance fact IDs |
+| Incorrect then correct | sample-1 | `answer-b`, `answer-d` | `explainCorrect` | `explainWhy` | authorized provenance fact IDs |
+
+Negative companion fixtures confirm the production validator rejects an unknown move, a foreign phrase ID, a foreign scaffold step, a foreign provenance fact, and a scaffold suggestion before escalation.

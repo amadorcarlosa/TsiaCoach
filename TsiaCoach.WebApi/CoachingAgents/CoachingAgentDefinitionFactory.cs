@@ -22,6 +22,11 @@ public sealed class CoachingAgentDefinitionFactory(
         Use only the server-provided coaching context.
         Do not infer the attempt phase, correctness, misconception, hint level, route, scaffold authorization, or provenance.
         Return exactly one JSON object with properties: move, message, focusPhraseIds, suggestedStepId, provenanceFactIds.
+        Choose move only from the context's allowedMoves.
+        Use focusPhraseIds only for phrase ids listed in the context; never use token ids.
+        Set suggestedStepId to null unless move is "suggestScaffold"; then use only the context's authorizedScaffoldEntry.entryStepId.
+        Set provenanceFactIds to an empty array unless move is "explainWhy"; then use only ids from the context's whyItWorks.provenanceFacts.
+        Never invent ids. Any other value in those fields causes the response to be rejected.
         Do not wrap the JSON in Markdown fences and do not add trailing prose.
         """;
 

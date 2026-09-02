@@ -6,6 +6,7 @@ public sealed record AuthFailed(string Detail);
 public sealed record DeploymentNotFound(string Deployment, string Endpoint);
 public sealed record RateLimited(TimeSpan? RetryAfter);
 public sealed record Cancelled;
+public sealed record ProviderRejected(int Status, string Detail);
 
 public sealed record UnknownModel(string Model);
 
@@ -15,7 +16,8 @@ public union AgentError(
     DeploymentNotFound, 
     RateLimited, 
     Cancelled,
-    UnknownModel);
+    UnknownModel,
+    ProviderRejected);
 
 
 public sealed record MyAgent(AIAgent Agent);

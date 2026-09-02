@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using TsiaCoach.Domain.Attempts;
 using TsiaCoach.Domain.Coaching;
 using TsiaCoach.WebApi.Agents;
@@ -27,7 +28,10 @@ public sealed class CoachingTurnService(
     SamplePracticeCatalog catalog,
     InMemoryAttemptStore attemptStore,
     CoachingAgentDefinitionFactory definitionFactory,
-    ICoachingAgentRunner runner)
+    ICoachingAgentRunner runner,
+    ICoachingMoveRecorder moveRecorder,
+    TimeProvider timeProvider,
+    ILogger<CoachingTurnService> logger)
 {
     public async Task<CoachingTurnResult> RunAsync(
         AttemptId attemptId,
@@ -59,6 +63,16 @@ public sealed class CoachingTurnService(
             entry,
             requestedEvent);
 
+        long startedAt = Stopwatch.GetTimestamp();
+        string eventName = CoachContractNames.EventName(requestedEvent);
+
+        logger.LogInformation(
+            "Starting coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model}",
+            attempt.Id.Value,
+            definition.Phase,
+            eventName,
+            definition.Model);
+
         CoachingAgentRunResult runResult;
         try
         {
@@ -69,20 +83,103 @@ public sealed class CoachingTurnService(
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
+            logger.LogInformation(
+                "Coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model} was cancelled after {ElapsedMilliseconds} ms",
+                attempt.Id.Value,
+                definition.Phase,
+                eventName,
+                definition.Model,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
             return new(CoachingTurnResultKind.Cancelled);
         }
 
         if (runResult.Error is AgentError error)
         {
-            return new(MapAgentError(error));
+            CoachingTurnResultKind mapped = MapAgentError(error);
+
+            logger.LogWarning(
+                "Coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model} ended as {ResultKind} after {ElapsedMilliseconds} ms with agent error {AgentErrorKind}",
+                attempt.Id.Value,
+                definition.Phase,
+                eventName,
+                definition.Model,
+                mapped,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                AgentErrorKind(error));
+
+            return new(mapped);
         }
 
         CoachTurnValidationResult validation =
             CoachTurnValidator.Validate(runResult.Text ?? string.Empty, definition);
 
-        return validation.IsValid
-            ? new(CoachingTurnResultKind.Succeeded, validation.Response)
-            : new(CoachingTurnResultKind.InvalidModelOutput);
+        if (!validation.IsValid)
+        {
+            logger.LogWarning(
+                "Coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model} returned invalid model output after {ElapsedMilliseconds} ms with validation failure {ValidationFailure}",
+                attempt.Id.Value,
+                definition.Phase,
+                eventName,
+                definition.Model,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                validation.FailureReason);
+
+            return new(CoachingTurnResultKind.InvalidModelOutput);
+        }
+
+        moveRecorder.Record(CreateRecord(
+            attempt,
+            definition,
+            requestedEvent,
+            validation.Response!));
+
+        logger.LogInformation(
+            "Completed coaching turn for attempt {AttemptId} phase {Phase} event {Event} model {Model} with move {MoveKind} in {ElapsedMilliseconds} ms",
+            attempt.Id.Value,
+            definition.Phase,
+            eventName,
+            definition.Model,
+            MoveKind(validation.Response!.Move),
+            Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
+        return new(CoachingTurnResultKind.Succeeded, validation.Response);
+    }
+
+    private CoachingMoveRecord CreateRecord(
+        Attempt attempt,
+        CoachingAgentDefinition definition,
+        CoachTurnEvent requestedEvent,
+        CoachTurnResponse response)
+    {
+        (string moveKind, string? suggestedStepId, IReadOnlyList<string> provenanceFactIds) =
+            response.Move switch
+            {
+                AskReadingQuestionResponse =>
+                    (CoachContractNames.AskReadingQuestion, (string?)null,
+                        (IReadOnlyList<string>)[]),
+                DiagnoseDifferenceResponse =>
+                    (CoachContractNames.DiagnoseDifference, null, []),
+                SuggestScaffoldResponse suggest =>
+                    (CoachContractNames.SuggestScaffold, suggest.SuggestedStepId, []),
+                ExplainWhyResponse explain =>
+                    (CoachContractNames.ExplainWhy, null, explain.ProvenanceFactIds),
+                _ => throw new InvalidOperationException(
+                    $"Unsupported coach move '{response.Move.GetType().Name}'.")
+            };
+
+        return new CoachingMoveRecord(
+            RecordId: Guid.NewGuid().ToString("n"),
+            AttemptId: attempt.Id.Value,
+            PracticeItemId: attempt.PracticeItemId.Value,
+            CheckCount: attempt.Checks.Count,
+            Phase: definition.Phase,
+            RequestedEvent: CoachContractNames.EventName(requestedEvent),
+            MoveKind: moveKind,
+            FocusPhraseIds: response.Move.FocusPhraseIds,
+            SuggestedStepId: suggestedStepId,
+            ProvenanceFactIds: provenanceFactIds,
+            RecordedAt: timeProvider.GetUtcNow());
     }
 
     private static bool IsLegalEvent(
@@ -110,6 +207,20 @@ public sealed class CoachingTurnService(
             DeploymentNotFound => CoachingTurnResultKind.ProviderFailure,
             MissingConfig => CoachingTurnResultKind.ProviderFailure,
             UnknownModel => CoachingTurnResultKind.ProviderFailure,
+            ProviderRejected => CoachingTurnResultKind.ProviderFailure,
             _ => CoachingTurnResultKind.ProviderFailure
+        };
+
+    private static string AgentErrorKind(AgentError error) =>
+        error.Value.GetType().Name;
+
+    private static string MoveKind(CoachMoveResponse move) =>
+        move switch
+        {
+            AskReadingQuestionResponse => CoachContractNames.AskReadingQuestion,
+            DiagnoseDifferenceResponse => CoachContractNames.DiagnoseDifference,
+            SuggestScaffoldResponse => CoachContractNames.SuggestScaffold,
+            ExplainWhyResponse => CoachContractNames.ExplainWhy,
+            _ => move.GetType().Name
         };
 }

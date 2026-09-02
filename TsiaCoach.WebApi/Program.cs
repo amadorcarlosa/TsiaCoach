@@ -47,6 +47,7 @@ builder.Services.AddOptions<CoachingAgentOptions>()
     .Bind(builder.Configuration.GetSection("CoachingAgent"));
 builder.Services.AddSingleton<CoachingAgentDefinitionFactory>();
 builder.Services.AddSingleton<ICoachingAgentRunner, CoachingAgentRunner>();
+builder.Services.AddSingleton<ICoachingMoveRecorder, InMemoryCoachingMoveRecorder>();
 builder.Services.AddSingleton<CoachingTurnService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
