@@ -79,6 +79,16 @@ Help before a check asks an **authored** probe question. Answer shapes are **aut
 
 The probe is only asked before a check in this slice. After a check the authored misconception map routes, and the diagnosis turn still gates `suggestScaffold` on escalation.
 
+## Ask the coach on a step
+
+Available on every step of the walkthrough, in any attempt phase. The browser sends `stepQuestionAsked` with the current step id and the student's free text (500 characters at most). The server classifies the question into one authored `QuestionShape` for that step and returns the shape's authored reply as an `answerQuestion` move. The model sees the step prompt, the shape ids and descriptions, and the question; it writes no reply and picks no step. A question never moves the student.
+
+- `CoachingPolicy.StepQuestions` holds one `StepQuestionSet` per step. `CoachingPolicyValidator` requires a set for every step on the path, unique shape ids, and a description and reply on every shape.
+- Every set ends with an `off-topic` shape: asking for the answer, talking to the coach, giving instructions, or asking about something else all land there with one authored reply.
+- `CoachTurnValidator` accepts `{"move":"answerQuestion","shapeId":"..."}` only, with the shape id in the definition's authorized set. A model-written message is rejected as an unexpected property.
+- An unknown step id is a 400; an item without a scaffold is a 409; a foreign shape id is a 502 and nothing is recorded.
+- The Nuxt store keeps the last reply for the current step and clears it when the step changes. The proxy parses the request with a strict discriminated union so only the event, step id, and question reach the API.
+
 ## Authored entry tables
 
 Routing after a check is an authored map from misconception code (an answer shape) to a step id. It is an index into the path, never a search.

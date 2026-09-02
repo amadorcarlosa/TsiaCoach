@@ -350,11 +350,14 @@ Version-one simplifications, to be lifted later:
 
 - Steps 3b and 4 fix the pair at 3 and 5. Step 3 accepts any neighbouring pair, but the compare scene does not yet follow the student's choice.
 - Step 4 does not yet swap the whole rods for tiles on completion; step 5 shows n and n + 2 as before.
-- The pattern question after step 1, the narrowed questions, ask-the-coach, and the bonus path are not built. Nothing routes to 1b or 1c yet.
+- The pattern question after step 1, the narrowed questions, and the bonus path are not built. Nothing routes to 1b or 1c yet.
+
+Ask the coach is built on every step (`stepQuestionAsked` event, `answerQuestion` move). The shapes per step are authored in `PracticeItemOneCoachingPolicy.StepQuestions`: step 1 has what-pieces, where-to-put, why-refused; step 2 has which-rows, why-refused, what-is-odd; step 3 has what-consecutive, why-refused; step 3b has what-to-do, why-refused, why-two; step 4 has what-to-do, what-is-n; the later steps have what-to-do and one why shape. Every step ends with off-topic. The reply is authored; the model only picks the shape; the student never moves.
+
+The walkthrough page is minimal: the original question with the words in focus, a step counter with a thin progress line, an Ask the coach button, the prompt, and the board.
 
 Next:
 
 1. Pattern question after step 1 with its three shapes and the landings on 1b and 1c.
-2. Ask the coach on a step.
-3. The compare scene built from the student's chosen pair.
-4. Bonus path.
+2. The compare scene built from the student's chosen pair.
+3. Bonus path.
