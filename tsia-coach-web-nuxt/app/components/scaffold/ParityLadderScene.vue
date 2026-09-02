@@ -342,6 +342,14 @@ watch(() => props.step.id, resetInputs, { immediate: true })
     </div>
 
     <div v-else-if="actionType === 'enterScalar'" class="board-stage">
+      <section v-if="joinScene?.parts?.length" class="join-sum-lane is-static" aria-label="The joined train: n, n, and a two">
+        <h2 class="join-lane-label">Sum</h2>
+        <div class="join-sum-content">
+          <div class="quantity-part"><ScaffoldRodPiece :length="8" :label="joinPartLabel(0)" tone="teal" /></div>
+          <div class="quantity-part"><ScaffoldRodPiece :length="8" :label="joinPartLabel(0)" tone="teal" /></div>
+          <div class="quantity-part"><ScaffoldRodPiece :length="2" :label="String(stepLength)" tone="red" /></div>
+        </div>
+      </section>
       <p class="stage-label">Enter the number you read from the model.</p>
       <UInputNumber v-model="scalarValue" :min="0" size="xl" class="number-input" />
     </div>
@@ -504,6 +512,7 @@ button.selected { border-color: var(--color-primary-600); background: color-mix(
   color: var(--mt-text-sub);
   padding-top: 1.6rem;
 }
+.join-sum-lane.is-static { margin: 0 auto 1rem; max-width: 40rem; }
 .join-sum-lane {
   min-height: 5rem;
   border: 2px dashed color-mix(in srgb, var(--mt-border-strong) 60%, transparent);
