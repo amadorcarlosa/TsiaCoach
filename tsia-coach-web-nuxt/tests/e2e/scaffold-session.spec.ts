@@ -1,11 +1,15 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
+/** Resolves once the Nuxt app has mounted and finished hydrating, so clicks reach live handlers. */
 async function waitForNuxtHydration(page: Page) {
-  await page.waitForFunction(() => Boolean(
-    (document.querySelector('#__nuxt') as Element & { __vue_app__?: unknown } | null)
-      ?.__vue_app__,
-  ))
+  await page.waitForFunction(() => {
+    const app = (document.querySelector('#__nuxt') as Element & {
+      __vue_app__?: { config?: { globalProperties?: { $nuxt?: { isHydrating?: boolean } } } }
+    } | null)?.__vue_app__
+    const nuxt = app?.config?.globalProperties?.$nuxt
+    return Boolean(nuxt) && nuxt?.isHydrating === false
+  })
 }
 
 /**
@@ -191,6 +195,7 @@ test('ask the coach sends only the step id and the question, and shows the autho
   await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
 
   await page.getByTestId('ask-coach').click()
+  await expect(page.getByTestId('coach-panel')).toBeVisible()
   await page.getByLabel('Your question for the coach').fill('why did my white come back?')
   await page.getByTestId('coach-send').click()
 
