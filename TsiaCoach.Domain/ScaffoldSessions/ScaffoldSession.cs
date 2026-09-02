@@ -33,7 +33,7 @@ public sealed class ScaffoldSession
 {
     public ScaffoldSessionId Id { get; }
     public AttemptId AttemptId { get; }
-    public CheckResultId AuthorizedByCheckResultId { get; }
+    public CheckResultId? AuthorizedByCheckResultId { get; }
     public PracticeItemId PracticeItemId { get; }
     public ScaffoldId ScaffoldId { get; }
     public ScaffoldStepId EntryStepId { get; }
@@ -214,23 +214,12 @@ public sealed class ScaffoldSession
         ScaffoldStepId entryStepId,
         Scaffold scaffold)
     {
-        ScaffoldStep[] allSteps = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .ToArray();
-        int entryIndex = Array.FindIndex(allSteps, step => step.Id == entryStepId);
-
-        if (entryIndex < 0)
+        if (!scaffold.ContainsStep(entryStepId))
         {
             throw new InvalidOperationException(
                 $"Scaffold entry step '{entryStepId.Value}' does not exist in scaffold '{scaffold.Id.Value}'.");
         }
 
-        if (!allSteps[entryIndex].CanStartCold)
-        {
-            throw new InvalidOperationException(
-                $"Scaffold entry step '{entryStepId.Value}' cannot start cold.");
-        }
-
-        return allSteps[entryIndex..];
+        return scaffold.Steps.Skip(scaffold.IndexOf(entryStepId)).ToArray();
     }
 }

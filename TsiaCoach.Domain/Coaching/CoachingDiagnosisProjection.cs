@@ -10,10 +10,14 @@ public enum CoachingHintLevel
     Escalated
 }
 
+/// <summary>
+/// Server-derived view of the latest incorrect check. <see cref="Purpose"/> is
+/// the label of the authored entry step and is null when no scaffold exists.
+/// </summary>
 public sealed record CoachingDiagnosisProjection(
     AnswerChoiceId SelectedAnswerId,
     MisconceptionCode Misconception,
-    ScaffoldPhasePurpose Purpose,
+    ScaffoldPhasePurpose? Purpose,
     CoachingRoute Route,
     int RouteStreak,
     CoachingHintLevel HintLevel);

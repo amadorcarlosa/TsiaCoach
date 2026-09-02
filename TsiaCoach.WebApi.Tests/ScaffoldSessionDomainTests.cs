@@ -9,7 +9,6 @@ using TsiaCoach.Domain.SampleScaffolds;
 using TsiaCoach.Domain.ScaffoldSessions;
 using TsiaCoach.Domain.Scaffolds;
 using TsiaCoach.Domain.Scaffolds.Evaluation;
-using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.ValueObjects;
 
 namespace TsiaCoach.WebApi.Tests;
@@ -17,34 +16,35 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class ScaffoldSessionDomainTests
 {
     [Test]
-    public async Task BeforeCheck_DeniesScaffoldSession()
+    public async Task BeforeCheck_GrantsFloorEntry()
     {
         Attempt attempt = Attempt.Start(new("attempt-before-check"), PracticeItemOne.Item);
 
-        ScaffoldSessionAuthorization authorization = Authorize(attempt, PracticeItemOne.Item);
+        ScaffoldSessionGrant grant = Grant(attempt);
 
-        await Assert.That(authorization.Value)
-            .IsTypeOf<ScaffoldSessionDenied>();
-        await Assert.That(((ScaffoldSessionDenied)authorization.Value).Reason)
-            .IsEqualTo(ScaffoldSessionDenialReason.BeforeCheck);
+        await Assert.That(grant.AuthorizedByCheckResultId).IsNull();
+        await Assert.That(grant.EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
     }
 
     [Test]
-    public async Task FirstIncorrectCheck_DeniesInitialHintSession()
+    public async Task FirstIncorrectCheck_GrantsRoutedEntry()
     {
         Attempt attempt = ScaffoldSessionTestData.AppendAttemptCheck(
             Attempt.Start(new("attempt-initial"), PracticeItemOne.Item),
             "answer-b",
             0);
 
-        ScaffoldSessionDenied denied = Denied(Authorize(attempt, PracticeItemOne.Item));
+        ScaffoldSessionGrant grant = Grant(attempt);
 
-        await Assert.That(denied.Reason)
-            .IsEqualTo(ScaffoldSessionDenialReason.InitialHint);
+        await Assert.That(grant.AuthorizedByCheckResultId)
+            .IsEqualTo(attempt.Checks[^1].Id);
+        await Assert.That(grant.EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
     }
 
     [Test]
-    public async Task SecondSamePurposeIncorrectCheck_GrantsScaffoldEntry()
+    public async Task SecondSameRouteIncorrectCheck_GrantsSameEntry()
     {
         Attempt attempt = ScaffoldSessionTestData.EscalatedRepresentationAttempt();
         ScaffoldSessionGrant grant = Grant(attempt);
@@ -54,24 +54,24 @@ public sealed class ScaffoldSessionDomainTests
         await Assert.That(grant.ScaffoldId)
             .IsEqualTo(ParityLadderScaffold.Definition.Id);
         await Assert.That(grant.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
     }
 
     [Test]
-    public async Task DifferentPurposeIncorrectCheck_DeniesAfterStreakReset()
+    public async Task LatestIncorrectCheck_DecidesTheEntry()
     {
-        Attempt attempt = Attempt.Start(new("attempt-reset"), PracticeItemOne.Item);
+        Attempt attempt = Attempt.Start(new("attempt-latest"), PracticeItemOne.Item);
         attempt = ScaffoldSessionTestData.AppendAttemptCheck(attempt, "answer-b", 0);
         attempt = ScaffoldSessionTestData.AppendAttemptCheck(attempt, "answer-a", 1);
 
-        ScaffoldSessionDenied denied = Denied(Authorize(attempt, PracticeItemOne.Item));
+        ScaffoldSessionGrant grant = Grant(attempt);
 
-        await Assert.That(denied.Reason)
-            .IsEqualTo(ScaffoldSessionDenialReason.InitialHint);
+        await Assert.That(grant.EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
     }
 
     [Test]
-    public async Task CorrectAttempt_DeniesScaffoldSession()
+    public async Task CorrectAttempt_GrantsFloorEntry()
     {
         Attempt attempt = Attempt.Start(new("attempt-correct"), PracticeItemOne.Item)
             .Append(
@@ -80,33 +80,38 @@ public sealed class ScaffoldSessionDomainTests
                 DateTimeOffset.UnixEpoch,
                 PracticeItemOne.Item);
 
-        ScaffoldSessionDenied denied = Denied(Authorize(attempt, PracticeItemOne.Item));
+        ScaffoldSessionGrant grant = Grant(attempt);
 
-        await Assert.That(denied.Reason)
-            .IsEqualTo(ScaffoldSessionDenialReason.AfterCorrect);
+        await Assert.That(grant.AuthorizedByCheckResultId)
+            .IsEqualTo(attempt.Checks[^1].Id);
+        await Assert.That(grant.EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
     }
 
     [Test]
     public async Task NoScaffoldAuthored_DeniesScaffoldSession()
     {
         Attempt attempt = Attempt.Start(new("attempt-no-scaffold"), PracticeItemTwo.Item);
+
+        ScaffoldSessionAuthorization beforeCheck = Authorize(
+            attempt,
+            PracticeItemTwo.Item,
+            PracticeItemTwoCoachingPolicy.Definition);
+
         attempt = attempt.Append(
             new CheckResultId("check-two-1"),
             new AnswerChoiceId("answer-b"),
             DateTimeOffset.UnixEpoch,
             PracticeItemTwo.Item);
-        attempt = attempt.Append(
-            new CheckResultId("check-two-2"),
-            new AnswerChoiceId("answer-b"),
-            DateTimeOffset.UnixEpoch,
-            PracticeItemTwo.Item);
 
-        ScaffoldSessionAuthorization authorization = Authorize(
+        ScaffoldSessionAuthorization afterCheck = Authorize(
             attempt,
             PracticeItemTwo.Item,
             PracticeItemTwoCoachingPolicy.Definition);
 
-        await Assert.That(Denied(authorization).Reason)
+        await Assert.That(Denied(beforeCheck).Reason)
+            .IsEqualTo(ScaffoldSessionDenialReason.NoScaffoldAuthored);
+        await Assert.That(Denied(afterCheck).Reason)
             .IsEqualTo(ScaffoldSessionDenialReason.NoScaffoldAuthored);
     }
 
@@ -123,7 +128,7 @@ public sealed class ScaffoldSessionDomainTests
         await Assert.That(grant.ScaffoldId)
             .IsEqualTo(ParityLadderScaffold.Definition.Id);
         await Assert.That(grant.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
     }
 
     [Test]
@@ -143,11 +148,53 @@ public sealed class ScaffoldSessionDomainTests
         await Assert.That(session.AuthorizedByCheckResultId)
             .IsEqualTo(grant.AuthorizedByCheckResultId);
         await Assert.That(session.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
         await Assert.That(progress.CurrentStepId)
             .IsEqualTo(session.EntryStepId);
         await Assert.That(progress.CompletedStepCount).IsEqualTo(0);
-        await Assert.That(progress.TotalStepCount).IsEqualTo(7);
+        await Assert.That(progress.TotalStepCount).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Start_AtFloorTraversesTheWholePath()
+    {
+        ScaffoldSession session = ScaffoldSession.Start(
+            new ScaffoldSessionId("session-floor"),
+            ScaffoldSessionTestData.FloorGrant(),
+            ParityLadderScaffold.Definition);
+        ActiveScaffoldSession progress = Active(session.Progress(
+            PracticeItemOne.Item,
+            ParityLadderScaffold.Definition));
+
+        await Assert.That(progress.CurrentStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(progress.TotalStepCount)
+            .IsEqualTo(ParityLadderScaffold.Definition.Steps.Count);
+    }
+
+    [Test]
+    public async Task AnyStep_CanBeAnEntry()
+    {
+        foreach (ScaffoldStep step in ParityLadderScaffold.Definition.Steps)
+        {
+            ScaffoldSessionGrant grant = ScaffoldSessionTestData.FloorGrant() with
+            {
+                EntryStepId = step.Id
+            };
+
+            ScaffoldSession session = ScaffoldSession.Start(
+                new ScaffoldSessionId($"session-entry-{step.Id.Value}"),
+                grant,
+                ParityLadderScaffold.Definition);
+            ActiveScaffoldSession progress = Active(session.Progress(
+                PracticeItemOne.Item,
+                ParityLadderScaffold.Definition));
+
+            await Assert.That(progress.CurrentStepId).IsEqualTo(step.Id);
+            await Assert.That(progress.TotalStepCount)
+                .IsEqualTo(ParityLadderScaffold.Definition.Steps.Count
+                    - ParityLadderScaffold.Definition.IndexOf(step.Id));
+        }
     }
 
     [Test]
@@ -167,15 +214,15 @@ public sealed class ScaffoldSessionDomainTests
     }
 
     [Test]
-    public async Task Start_RejectsNonColdEntry()
+    public async Task Start_RejectsEntryNotOnThePath()
     {
         ScaffoldSessionGrant grant = Grant() with
         {
-            EntryStepId = ParityLadderScaffold.CountBasePartsStepId
+            EntryStepId = new ScaffoldStepId("step-not-on-path")
         };
 
         await AssertInvalid(() => ScaffoldSession.Start(
-            new("session-non-cold"),
+            new("session-unknown-entry"),
             grant,
             ParityLadderScaffold.Definition));
     }
@@ -197,7 +244,7 @@ public sealed class ScaffoldSessionDomainTests
 
         await Assert.That(updated.Checks.Count).IsEqualTo(1);
         await Assert.That(progress.CurrentStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
         await Assert.That(progress.CompletedStepCount).IsEqualTo(0);
     }
 
@@ -217,7 +264,7 @@ public sealed class ScaffoldSessionDomainTests
             ParityLadderScaffold.Definition));
 
         await Assert.That(progress.CurrentStepId)
-            .IsEqualTo(ParityLadderScaffold.CountBasePartsStepId);
+            .IsEqualTo(ParityLadderScaffold.NameBarCountStepId);
         await Assert.That(progress.CompletedStepCount).IsEqualTo(1);
     }
 
@@ -233,13 +280,38 @@ public sealed class ScaffoldSessionDomainTests
     }
 
     [Test]
+    public async Task FloorSession_CompletesAfterTheWholePath()
+    {
+        ScaffoldSession session = ScaffoldSession.Start(
+            new ScaffoldSessionId("session-floor-complete"),
+            ScaffoldSessionTestData.FloorGrant(),
+            ParityLadderScaffold.Definition);
+
+        foreach (ScaffoldStepSubmission submission in ScaffoldSessionTestData.FullPathSubmissions())
+        {
+            session = session.Append(
+                ScaffoldSessionTestData.NewCheckId(),
+                submission,
+                DateTimeOffset.UnixEpoch,
+                PracticeItemOne.Item,
+                ParityLadderScaffold.Definition);
+        }
+
+        await Assert.That(session.Checks.Count).IsEqualTo(6);
+        await Assert.That(session.Progress(
+            PracticeItemOne.Item,
+            ParityLadderScaffold.Definition).Value)
+            .IsTypeOf<CompletedScaffoldSession>();
+    }
+
+    [Test]
     public async Task AppendAfterCompletion_IsRejected()
     {
         ScaffoldSession session = ScaffoldSessionTestData.CompleteRepresentationSession();
 
         await AssertInvalid(() => session.Append(
             ScaffoldSessionTestData.NewCheckId(),
-            new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId),
+            new EnterScalarSubmission(2m),
             DateTimeOffset.UnixEpoch,
             PracticeItemOne.Item,
             ParityLadderScaffold.Definition));
@@ -250,7 +322,7 @@ public sealed class ScaffoldSessionDomainTests
     {
         await AssertInvalid(() => ScaffoldSessionTestData.StartRepresentationSession().Append(
             ScaffoldSessionTestData.NewCheckId(),
-            new SelectAnswerChoiceSubmission(PracticeItemTwo.Item.CorrectAnswerId),
+            ScaffoldSessionTestData.CorrectJoinSubmission(),
             DateTimeOffset.UnixEpoch,
             PracticeItemTwo.Item,
             ParityLadderScaffold.Definition));
@@ -380,7 +452,7 @@ public sealed class ScaffoldSessionDomainTests
             ParityLadderScaffold.Definition));
 
         await Assert.That(progress.CurrentStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
         await Assert.That(session.Checks[0].GetType().GetProperty("Satisfied"))
             .IsNull();
     }
@@ -392,15 +464,14 @@ public sealed class ScaffoldSessionDomainTests
         ActiveScaffoldSession progress = Active(session.Progress(
             PracticeItemOne.Item,
             ParityLadderScaffold.Definition));
-        string[] authorizedIds = ParityLadderScaffold.Definition.Phases
-            .SelectMany(phase => phase.Steps)
+        string[] authorizedIds = ParityLadderScaffold.Definition.Steps
             .SkipWhile(step => step.Id != session.EntryStepId)
             .Select(step => step.Id.Value)
             .ToArray();
 
         await Assert.That(progress.TotalStepCount).IsEqualTo(authorizedIds.Length);
         await Assert.That(authorizedIds[0])
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId.Value);
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId.Value);
         await Assert.That(progress.CurrentStepId.Value)
             .IsEqualTo(authorizedIds[0]);
     }

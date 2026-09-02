@@ -10,7 +10,7 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class ScaffoldDomainTests
 {
     [Test]
-    public async Task ParityLadder_IsAnOrderedScaffoldForPracticeItemOne()
+    public async Task ParityLadder_IsOneFlatPathForPracticeItemOne()
     {
         Scaffold scaffold = ParityLadderScaffold.Definition;
 
@@ -20,14 +20,83 @@ public sealed class ScaffoldDomainTests
             .IsEqualTo(PracticeItemOne.Id);
         await Assert.That(scaffold.Resources.Count)
             .IsEqualTo(3);
-        await Assert.That(scaffold.Phases.Count)
-            .IsEqualTo(5);
-        await Assert.That(scaffold.Phases.SelectMany(phase => phase.Steps).Count())
-            .IsEqualTo(12);
-        await Assert.That(scaffold.Phases[0].Purpose)
+        await Assert.That(scaffold.Steps.Count)
+            .IsEqualTo(6);
+        await Assert.That(scaffold.Steps.Select(step => step.Id).Distinct().Count())
+            .IsEqualTo(6);
+        await Assert.That(scaffold.Steps.Select(step => step.Id))
+            .IsEquivalentTo(
+            [
+                ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+                ParityLadderScaffold.RemovePairedEvensStepId,
+                ParityLadderScaffold.SelectConsecutiveOddsStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
+                ParityLadderScaffold.NameBarCountStepId,
+                ParityLadderScaffold.NameLeftoverLengthStepId
+            ]);
+    }
+
+    [Test]
+    public async Task FloorStep_IsWhatMakesANumberOdd()
+    {
+        ScaffoldStep floor = ParityLadderScaffold.Definition.FloorStep;
+
+        await Assert.That(floor.Id)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(floor.Purpose)
             .IsEqualTo(ScaffoldPhasePurpose.ConceptFormation);
-        await Assert.That(scaffold.Phases[^1].Purpose)
-            .IsEqualTo(ScaffoldPhasePurpose.Verification);
+        await Assert.That(floor.Action.Value).IsTypeOf<ClassifyByFit>();
+        await Assert.That(floor.SuccessCheck.Value).IsTypeOf<MatchesComputedFit>();
+    }
+
+    [Test]
+    public async Task PurposesAreLabelsInPathOrder()
+    {
+        ScaffoldPhasePurpose[] purposes = ParityLadderScaffold.Definition.Steps
+            .Select(step => step.Purpose)
+            .ToArray();
+
+        await Assert.That(purposes).IsEquivalentTo(
+        [
+            ScaffoldPhasePurpose.ConceptFormation,
+            ScaffoldPhasePurpose.ConceptFormation,
+            ScaffoldPhasePurpose.LanguageInterpretation,
+            ScaffoldPhasePurpose.Representation,
+            ScaffoldPhasePurpose.Generalization,
+            ScaffoldPhasePurpose.Generalization
+        ]);
+    }
+
+    [Test]
+    public async Task EveryStep_RendersFromResourcesAlone()
+    {
+        Scaffold scaffold = ParityLadderScaffold.Definition;
+        HashSet<ScaffoldResourceId> resourceIds = scaffold.Resources
+            .Select(resource => resource.Value switch
+            {
+                RodResource rod => rod.Id,
+                RodSeriesResource series => series.Id,
+                _ => throw new InvalidOperationException("Unsupported resource.")
+            })
+            .ToHashSet();
+
+        foreach (ScaffoldStep step in scaffold.Steps)
+        {
+            bool selfContained = step.Scene.Value switch
+            {
+                RodEquivalenceScene scene =>
+                    resourceIds.Contains(scene.UnitRodId) && resourceIds.Contains(scene.ProbeRodId),
+                RodMeasurementScene scene =>
+                    resourceIds.Contains(scene.ProbeRodId) && resourceIds.Contains(scene.SpanSeriesId),
+                RodGapScene scene =>
+                    resourceIds.Contains(scene.StepRodId) && resourceIds.Contains(scene.SpanSeriesId),
+                QuantityJoinScene scene => scene.Parts.Count >= 2,
+                AnswerChoiceScene => true,
+                _ => false
+            };
+
+            await Assert.That(selfContained).IsTrue();
+        }
     }
 
     [Test]
@@ -46,15 +115,19 @@ public sealed class ScaffoldDomainTests
         await Assert.That(length.LatentMathId)
             .IsEqualTo(PracticeItemOne.OrderedStep.Id);
 
-        RodMeasurementScene measure = FreshSceneFor<RodMeasurementScene>(
-            FindStep(ParityLadderScaffold.ClassifyLengthsStepId));
-        RodGapScene step = FreshSceneFor<RodGapScene>(
-            FindStep(ParityLadderScaffold.TraverseOddGapsStepId));
+        RodMeasurementScene measure = SceneFor<RodMeasurementScene>(
+            FindStep(ParityLadderScaffold.RebuildFromTwosAndOnesStepId));
+        RodGapScene gap = SceneFor<RodGapScene>(
+            FindStep(ParityLadderScaffold.SelectConsecutiveOddsStepId));
 
         await Assert.That(measure.ProbeRodId)
             .IsEqualTo(rod.Id);
-        await Assert.That(step.StepRodId)
+        await Assert.That(gap.StepRodId)
             .IsEqualTo(rod.Id);
+        await Assert.That(gap.SpanSeriesId)
+            .IsEqualTo(ParityLadderScaffold.MeasurandSeriesId);
+        await Assert.That(gap.IncludedOutcome)
+            .IsEqualTo(FitClassification.OneUnitLeftover);
     }
 
     [Test]
@@ -86,58 +159,43 @@ public sealed class ScaffoldDomainTests
     }
 
     [Test]
-    public async Task KnownAndUnknownJoin_UseTheSameQuantitiesWithFadedSupport()
+    public async Task SumScene_JoinsNAndTheNextOddIntegerWithoutBindings()
     {
-        QuantityJoinScene known = FreshSceneFor<QuantityJoinScene>(
-            FindStep(ParityLadderScaffold.JoinKnownQuantitiesStepId));
-        QuantityJoinScene unknown = FreshSceneFor<QuantityJoinScene>(
-            FindStep(ParityLadderScaffold.JoinUnknownQuantitiesStepId));
+        QuantityJoinScene join = SceneFor<QuantityJoinScene>(
+            FindStep(ParityLadderScaffold.JoinAndReadSumStepId));
+        QuantityJoinScene count = SceneFor<QuantityJoinScene>(
+            FindStep(ParityLadderScaffold.NameBarCountStepId));
+        QuantityJoinScene length = SceneFor<QuantityJoinScene>(
+            FindStep(ParityLadderScaffold.NameLeftoverLengthStepId));
 
-        await Assert.That(known.Parts)
-            .IsEquivalentTo(unknown.Parts);
-        await Assert.That(known.Bindings.Count)
-            .IsEqualTo(1);
-        await Assert.That(known.Bindings[0].SemanticEntityId)
+        await Assert.That(join.Parts.Count).IsEqualTo(2);
+        await Assert.That(RequireCase<SemanticQuantityReference>(join.Parts[0].Value).SemanticEntityId)
             .IsEqualTo(PracticeItemOne.N.Id);
-        await Assert.That(known.Bindings[0].Value)
-            .IsEqualTo(new UnitLength(15));
-        await Assert.That(known.ShowSizedTarget)
-            .IsTrue();
-        await Assert.That(unknown.Bindings.Count)
-            .IsEqualTo(0);
-        await Assert.That(unknown.ShowSizedTarget)
-            .IsFalse();
+        await Assert.That(RequireCase<LatentExpressionReference>(join.Parts[1].Value).LatentMathId)
+            .IsEqualTo(PracticeItemOne.SecondMember.Id);
+        await Assert.That(join.Bindings.Count).IsEqualTo(0);
+        await Assert.That(join.ShowSizedTarget).IsFalse();
+        await Assert.That(count.Parts).IsEquivalentTo(join.Parts);
+        await Assert.That(length.Parts).IsEquivalentTo(join.Parts);
     }
 
     [Test]
-    public async Task FrozenKnownTrain_AsksForCountAndLengthAsDifferentReadings()
+    public async Task NamingSteps_ReadCountAndLengthAsDifferentReadings()
     {
-        ScaffoldStep countStep = FindStep(ParityLadderScaffold.CountBasePartsStepId);
-        ScaffoldStep lengthStep = FindStep(ParityLadderScaffold.MeasureRemainderStepId);
+        ScaffoldStep countStep = FindStep(ParityLadderScaffold.NameBarCountStepId);
+        ScaffoldStep lengthStep = FindStep(ParityLadderScaffold.NameLeftoverLengthStepId);
 
         EnterScalar countAction = RequireCase<EnterScalar>(countStep.Action.Value);
         MatchesLatentScalar countCheck =
             RequireCase<MatchesLatentScalar>(countStep.SuccessCheck.Value);
-        ContinuedScene countScene = RequireCase<ContinuedScene>(countStep.Scene.Value);
-
         EnterScalar lengthAction = RequireCase<EnterScalar>(lengthStep.Action.Value);
         MatchesLatentScalar lengthCheck =
             RequireCase<MatchesLatentScalar>(lengthStep.SuccessCheck.Value);
-        ContinuedScene lengthScene = RequireCase<ContinuedScene>(lengthStep.Scene.Value);
 
-        await Assert.That(countScene.SourceStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
-        await Assert.That(countScene.Access)
-            .IsEqualTo(SceneAccess.Frozen);
         await Assert.That(countAction.Reading)
             .IsEqualTo(ScalarReading.RodCount);
         await Assert.That(countCheck.ExpectedValueId)
             .IsEqualTo(PracticeItemOne.LikeTermCount.Id);
-
-        await Assert.That(lengthScene.SourceStepId)
-            .IsEqualTo(ParityLadderScaffold.CountBasePartsStepId);
-        await Assert.That(lengthScene.Access)
-            .IsEqualTo(SceneAccess.Frozen);
         await Assert.That(lengthAction.Reading)
             .IsEqualTo(ScalarReading.UnitLength);
         await Assert.That(lengthCheck.ExpectedValueId)
@@ -175,16 +233,11 @@ public sealed class ScaffoldDomainTests
     }
 
     private static ScaffoldStep FindStep(ScaffoldStepId id) =>
-        ParityLadderScaffold.Definition.Phases
-            .SelectMany(phase => phase.Steps)
-            .Single(step => step.Id == id);
+        ParityLadderScaffold.Definition.Step(id);
 
-    private static TScene FreshSceneFor<TScene>(ScaffoldStep step)
-        where TScene : class
-    {
-        FreshScene fresh = RequireCase<FreshScene>(step.Scene.Value);
-        return RequireCase<TScene>(fresh.Definition.Value);
-    }
+    private static TScene SceneFor<TScene>(ScaffoldStep step)
+        where TScene : class =>
+        RequireCase<TScene>(step.Scene.Value);
 
     private static T RequireCase<T>(object? value)
         where T : class =>

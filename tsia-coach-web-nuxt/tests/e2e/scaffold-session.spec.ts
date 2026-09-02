@@ -52,10 +52,10 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
   await page.goto(`/scaffolds/${attempt.attemptId}`)
   await waitForNuxtHydration(page)
 
-  await expect(page.locator('[data-step-id="step-join-known-quantities"]')).toBeVisible()
-  await movePartToSum(page, 'First part, 15')
+  await expect(page.locator('[data-step-id="step-join-and-read-sum"]')).toBeVisible()
+  await movePartToSum(page, 'First part, n')
   await page.getByTestId('check-scaffold-response').click()
-  await expect(page.locator('[data-step-id="step-join-known-quantities"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-join-and-read-sum"]')).toBeVisible()
   await expect(page.getByText(/does not match the model yet/i)).toBeVisible()
   expect(submittedBodies[0]).toEqual({
     type: 'joinQuantities',
@@ -67,9 +67,9 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
   expect(firstBody).not.toContain('correct')
   expect(firstBody).not.toContain('successCheck')
 
-  await movePartToSum(page, 'Next part, 17')
+  await movePartToSum(page, 'Next part, n + 2')
   await page.getByTestId('check-scaffold-response').click()
-  await expect(page.locator('[data-step-id="step-count-base-parts"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-name-bar-count"]')).toBeVisible()
   expect(submittedBodies[1]).toEqual({
     type: 'joinQuantities',
     parts: [
@@ -83,12 +83,24 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
 
   await page.reload()
   await waitForNuxtHydration(page)
-  await expect(page.locator('[data-step-id="step-count-base-parts"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-name-bar-count"]')).toBeVisible()
 })
 
-test('unauthorized scaffold entry shows a safe error', async ({ page, request }) => {
+test('help before any check opens the walkthrough at the floor step', async ({ page, request }) => {
   const started = await request.post('/api/attempts', {
     data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
+})
+
+test('an item without a scaffold shows a safe error', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-2' },
   })
   expect(started.ok()).toBeTruthy()
   const attempt = await started.json() as { attemptId: string }
@@ -103,5 +115,5 @@ test('unauthorized scaffold entry shows a safe error', async ({ page, request })
   const alert = page.getByTestId('scaffold-safe-error')
   await expect(alert).toBeVisible()
   await expect(alert).toContainText('not available yet')
-  await expect(alert).not.toContainText('stopped-at-second-integer')
+  await expect(alert).not.toContainText('stopped-at-this-year')
 })

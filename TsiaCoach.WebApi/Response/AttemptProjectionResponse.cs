@@ -20,7 +20,7 @@ public sealed record BeforeCheckResponse : AttemptPhaseResponse;
 public sealed record AfterIncorrectCheckResponse(
     string SelectedAnswerId,
     string MisconceptionCode,
-    string Purpose,
+    string? Purpose,
     CoachingRouteResponse Route,
     int RouteStreak,
     string HintLevel) : AttemptPhaseResponse;

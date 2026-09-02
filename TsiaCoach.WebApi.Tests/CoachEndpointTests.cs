@@ -173,7 +173,7 @@ public sealed class CoachEndpointTests : CoachApiTestBase
             client,
             attempt.AttemptId,
             """
-            { "event": "helpRequested", "phase": "afterIncorrectCheck", "suggestedStepId": "step-join-known-quantities" }
+            { "event": "helpRequested", "phase": "afterIncorrectCheck", "suggestedStepId": "step-join-and-read-sum" }
             """);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);

@@ -105,13 +105,13 @@ public sealed class CoachingAgentDefinitionTests
                 CoachContractNames.SuggestScaffold))
             .IsTrue();
         await Assert.That(definition.AuthorizedSuggestedStepId)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo("step-join-and-read-sum");
         await Assert.That(definition.Prompt)
             .Contains("\"scaffoldId\": \"scaffold-parity-ladder\"");
         await Assert.That(definition.Prompt)
-            .Contains("\"entryStepId\": \"step-join-known-quantities\"");
+            .Contains("\"entryStepId\": \"step-join-and-read-sum\"");
         await Assert.That(definition.Prompt)
-            .DoesNotContain("step-count-base-parts");
+            .DoesNotContain("step-name-bar-count");
     }
 
     [Test]

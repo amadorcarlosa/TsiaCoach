@@ -20,9 +20,9 @@ public static class ScaffoldValidator
             throw new InvalidOperationException("A scaffold must declare at least one resource.");
         }
 
-        if (scaffold.Phases.Count == 0)
+        if (scaffold.Steps.Count == 0)
         {
-            throw new InvalidOperationException("A scaffold must contain at least one phase.");
+            throw new InvalidOperationException("A scaffold must contain at least one step.");
         }
 
         EnsureUnique(
@@ -34,9 +34,9 @@ public static class ScaffoldValidator
             .ToDictionary(ResourceId);
 
         EnsureUnique(
-            scaffold.Phases.Select(phase => phase.Id),
+            scaffold.Steps.Select(step => step.Id),
             id => id.Value,
-            "scaffold phase");
+            "scaffold step");
 
         Dictionary<LatentMathId, DerivedScalar> latentScalars = practiceItem.Semantics
             .LatentFacts
@@ -63,38 +63,19 @@ public static class ScaffoldValidator
             ValidateResource(resource, latentScalars);
         }
 
-        var authoredSteps = new Dictionary<ScaffoldStepId, ScaffoldStep>();
-
-        foreach (ScaffoldPhase phase in scaffold.Phases)
+        foreach (ScaffoldStep step in scaffold.Steps)
         {
-            if (phase.Steps.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Scaffold phase '{phase.Id.Value}' must contain at least one step.");
-            }
-
-            foreach (ScaffoldStep step in phase.Steps)
-            {
-                if (!authoredSteps.TryAdd(step.Id, step))
-                {
-                    throw new InvalidOperationException(
-                        $"Duplicate scaffold step id '{step.Id.Value}'.");
-                }
-
-                ValidatePrompt(step, phraseIds);
-                ValidateScene(
-                    step,
-                    authoredSteps,
-                    resources,
-                    semanticEntityIds,
-                    latentExpressions);
-                ValidateInteraction(
-                    step,
-                    authoredSteps,
-                    resources,
-                    latentScalars,
-                    latentExpressions);
-            }
+            ValidatePrompt(step, phraseIds);
+            ValidateScene(
+                step,
+                resources,
+                semanticEntityIds,
+                latentExpressions);
+            ValidateInteraction(
+                step,
+                resources,
+                latentScalars,
+                latentExpressions);
         }
     }
 
@@ -162,46 +143,13 @@ public static class ScaffoldValidator
 
     private static void ValidateScene(
         ScaffoldStep step,
-        IReadOnlyDictionary<ScaffoldStepId, ScaffoldStep> authoredSteps,
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources,
         IReadOnlySet<SemanticEntityId> semanticEntityIds,
         IReadOnlyDictionary<LatentMathId, DerivedExpression> latentExpressions)
     {
+        ScaffoldStepId stepId = step.Id;
+
         switch (step.Scene.Value)
-        {
-            case FreshScene fresh:
-                ValidateSceneDefinition(
-                    step.Id,
-                    fresh.Definition,
-                    authoredSteps,
-                    resources,
-                    semanticEntityIds,
-                    latentExpressions);
-                break;
-
-            case ContinuedScene continued:
-                if (continued.SourceStepId == step.Id ||
-                    !authoredSteps.ContainsKey(continued.SourceStepId))
-                {
-                    throw new InvalidOperationException(
-                        $"Scaffold step '{step.Id.Value}' must continue a previously authored step.");
-                }
-                break;
-
-            default:
-                throw Unsupported("step scene", step.Scene.Value);
-        }
-    }
-
-    private static void ValidateSceneDefinition(
-        ScaffoldStepId stepId,
-        ScaffoldScene scene,
-        IReadOnlyDictionary<ScaffoldStepId, ScaffoldStep> authoredSteps,
-        IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources,
-        IReadOnlySet<SemanticEntityId> semanticEntityIds,
-        IReadOnlyDictionary<LatentMathId, DerivedExpression> latentExpressions)
-    {
-        switch (scene.Value)
         {
             case RodEquivalenceScene equivalence:
                 RequireResource<RodResource>(equivalence.UnitRodId, resources);
@@ -215,13 +163,7 @@ public static class ScaffoldValidator
 
             case RodGapScene gaps:
                 RequireResource<RodResource>(gaps.StepRodId, resources);
-                if (gaps.ClassificationStepId == stepId ||
-                    !authoredSteps.ContainsKey(gaps.ClassificationStepId))
-                {
-                    throw new InvalidOperationException(
-                        $"Rod-gap scene in step '{stepId.Value}' must reference a previous " +
-                        "classification step.");
-                }
+                RequireResource<RodSeriesResource>(gaps.SpanSeriesId, resources);
                 break;
 
             case QuantityJoinScene join:
@@ -261,13 +203,12 @@ public static class ScaffoldValidator
                 break;
 
             default:
-                throw Unsupported("scaffold scene", scene.Value);
+                throw Unsupported("scaffold scene", step.Scene.Value);
         }
     }
 
     private static void ValidateInteraction(
         ScaffoldStep step,
-        IReadOnlyDictionary<ScaffoldStepId, ScaffoldStep> authoredSteps,
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources,
         IReadOnlyDictionary<LatentMathId, DerivedScalar> latentScalars,
         IReadOnlyDictionary<LatentMathId, DerivedExpression> latentExpressions)
@@ -299,34 +240,41 @@ public static class ScaffoldValidator
 
         if (action is MatchEquivalentLength)
         {
-            _ = RequireFreshScene<RodEquivalenceScene>(step);
+            _ = RequireScene<RodEquivalenceScene>(step);
         }
         else if (action is ClassifyByFit)
         {
-            _ = RequireFreshScene<RodMeasurementScene>(step);
+            RodMeasurementScene scene = RequireScene<RodMeasurementScene>(step);
+            ValidateFitIsRepresentable(
+                step,
+                scene.ProbeRodId,
+                scene.SpanSeriesId,
+                resources,
+                latentScalars);
         }
         else if (action is TraverseAllGaps && check is AllGapsTraversed gaps)
         {
             RequireResource<RodResource>(gaps.RequiredResourceId, resources);
-            RodGapScene scene = RequireFreshScene<RodGapScene>(step);
+            RodGapScene scene = RequireScene<RodGapScene>(step);
             if (gaps.RequiredResourceId != scene.StepRodId)
             {
                 throw new InvalidOperationException(
                     $"Rod-gap check in step '{step.Id.Value}' must use the scene step rod.");
             }
 
-            RequireClassificationSourceStep(step, scene, authoredSteps);
+            ValidateFitIsRepresentable(
+                step,
+                scene.StepRodId,
+                scene.SpanSeriesId,
+                resources,
+                latentScalars);
         }
         else if (action is JoinQuantities)
         {
-            _ = RequireFreshScene<QuantityJoinScene>(step);
+            _ = RequireScene<QuantityJoinScene>(step);
         }
 
-        if (check is MatchesComputedFit)
-        {
-            ValidateComputedFitIsRepresentable(step, resources, latentScalars);
-        }
-        else if (check is MatchesLatentScalar scalar)
+        if (check is MatchesLatentScalar scalar)
         {
             RequireLatentScalar(scalar.ExpectedValueId, latentScalars);
         }
@@ -336,51 +284,28 @@ public static class ScaffoldValidator
         }
     }
 
-    private static void RequireClassificationSourceStep(
-        ScaffoldStep step,
-        RodGapScene scene,
-        IReadOnlyDictionary<ScaffoldStepId, ScaffoldStep> authoredSteps)
-    {
-        if (!authoredSteps.TryGetValue(scene.ClassificationStepId, out ScaffoldStep? source) ||
-            source.Id == step.Id ||
-            source.Action.Value is not ClassifyByFit ||
-            source.SuccessCheck.Value is not MatchesComputedFit ||
-            source.Scene.Value is not FreshScene fresh ||
-            fresh.Definition.Value is not RodMeasurementScene)
-        {
-            throw new InvalidOperationException(
-                $"Rod-gap scene in step '{step.Id.Value}' must reference a prior " +
-                "classification step with a rod-measurement scene.");
-        }
-    }
-
-    private static TScene RequireFreshScene<TScene>(ScaffoldStep step)
+    private static TScene RequireScene<TScene>(ScaffoldStep step)
         where TScene : class
     {
-        if (step.Scene.Value is not FreshScene fresh ||
-            fresh.Definition.Value is not TScene scene)
+        if (step.Scene.Value is not TScene scene)
         {
             throw new InvalidOperationException(
-                $"Scaffold step '{step.Id.Value}' must use a fresh {typeof(TScene).Name}.");
+                $"Scaffold step '{step.Id.Value}' must use a {typeof(TScene).Name}.");
         }
 
         return scene;
     }
 
-    private static void ValidateComputedFitIsRepresentable(
+    private static void ValidateFitIsRepresentable(
         ScaffoldStep step,
+        ScaffoldResourceId probeRodId,
+        ScaffoldResourceId spanSeriesId,
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources,
         IReadOnlyDictionary<LatentMathId, DerivedScalar> latentScalars)
     {
-        RodMeasurementScene scene = step.Scene.Value is FreshScene fresh &&
-            fresh.Definition.Value is RodMeasurementScene measurement
-                ? measurement
-                : throw new InvalidOperationException(
-                    $"Scaffold step '{step.Id.Value}' must use a rod-measurement scene.");
-
-        RodResource probeRod = RequireResource<RodResource>(scene.ProbeRodId, resources);
+        RodResource probeRod = RequireResource<RodResource>(probeRodId, resources);
         RodSeriesResource spanSeries =
-            RequireResource<RodSeriesResource>(scene.SpanSeriesId, resources);
+            RequireResource<RodSeriesResource>(spanSeriesId, resources);
         UnitLength probeLength = ResolveLength(probeRod.Length, latentScalars);
 
         foreach (UnitLength span in spanSeries.Lengths)

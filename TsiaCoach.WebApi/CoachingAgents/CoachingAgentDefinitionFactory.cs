@@ -103,10 +103,15 @@ public sealed class CoachingAgentDefinitionFactory(
         PracticeItem item = entry.Item;
         CoachingDiagnosisProjection diagnosis =
             entry.CoachingPolicy.ProjectDiagnosis(attempt, item);
+        // Until the authored probe replaces escalation, a scaffold suggestion
+        // stays gated on the escalated hint level; the session itself is
+        // available at any phase.
         ScaffoldSessionGrant? grant =
-            ScaffoldSessionAuthorizer
-                .Authorize(attempt, item, entry.CoachingPolicy)
-                .Value as ScaffoldSessionGrant;
+            diagnosis.HintLevel == CoachingHintLevel.Escalated
+                ? ScaffoldSessionAuthorizer
+                    .Authorize(attempt, item, entry.CoachingPolicy)
+                    .Value as ScaffoldSessionGrant
+                : null;
 
         string[] allowedMoves = grant is null
             ? [CoachContractNames.DiagnoseDifference]
@@ -124,7 +129,7 @@ public sealed class CoachingAgentDefinitionFactory(
             SelectedAnswerText: AnswerText(item, phase.SelectedAnswerId),
             Diagnosis: new IncorrectDiagnosisContext(
                 MisconceptionCode: diagnosis.Misconception.Value,
-                PhasePurpose: ContractName(diagnosis.Purpose),
+                PhasePurpose: diagnosis.Purpose is null ? null : ContractName(diagnosis.Purpose.Value),
                 HintLevel: ContractName(diagnosis.HintLevel),
                 RouteStreak: diagnosis.RouteStreak),
             AuthorizedPhraseAnchors: PhraseContexts(item),
@@ -286,7 +291,7 @@ public sealed class CoachingAgentDefinitionFactory(
 
     private sealed record IncorrectDiagnosisContext(
         string MisconceptionCode,
-        string PhasePurpose,
+        string? PhasePurpose,
         string HintLevel,
         int RouteStreak);
 

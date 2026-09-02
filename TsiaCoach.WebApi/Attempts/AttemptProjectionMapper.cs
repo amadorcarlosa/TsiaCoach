@@ -46,7 +46,7 @@ public static class AttemptProjectionMapper
         return new(
             SelectedAnswerId: diagnosis.SelectedAnswerId.Value,
             MisconceptionCode: diagnosis.Misconception.Value,
-            Purpose: ContractName(diagnosis.Purpose),
+            Purpose: diagnosis.Purpose is null ? null : ContractName(diagnosis.Purpose.Value),
             Route: ToResponse(diagnosis.Route),
             RouteStreak: diagnosis.RouteStreak,
             HintLevel: ContractName(diagnosis.HintLevel));

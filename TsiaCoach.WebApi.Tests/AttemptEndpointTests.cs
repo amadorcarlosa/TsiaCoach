@@ -127,7 +127,7 @@ public sealed class AttemptEndpointTests : ApiTestBase
 
         ScaffoldEntryRouteResponse route = (ScaffoldEntryRouteResponse)incorrect.Route;
         await Assert.That(route.ScaffoldId).IsEqualTo("scaffold-parity-ladder");
-        await Assert.That(route.EntryStepId).IsEqualTo("step-join-known-quantities");
+        await Assert.That(route.EntryStepId).IsEqualTo("step-join-and-read-sum");
     }
 
     [Test]
@@ -146,7 +146,7 @@ public sealed class AttemptEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task SecondCheckOnSamePurpose_ReturnsEscalatedHint()
+    public async Task SecondCheckOnSameRoute_ReturnsEscalatedHint()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartProjection(client);
@@ -159,7 +159,7 @@ public sealed class AttemptEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task DifferentPurposeCheck_ResetsRouteStreak()
+    public async Task DifferentRouteCheck_ResetsRouteStreak()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartProjection(client);

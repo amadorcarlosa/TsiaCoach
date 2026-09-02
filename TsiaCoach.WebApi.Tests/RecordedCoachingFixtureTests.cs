@@ -71,14 +71,14 @@ public sealed class RecordedCoachingFixtureTests
                 CoachContractNames.SuggestScaffold
             });
         await Assert.That(definition.AuthorizedSuggestedStepId)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo("step-join-and-read-sum");
         await Assert.That(result.IsValid).IsTrue();
         var move = (SuggestScaffoldResponse)result.Response!.Move;
         await Assert.That(move.SuggestedStepId)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo("step-join-and-read-sum");
 
         CoachTurnValidationResult foreignStep = CoachTurnValidator.Validate(
-            SuggestJson("step-traverse-odd-gaps"),
+            SuggestJson("step-select-consecutive-odds"),
             definition);
         await Assert.That(foreignStep.IsValid).IsFalse();
     }
@@ -98,7 +98,7 @@ public sealed class RecordedCoachingFixtureTests
             .IsTypeOf<DiagnoseDifferenceResponse>();
 
         CoachTurnValidationResult scaffoldSuggestion = CoachTurnValidator.Validate(
-            SuggestJson("step-join-known-quantities"),
+            SuggestJson("step-join-and-read-sum"),
             definition);
         await Assert.That(scaffoldSuggestion.IsValid).IsFalse();
     }
@@ -118,7 +118,7 @@ public sealed class RecordedCoachingFixtureTests
             .IsTypeOf<DiagnoseDifferenceResponse>();
 
         CoachTurnValidationResult scaffoldSuggestion = CoachTurnValidator.Validate(
-            SuggestJson("step-join-known-quantities"),
+            SuggestJson("step-join-and-read-sum"),
             definition);
         await Assert.That(scaffoldSuggestion.IsValid).IsFalse();
     }
@@ -225,7 +225,7 @@ public sealed class RecordedCoachingFixtureTests
         // Scaffold suggestion before escalation.
         (CoachingAgentDefinition initial, _) = Run(InitialIncorrectFixture());
         await Assert.That(CoachTurnValidator.Validate(
-            SuggestJson("step-join-known-quantities"),
+            SuggestJson("step-join-and-read-sum"),
             initial).IsValid).IsFalse();
     }
 

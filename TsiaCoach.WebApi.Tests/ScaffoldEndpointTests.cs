@@ -43,7 +43,7 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task Detail_PreservesSceneFadingAndTypedScalarReadings()
+    public async Task Detail_ExposesOneFlatPathWithPurposeLabels()
     {
         using HttpClient client = Factory.CreateClient();
 
@@ -51,31 +51,44 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
             "/api/scaffolds/scaffold-parity-ladder");
 
         await Assert.That(scaffold is not null).IsTrue();
-        await Assert.That(scaffold!.Phases.Count).IsEqualTo(5);
-        await Assert.That(scaffold.Phases.SelectMany(phase => phase.Steps).Count())
-            .IsEqualTo(12);
+        await Assert.That(scaffold!.Steps.Count).IsEqualTo(6);
+        await Assert.That(scaffold.Steps.Select(step => step.Id))
+            .IsEquivalentTo(
+            [
+                "step-rebuild-from-twos-and-ones",
+                "step-remove-paired-evens",
+                "step-select-consecutive-odds",
+                "step-join-and-read-sum",
+                "step-name-bar-count",
+                "step-name-leftover-length"
+            ]);
+        await Assert.That(scaffold.Steps[0].Purpose).IsEqualTo("conceptFormation");
+        await Assert.That(scaffold.Steps[^1].Purpose).IsEqualTo("generalization");
 
-        ScaffoldStepResponse knownStep = FindStep(
-            scaffold,
-            "step-join-known-quantities");
-        ScaffoldStepResponse unknownStep = FindStep(
-            scaffold,
-            "step-join-unknown-quantities");
-        QuantityJoinSceneResponse known = QuantityJoinSceneFor(knownStep);
-        QuantityJoinSceneResponse unknown = QuantityJoinSceneFor(unknownStep);
+        RodGapSceneResponse gap =
+            FindStep(scaffold, "step-select-consecutive-odds").Scene as RodGapSceneResponse ??
+            throw new InvalidOperationException("Expected a rod-gap scene.");
+        await Assert.That(gap.StepRodId).IsEqualTo("resource-odd-step-rod");
+        await Assert.That(gap.SpanSeriesId).IsEqualTo("resource-measurand-series");
+        await Assert.That(gap.IncludedOutcome).IsEqualTo("oneUnitLeftover");
 
-        await Assert.That(known.Parts)
-            .IsEquivalentTo(unknown.Parts);
-        await Assert.That(known.Bindings.Single().SemanticEntityId)
-            .IsEqualTo("entity-n");
-        await Assert.That(known.Bindings.Single().Value)
-            .IsEqualTo(15);
-        await Assert.That(known.ShowSizedTarget).IsTrue();
-        await Assert.That(unknown.Bindings.Count).IsEqualTo(0);
-        await Assert.That(unknown.ShowSizedTarget).IsFalse();
+        QuantityJoinSceneResponse join = QuantityJoinSceneFor(
+            FindStep(scaffold, "step-join-and-read-sum"));
+        await Assert.That(join.Parts.Count).IsEqualTo(2);
+        await Assert.That(join.Bindings.Count).IsEqualTo(0);
+        await Assert.That(join.ShowSizedTarget).IsFalse();
+    }
 
-        ScaffoldStepResponse countStep = FindStep(scaffold, "step-count-base-parts");
-        ScaffoldStepResponse lengthStep = FindStep(scaffold, "step-measure-remainder");
+    [Test]
+    public async Task Detail_PreservesTypedScalarReadings()
+    {
+        using HttpClient client = Factory.CreateClient();
+
+        ScaffoldResponse? scaffold = await client.GetFromJsonAsync<ScaffoldResponse>(
+            "/api/scaffolds/scaffold-parity-ladder");
+
+        ScaffoldStepResponse countStep = FindStep(scaffold!, "step-name-bar-count");
+        ScaffoldStepResponse lengthStep = FindStep(scaffold, "step-name-leftover-length");
         EnterScalarActionResponse countAction =
             countStep.Action as EnterScalarActionResponse ??
             throw new InvalidOperationException("Expected a scalar-entry action.");
@@ -95,6 +108,8 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
         await Assert.That(lengthAction.Reading).IsEqualTo("unitLength");
         await Assert.That(lengthCheck.ExpectedValueId)
             .IsEqualTo("latent-ordered-step");
+        await Assert.That(QuantityJoinSceneFor(countStep).Parts)
+            .IsEquivalentTo(QuantityJoinSceneFor(lengthStep).Parts);
     }
 
     [Test]
@@ -112,17 +127,10 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
     private static ScaffoldStepResponse FindStep(
         ScaffoldResponse scaffold,
         string id) =>
-        scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .Single(step => step.Id == id);
+        scaffold.Steps.Single(step => step.Id == id);
 
     private static QuantityJoinSceneResponse QuantityJoinSceneFor(
-        ScaffoldStepResponse step)
-    {
-        FreshSceneResponse fresh = step.Scene as FreshSceneResponse ??
-            throw new InvalidOperationException("Expected a fresh scene.");
-
-        return fresh.Definition as QuantityJoinSceneResponse ??
+        ScaffoldStepResponse step) =>
+        step.Scene as QuantityJoinSceneResponse ??
             throw new InvalidOperationException("Expected a quantity-join scene.");
-    }
 }

@@ -20,11 +20,7 @@ public static class ScaffoldStepEvaluator
                 $"'{scaffold.PracticeItemId.Value}', not '{practiceItem.Id.Value}'.");
         }
 
-        ScaffoldStep step = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .SingleOrDefault(step => step.Id == stepId)
-            ?? throw new InvalidOperationException(
-                $"Scaffold step '{stepId.Value}' does not exist.");
+        ScaffoldStep step = scaffold.Step(stepId);
 
         bool satisfied = (step.Action.Value, step.SuccessCheck.Value, submission.Value) switch
         {
@@ -68,7 +64,7 @@ public static class ScaffoldStepEvaluator
         ScaffoldStep step,
         MatchEquivalentLengthSubmission submission)
     {
-        RodEquivalenceScene scene = FreshSceneFor<RodEquivalenceScene>(step);
+        RodEquivalenceScene scene = SceneFor<RodEquivalenceScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
         RodResource unitRod = RequireResource<RodResource>(scene.UnitRodId, resources);
         RodResource probeRod = RequireResource<RodResource>(scene.ProbeRodId, resources);
@@ -85,7 +81,7 @@ public static class ScaffoldStepEvaluator
         ScaffoldStep step,
         ClassifyByFitSubmission submission)
     {
-        RodMeasurementScene scene = FreshSceneFor<RodMeasurementScene>(step);
+        RodMeasurementScene scene = SceneFor<RodMeasurementScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
         RodResource probeRod = RequireResource<RodResource>(scene.ProbeRodId, resources);
         RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(scene.SpanSeriesId, resources);
@@ -120,19 +116,13 @@ public static class ScaffoldStepEvaluator
         AllGapsTraversed check,
         TraverseAllGapsSubmission submission)
     {
-        RodGapScene scene = FreshSceneFor<RodGapScene>(step);
+        RodGapScene scene = SceneFor<RodGapScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
 
         RodResource requiredRod = RequireResource<RodResource>(check.RequiredResourceId, resources);
         UnitLength requiredLength = ResolveLength(requiredRod.Length, practiceItem);
-        ScaffoldStep classificationStep = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .SingleOrDefault(candidate => candidate.Id == scene.ClassificationStepId)
-            ?? throw new InvalidOperationException(
-                $"Scaffold step '{scene.ClassificationStepId.Value}' does not exist.");
-        RodMeasurementScene measurement = FreshSceneFor<RodMeasurementScene>(classificationStep);
-        RodResource probeRod = RequireResource<RodResource>(measurement.ProbeRodId, resources);
-        RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(measurement.SpanSeriesId, resources);
+        RodResource probeRod = RequireResource<RodResource>(scene.StepRodId, resources);
+        RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(scene.SpanSeriesId, resources);
         UnitLength probeLength = ResolveLength(probeRod.Length, practiceItem);
 
         List<UnitLength> includedLengths = spanSeries.Lengths
@@ -166,7 +156,7 @@ public static class ScaffoldStepEvaluator
         ScaffoldStep step,
         JoinQuantitiesSubmission submission)
     {
-        QuantityJoinScene scene = FreshSceneFor<QuantityJoinScene>(step);
+        QuantityJoinScene scene = SceneFor<QuantityJoinScene>(step);
 
         foreach (QuantityReference part in submission.Parts)
         {
@@ -266,11 +256,10 @@ public static class ScaffoldStepEvaluator
             _ => throw Unsupported("semantic entity", entity.Value)
         };
 
-    private static TScene FreshSceneFor<TScene>(ScaffoldStep step)
+    private static TScene SceneFor<TScene>(ScaffoldStep step)
         where TScene : class
     {
-        if (step.Scene.Value is not FreshScene fresh ||
-            fresh.Definition.Value is not TScene scene)
+        if (step.Scene.Value is not TScene scene)
         {
             throw new InvalidOperationException(
                 $"Scaffold step '{step.Id.Value}' does not use a {typeof(TScene).Name}.");

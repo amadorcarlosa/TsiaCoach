@@ -8,35 +8,15 @@ public static class CoachingPolicyValidator
 {
     public static void Validate(
         PracticeItem practiceItem,
-        IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> purposeByCode,
-        Scaffold? scaffold)
+        IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
+        Scaffold scaffold)
     {
-        if (purposeByCode is null)
+        if (entryStepByCode is null)
         {
-            throw new InvalidOperationException("A coaching policy must provide a purpose map.");
+            throw new InvalidOperationException("A coaching policy must provide an entry map.");
         }
 
-        HashSet<MisconceptionCode> authoredCodes = practiceItem.Distractors.Values.ToHashSet();
-        HashSet<MisconceptionCode> policyCodes = purposeByCode.Keys.ToHashSet();
-
-        if (!authoredCodes.SetEquals(policyCodes))
-        {
-            string missing = string.Join(", ", authoredCodes
-                .Except(policyCodes)
-                .Select(code => code.Value));
-            string extra = string.Join(", ", policyCodes
-                .Except(authoredCodes)
-                .Select(code => code.Value));
-
-            throw new InvalidOperationException(
-                $"Coaching policy for practice item '{practiceItem.Id.Value}' must cover exactly " +
-                $"the authored misconception codes. Missing: [{missing}]. Extra: [{extra}].");
-        }
-
-        if (scaffold is null)
-        {
-            return;
-        }
+        EnsureCoversAuthoredCodes(practiceItem, entryStepByCode.Keys);
 
         if (scaffold.PracticeItemId != practiceItem.Id)
         {
@@ -45,25 +25,36 @@ public static class CoachingPolicyValidator
                 $"'{scaffold.PracticeItemId.Value}', not '{practiceItem.Id.Value}'.");
         }
 
-        foreach (ScaffoldPhasePurpose purpose in purposeByCode.Values.Distinct())
+        foreach ((MisconceptionCode code, ScaffoldStepId stepId) in entryStepByCode)
         {
-            ScaffoldPhase[] matchingPhases = scaffold.Phases
-                .Where(phase => phase.Purpose == purpose)
-                .ToArray();
-
-            if (matchingPhases.Length != 1)
+            if (!scaffold.ContainsStep(stepId))
             {
                 throw new InvalidOperationException(
-                    matchingPhases.Length == 0
-                        ? $"Scaffold '{scaffold.Id.Value}' has no phase for targeted purpose '{purpose}'."
-                        : $"Scaffold '{scaffold.Id.Value}' has multiple phases for targeted purpose '{purpose}'.");
+                    $"Coaching policy for practice item '{practiceItem.Id.Value}' routes " +
+                    $"misconception '{code.Value}' to unknown scaffold step '{stepId.Value}'.");
             }
+        }
+    }
 
-            if (!matchingPhases[0].Steps.Any(step => step.CanStartCold))
-            {
-                throw new InvalidOperationException(
-                    $"Scaffold phase '{matchingPhases[0].Id.Value}' has no cold-start step.");
-            }
+    public static void EnsureCoversAuthoredCodes(
+        PracticeItem practiceItem,
+        IEnumerable<MisconceptionCode> policyCodes)
+    {
+        HashSet<MisconceptionCode> authoredCodes = practiceItem.Distractors.Values.ToHashSet();
+        HashSet<MisconceptionCode> provided = policyCodes.ToHashSet();
+
+        if (!authoredCodes.SetEquals(provided))
+        {
+            string missing = string.Join(", ", authoredCodes
+                .Except(provided)
+                .Select(code => code.Value));
+            string extra = string.Join(", ", provided
+                .Except(authoredCodes)
+                .Select(code => code.Value));
+
+            throw new InvalidOperationException(
+                $"Coaching policy for practice item '{practiceItem.Id.Value}' must cover exactly " +
+                $"the authored misconception codes. Missing: [{missing}]. Extra: [{extra}].");
         }
     }
 }

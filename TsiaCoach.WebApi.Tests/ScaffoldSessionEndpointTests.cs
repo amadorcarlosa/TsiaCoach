@@ -8,6 +8,9 @@ namespace TsiaCoach.WebApi.Tests;
 
 public sealed class ScaffoldSessionEndpointTests : ApiTestBase
 {
+    private const string FloorStepId = "step-rebuild-from-twos-and-ones";
+    private const string JoinStepId = "step-join-and-read-sum";
+
     [Test]
     public async Task StartSession_EscalatedRouteReturnsCreatedAtAuthorizedEntry()
     {
@@ -20,14 +23,14 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         ScaffoldSessionResponse session = await ReadSession(response);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created);
-        await Assert.That(session.EntryStepId)
-            .IsEqualTo("step-join-known-quantities");
+        await Assert.That(session.EntryStepId).IsEqualTo(JoinStepId);
         await Assert.That(session.ScaffoldId)
             .IsEqualTo("scaffold-parity-ladder");
         await Assert.That(session.State)
             .IsTypeOf<ActiveScaffoldSessionResponse>();
         await Assert.That(((ActiveScaffoldSessionResponse)session.State).CurrentStep.Id)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo(JoinStepId);
+        await Assert.That(session.TotalStepCount).IsEqualTo(3);
     }
 
     [Test]
@@ -48,7 +51,7 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task StartSession_BeforeCheckReturnsConflict()
+    public async Task StartSession_BeforeCheckReturnsCreatedAtFloor()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartAttempt(client);
@@ -56,12 +59,17 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         using HttpResponseMessage response = await client.PostAsync(
             $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
             null);
+        ScaffoldSessionResponse session = await ReadSession(response);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created);
+        await Assert.That(session.EntryStepId).IsEqualTo(FloorStepId);
+        await Assert.That(session.TotalStepCount).IsEqualTo(6);
+        await Assert.That(((ActiveScaffoldSessionResponse)session.State).CurrentStep.Scene)
+            .IsTypeOf<RodMeasurementSceneResponse>();
     }
 
     [Test]
-    public async Task StartSession_InitialHintReturnsConflict()
+    public async Task StartSession_FirstIncorrectReturnsCreatedAtRoutedEntry()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartAttempt(client);
@@ -70,8 +78,10 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         using HttpResponseMessage response = await client.PostAsync(
             $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
             null);
+        ScaffoldSessionResponse session = await ReadSession(response);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created);
+        await Assert.That(session.EntryStepId).IsEqualTo(JoinStepId);
     }
 
     [Test]
@@ -81,18 +91,21 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         AttemptProjectionResponse attempt = await StartAttempt(
             client,
             "practice-item-sample-2");
-        await SubmitAttemptCheck(client, attempt.AttemptId, "answer-b");
-        await SubmitAttemptCheck(client, attempt.AttemptId, "answer-b");
 
-        using HttpResponseMessage response = await client.PostAsync(
+        using HttpResponseMessage beforeCheck = await client.PostAsync(
+            $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
+            null);
+        await SubmitAttemptCheck(client, attempt.AttemptId, "answer-b");
+        using HttpResponseMessage afterCheck = await client.PostAsync(
             $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
             null);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(beforeCheck.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(afterCheck.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
     }
 
     [Test]
-    public async Task StartSession_CorrectAttemptReturnsConflict()
+    public async Task StartSession_CorrectAttemptReturnsCreatedAtFloor()
     {
         using HttpClient client = Factory.CreateClient();
         AttemptProjectionResponse attempt = await StartAttempt(client);
@@ -101,8 +114,10 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         using HttpResponseMessage response = await client.PostAsync(
             $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
             null);
+        ScaffoldSessionResponse session = await ReadSession(response);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created);
+        await Assert.That(session.EntryStepId).IsEqualTo(FloorStepId);
     }
 
     [Test]
@@ -132,7 +147,7 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         await Assert.That(session.State)
             .IsTypeOf<ActiveScaffoldSessionResponse>();
         await Assert.That(((ActiveScaffoldSessionResponse)session.State).CurrentStep.Id)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo(JoinStepId);
         await Assert.That(session.LastCheck).IsNull();
     }
 
@@ -167,10 +182,8 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
         await Assert.That(session.CheckCount).IsEqualTo(1);
         await Assert.That(session.LastCheck!.Satisfied).IsFalse();
-        await Assert.That(session.LastCheck.StepId)
-            .IsEqualTo("step-join-known-quantities");
-        await Assert.That(state.CurrentStep.Id)
-            .IsEqualTo("step-join-known-quantities");
+        await Assert.That(session.LastCheck.StepId).IsEqualTo(JoinStepId);
+        await Assert.That(state.CurrentStep.Id).IsEqualTo(JoinStepId);
     }
 
     [Test]
@@ -189,7 +202,7 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         await Assert.That(session.LastCheck!.Satisfied).IsTrue();
         await Assert.That(session.CompletedStepCount).IsEqualTo(1);
         await Assert.That(((ActiveScaffoldSessionResponse)session.State).CurrentStep.Id)
-            .IsEqualTo("step-count-base-parts");
+            .IsEqualTo("step-name-bar-count");
     }
 
     [Test]
@@ -198,40 +211,41 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         using HttpClient client = Factory.CreateClient();
         ScaffoldSessionResponse started = await StartAuthorizedSession(client);
 
-        string[] submissions =
-        [
-            CorrectJoinJson(),
-            "{ \"type\": \"enterScalar\", \"value\": 2 }",
-            "{ \"type\": \"enterScalar\", \"value\": 2 }",
-            CorrectJoinJson(),
-            "{ \"type\": \"buildExpression\", \"mathObjectId\": \"math-requested-value-composed\" }",
-            "{ \"type\": \"buildExpression\", \"mathObjectId\": \"math-answer-d\" }",
-            "{ \"type\": \"selectAnswerChoice\", \"answerChoiceId\": \"answer-d\" }"
-        ];
+        ScaffoldSessionResponse session = await Submit(
+            client,
+            started.SessionId,
+            RepresentationSubmissions());
 
-        HttpResponseMessage? lastResponse = null;
-        try
-        {
-            foreach (string submission in submissions)
-            {
-                lastResponse?.Dispose();
-                lastResponse = await PostJson(
-                    client,
-                    $"/api/scaffold-sessions/{started.SessionId}/checks",
-                    submission);
-            }
+        await Assert.That(session.CompletedStepCount).IsEqualTo(3);
+        await Assert.That(session.TotalStepCount).IsEqualTo(3);
+        await Assert.That(session.State)
+            .IsTypeOf<CompletedScaffoldSessionResponse>();
+    }
 
-            ScaffoldSessionResponse session = await ReadSession(lastResponse!);
-            await Assert.That(lastResponse!.StatusCode).IsEqualTo(HttpStatusCode.OK);
-            await Assert.That(session.CompletedStepCount).IsEqualTo(7);
-            await Assert.That(session.TotalStepCount).IsEqualTo(7);
-            await Assert.That(session.State)
-                .IsTypeOf<CompletedScaffoldSessionResponse>();
-        }
-        finally
-        {
-            lastResponse?.Dispose();
-        }
+    [Test]
+    public async Task FloorSession_TraversesTheWholePath()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        using HttpResponseMessage startResponse = await client.PostAsync(
+            $"/api/attempts/{attempt.AttemptId}/scaffold-sessions",
+            null);
+        ScaffoldSessionResponse started = await ReadSession(startResponse);
+
+        ScaffoldSessionResponse session = await Submit(
+            client,
+            started.SessionId,
+            [
+                CorrectClassificationJson(),
+                """{ "type": "nameFitClassification", "domain": "oddIntegers" }""",
+                CorrectGapTraversalJson(),
+                .. RepresentationSubmissions()
+            ]);
+
+        await Assert.That(session.CompletedStepCount).IsEqualTo(6);
+        await Assert.That(session.TotalStepCount).IsEqualTo(6);
+        await Assert.That(session.State)
+            .IsTypeOf<CompletedScaffoldSessionResponse>();
     }
 
     [Test]
@@ -239,12 +253,12 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
     {
         using HttpClient client = Factory.CreateClient();
         ScaffoldSessionResponse started = await StartAuthorizedSession(client);
-        await CompleteSession(client, started.SessionId);
+        await Submit(client, started.SessionId, RepresentationSubmissions());
 
         using HttpResponseMessage response = await PostJson(
             client,
             $"/api/scaffold-sessions/{started.SessionId}/checks",
-            "{ \"type\": \"selectAnswerChoice\", \"answerChoiceId\": \"answer-d\" }");
+            "{ \"type\": \"enterScalar\", \"value\": 2 }");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
     }
@@ -332,13 +346,16 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
             .Single(resource => resource.Id == "resource-odd-step-rod");
         ActiveScaffoldSessionResponse state =
             (ActiveScaffoldSessionResponse)session.State;
+        RodGapSceneResponse gap = state.CurrentStep.Scene as RodGapSceneResponse ??
+            throw new InvalidOperationException("Expected a rod-gap scene.");
 
+        await Assert.That(session.EntryStepId).IsEqualTo("step-select-consecutive-odds");
         await Assert.That(stepRod.Length).IsEqualTo(2);
-        await Assert.That(state.CurrentStep.Scene).IsTypeOf<RodGapSceneResponse>();
+        await Assert.That(gap.SpanSeriesId).IsEqualTo("resource-measurand-series");
     }
 
     [Test]
-    public async Task ContinuedStep_ReturnsResolvedSourceSceneForReload()
+    public async Task MidPathEntry_AdvancesAlongTheSamePath()
     {
         using HttpClient client = Factory.CreateClient();
         ScaffoldSessionResponse started = await StartLanguageSession(client);
@@ -352,9 +369,9 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
             (ActiveScaffoldSessionResponse)advanced.State;
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        await Assert.That(state.CurrentStep.Id)
-            .IsEqualTo("step-state-odd-step-length");
-        await Assert.That(state.CurrentStep.Scene).IsTypeOf<RodGapSceneResponse>();
+        await Assert.That(state.CurrentStep.Id).IsEqualTo(JoinStepId);
+        await Assert.That(state.CurrentStep.Scene).IsTypeOf<QuantityJoinSceneResponse>();
+        await Assert.That(advanced.TotalStepCount).IsEqualTo(4);
     }
 
     [Test]
@@ -429,7 +446,7 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         ScaffoldSessionResponse latest = await ReadSession(read);
         await Assert.That(latest.CheckCount).IsEqualTo(8);
         await Assert.That(((ActiveScaffoldSessionResponse)latest.State).CurrentStep.Id)
-            .IsEqualTo("step-join-known-quantities");
+            .IsEqualTo(JoinStepId);
     }
 
     private static async Task<AttemptProjectionResponse> CreateEscalatedAttempt(
@@ -485,20 +502,12 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
         return await ReadSession(response);
     }
 
-    private static async Task CompleteSession(
+    private static async Task<ScaffoldSessionResponse> Submit(
         HttpClient client,
-        string sessionId)
+        string sessionId,
+        IReadOnlyList<string> submissions)
     {
-        string[] submissions =
-        [
-            CorrectJoinJson(),
-            "{ \"type\": \"enterScalar\", \"value\": 2 }",
-            "{ \"type\": \"enterScalar\", \"value\": 2 }",
-            CorrectJoinJson(),
-            "{ \"type\": \"buildExpression\", \"mathObjectId\": \"math-requested-value-composed\" }",
-            "{ \"type\": \"buildExpression\", \"mathObjectId\": \"math-answer-d\" }",
-            "{ \"type\": \"selectAnswerChoice\", \"answerChoiceId\": \"answer-d\" }"
-        ];
+        ScaffoldSessionResponse? session = null;
 
         foreach (string submission in submissions)
         {
@@ -507,8 +516,18 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
                 $"/api/scaffold-sessions/{sessionId}/checks",
                 submission);
             await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+            session = await ReadSession(response);
         }
+
+        return session ?? throw new InvalidOperationException("No submissions were sent.");
     }
+
+    private static string[] RepresentationSubmissions() =>
+    [
+        CorrectJoinJson(),
+        "{ \"type\": \"enterScalar\", \"value\": 2 }",
+        "{ \"type\": \"enterScalar\", \"value\": 2 }"
+    ];
 
     private static string CorrectJoinJson() =>
         """
@@ -517,6 +536,14 @@ public sealed class ScaffoldSessionEndpointTests : ApiTestBase
           { "type": "semanticQuantity", "semanticEntityId": "entity-n" }
         ] }
         """;
+
+    private static string CorrectClassificationJson()
+    {
+        string entries = string.Join(",", Enumerable.Range(1, 10).Select(length =>
+            $$"""{ "length": {{length}}, "classification": "{{(length % 2 == 0 ? "flush" : "oneUnitLeftover")}}" }"""));
+
+        return $$"""{ "type": "classifyByFit", "classifications": [{{entries}}] }""";
+    }
 
     private static string CorrectGapTraversalJson() =>
         """

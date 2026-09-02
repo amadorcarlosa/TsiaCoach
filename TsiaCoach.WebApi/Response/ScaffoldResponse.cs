@@ -6,19 +6,14 @@ public sealed record ScaffoldResponse(
     string Id,
     string PracticeItemId,
     IReadOnlyList<ScaffoldResourceResponse> Resources,
-    IReadOnlyList<ScaffoldPhaseResponse> Phases
-);
-
-public sealed record ScaffoldPhaseResponse(
-    string Id,
-    string Purpose,
     IReadOnlyList<ScaffoldStepResponse> Steps
 );
 
 public sealed record ScaffoldStepResponse(
     string Id,
+    string Purpose,
     ScaffoldPromptResponse Prompt,
-    StepSceneResponse Scene,
+    ScaffoldSceneResponse Scene,
     LearnerActionResponse Action,
     SuccessCheckResponse SuccessCheck
 );
@@ -59,20 +54,6 @@ public sealed record LatentLengthReferenceResponse(
 ) : LengthSourceResponse;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(FreshSceneResponse), "freshScene")]
-[JsonDerivedType(typeof(ContinuedSceneResponse), "continuedScene")]
-public abstract record StepSceneResponse;
-
-public sealed record FreshSceneResponse(
-    ScaffoldSceneResponse Definition
-) : StepSceneResponse;
-
-public sealed record ContinuedSceneResponse(
-    string SourceStepId,
-    string Access
-) : StepSceneResponse;
-
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(RodEquivalenceSceneResponse), "rodEquivalenceScene")]
 [JsonDerivedType(typeof(RodMeasurementSceneResponse), "rodMeasurementScene")]
 [JsonDerivedType(typeof(RodGapSceneResponse), "rodGapScene")]
@@ -92,7 +73,7 @@ public sealed record RodMeasurementSceneResponse(
 
 public sealed record RodGapSceneResponse(
     string StepRodId,
-    string ClassificationStepId,
+    string SpanSeriesId,
     string IncludedOutcome
 ) : ScaffoldSceneResponse;
 

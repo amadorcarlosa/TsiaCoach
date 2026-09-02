@@ -14,17 +14,12 @@ internal static class ScaffoldResponseMapper
             Id: scaffold.Id.Value,
             PracticeItemId: scaffold.PracticeItemId.Value,
             Resources: scaffold.Resources.Select(ToResponse).ToArray(),
-            Phases: scaffold.Phases.Select(ToResponse).ToArray());
-
-    private static ScaffoldPhaseResponse ToResponse(ScaffoldPhase phase) =>
-        new(
-            Id: phase.Id.Value,
-            Purpose: ContractName(phase.Purpose),
-            Steps: phase.Steps.Select(ToResponse).ToArray());
+            Steps: scaffold.Steps.Select(ToResponse).ToArray());
 
     private static ScaffoldStepResponse ToResponse(ScaffoldStep step) =>
         new(
             Id: step.Id.Value,
+            Purpose: ContractName(step.Purpose),
             Prompt: new(
                 Text: step.Prompt.Text,
                 FocusPhraseIds: step.Prompt.FocusPhraseIds
@@ -38,7 +33,6 @@ internal static class ScaffoldResponseMapper
         ScaffoldResource resource) => ToResponse(resource);
 
     internal static ScaffoldLearnerStepResponse ToLearnerStepResponse(
-        Scaffold scaffold,
         ScaffoldStep step) =>
         new(
             Id: step.Id.Value,
@@ -47,7 +41,7 @@ internal static class ScaffoldResponseMapper
                 FocusPhraseIds: step.Prompt.FocusPhraseIds
                     .Select(id => id.Value)
                     .ToArray()),
-            Scene: ToResponse(ResolveScene(scaffold, step)),
+            Scene: ToResponse(step.Scene),
             Action: ToResponse(step.Action));
 
     internal static ScaffoldLearnerResourceResponse ToLearnerResourceResponse(
@@ -89,17 +83,6 @@ internal static class ScaffoldResponseMapper
             _ => throw Unsupported("length source", source.Value)
         };
 
-    private static StepSceneResponse ToResponse(StepScene scene) =>
-        scene.Value switch
-        {
-            FreshScene value => new FreshSceneResponse(
-                Definition: ToResponse(value.Definition)),
-            ContinuedScene value => new ContinuedSceneResponse(
-                SourceStepId: value.SourceStepId.Value,
-                Access: ContractName(value.Access)),
-            _ => throw Unsupported("step scene", scene.Value)
-        };
-
     private static ScaffoldSceneResponse ToResponse(ScaffoldScene scene) =>
         scene.Value switch
         {
@@ -111,7 +94,7 @@ internal static class ScaffoldResponseMapper
                 SpanSeriesId: value.SpanSeriesId.Value),
             RodGapScene value => new RodGapSceneResponse(
                 StepRodId: value.StepRodId.Value,
-                ClassificationStepId: value.ClassificationStepId.Value,
+                SpanSeriesId: value.SpanSeriesId.Value,
                 IncludedOutcome: ContractName(value.IncludedOutcome)),
             QuantityJoinScene value => new QuantityJoinSceneResponse(
                 Parts: value.Parts.Select(ToResponse).ToArray(),
@@ -184,20 +167,6 @@ internal static class ScaffoldResponseMapper
     private static InvalidOperationException Unsupported(string kind, object? value) =>
         new($"Unsupported {kind} case: {value?.GetType().Name ?? "null"}.");
 
-    private static ScaffoldScene ResolveScene(
-        Scaffold scaffold,
-        ScaffoldStep step) =>
-        step.Scene.Value switch
-        {
-            FreshScene fresh => fresh.Definition,
-            ContinuedScene continued => ResolveScene(
-                scaffold,
-                scaffold.Phases
-                    .SelectMany(phase => phase.Steps)
-                    .Single(candidate => candidate.Id == continued.SourceStepId)),
-            _ => throw Unsupported("step scene", step.Scene.Value)
-        };
-
     private static int ResolveLength(
         LengthSource source,
         PracticeItem practiceItem) =>
@@ -242,7 +211,8 @@ internal static class ScaffoldSessionResponseMapper
         ScaffoldSessionStateResponse state = progress.Value switch
         {
             ActiveScaffoldSession active => new ActiveScaffoldSessionResponse(
-                FindLearnerStep(context.Scaffold, active.CurrentStepId)),
+                ScaffoldResponseMapper.ToLearnerStepResponse(
+                    context.Scaffold.Step(active.CurrentStepId))),
             CompletedScaffoldSession => new CompletedScaffoldSessionResponse(),
             _ => throw new InvalidOperationException("Unsupported scaffold session progress.")
         };
@@ -281,19 +251,6 @@ internal static class ScaffoldSessionResponseMapper
                 .ToArray(),
             State: state,
             LastCheck: lastCheck);
-    }
-
-    private static ScaffoldLearnerStepResponse FindLearnerStep(
-        Scaffold scaffold,
-        TsiaCoach.Domain.ValueObjects.ScaffoldStepId stepId)
-    {
-        ScaffoldStep step = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .SingleOrDefault(candidate => candidate.Id == stepId)
-            ?? throw new InvalidOperationException(
-                $"Scaffold step '{stepId.Value}' does not exist.");
-
-        return ScaffoldResponseMapper.ToLearnerStepResponse(scaffold, step);
     }
 
     private static ScaffoldLastCheckResponse ToLastCheck(

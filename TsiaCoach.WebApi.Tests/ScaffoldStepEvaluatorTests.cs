@@ -14,122 +14,84 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class ScaffoldStepEvaluatorTests
 {
     [Test]
-    public async Task EstablishRodLength_TwoUnitRodsSatisfyLengthsAreEquivalent()
+    public async Task RebuildFromTwosAndOnes_CompleteComputedFitMapSatisfiesCheck()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.EstablishRodLengthStepId,
-            new MatchEquivalentLengthSubmission(new RodCount(2)));
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            ScaffoldSessionTestData.CorrectClassificationSubmission());
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task ClassifyLengths_CompleteComputedFitMapSatisfiesCheck()
+    public async Task RemovePairedEvens_OddIntegerDomainSatisfiesCheck()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ClassifyLengthsStepId,
-            new ClassifyByFitSubmission(
-            [
-                new(new UnitLength(1), FitClassification.OneUnitLeftover),
-                new(new UnitLength(2), FitClassification.Flush),
-                new(new UnitLength(3), FitClassification.OneUnitLeftover),
-                new(new UnitLength(4), FitClassification.Flush),
-                new(new UnitLength(5), FitClassification.OneUnitLeftover),
-                new(new UnitLength(6), FitClassification.Flush),
-                new(new UnitLength(7), FitClassification.OneUnitLeftover),
-                new(new UnitLength(8), FitClassification.Flush),
-                new(new UnitLength(9), FitClassification.OneUnitLeftover),
-                new(new UnitLength(10), FitClassification.Flush)
-            ]));
-
-        await AssertSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task NameOddClass_OddIntegerDomainSatisfiesCheck()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.NameOddClassStepId,
+            ParityLadderScaffold.RemovePairedEvensStepId,
             new NameFitClassificationSubmission(IntegerDomain.OddIntegers));
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task TraverseOddGaps_AllFourOrderedTraversalsSatisfyCheck()
+    public async Task SelectConsecutiveOdds_AllFourOrderedTraversalsSatisfyCheck()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
-            CorrectGapSubmission());
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            ScaffoldSessionTestData.CorrectGapTraversalSubmission());
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task StateOddStepLength_TwoSatisfiesLatentScalar()
+    public async Task JoinAndReadSum_AuthoredPartsSatisfyComposition()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.StateOddStepLengthStepId,
+            ParityLadderScaffold.JoinAndReadSumStepId,
+            ScaffoldSessionTestData.CorrectJoinSubmission());
+
+        await AssertSatisfied(evaluation);
+    }
+
+    [Test]
+    public async Task NameBarCount_TwoSatisfiesRodCountScalar()
+    {
+        ScaffoldStepEvaluation evaluation = Evaluate(
+            ParityLadderScaffold.NameBarCountStepId,
             new EnterScalarSubmission(2m));
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task JoinKnownQuantities_AuthoredPartsSatisfyComposition()
+    public async Task NameLeftoverLength_TwoSatisfiesUnitLengthScalar()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinKnownQuantitiesStepId,
-            CorrectJoinSubmission());
-
-        await AssertSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task CountBaseParts_TwoSatisfiesRodCountScalar()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.CountBasePartsStepId,
+            ParityLadderScaffold.NameLeftoverLengthStepId,
             new EnterScalarSubmission(2m));
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task MeasureRemainder_TwoSatisfiesUnitLengthScalar()
+    public async Task MatchEquivalentLength_TwoUnitRodsSatisfyLengthsAreEquivalent()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.MeasureRemainderStepId,
-            new EnterScalarSubmission(2m));
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            EquivalenceScaffold(),
+            PracticeItemOne.Item,
+            EquivalenceStepId,
+            new MatchEquivalentLengthSubmission(new RodCount(2)));
 
         await AssertSatisfied(evaluation);
     }
 
     [Test]
-    public async Task JoinUnknownQuantities_AuthoredPartsSatisfyComposition()
+    public async Task BuildExpression_SimplifiedMathObjectSatisfiesCheck()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinUnknownQuantitiesStepId,
-            CorrectJoinSubmission());
-
-        await AssertSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task ComposeExpression_ComposedMathObjectSatisfiesCheck()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ComposeExpressionStepId,
-            new BuildExpressionSubmission(PracticeItemOne.RequestedValueComposed.MathObjectId));
-
-        await AssertSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task SimplifyExpression_SimplifiedMathObjectSatisfiesCheck()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SimplifyExpressionStepId,
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            ExpressionStepId,
             new BuildExpressionSubmission(PracticeItemOne.RequestedValueSimplified.MathObjectId));
 
         await AssertSatisfied(evaluation);
@@ -138,8 +100,10 @@ public sealed class ScaffoldStepEvaluatorTests
     [Test]
     public async Task SelectAnswer_CorrectChoiceSatisfiesCheck()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SelectAnswerStepId,
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            AnswerStepId,
             new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId));
 
         await AssertSatisfied(evaluation);
@@ -148,8 +112,10 @@ public sealed class ScaffoldStepEvaluatorTests
     [Test]
     public async Task MatchEquivalentLength_WrongRodCountIsNotSatisfied()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.EstablishRodLengthStepId,
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            EquivalenceScaffold(),
+            PracticeItemOne.Item,
+            EquivalenceStepId,
             new MatchEquivalentLengthSubmission(new RodCount(1)));
 
         await AssertNotSatisfied(evaluation);
@@ -159,7 +125,7 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task ClassifyByFit_WrongClassificationIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ClassifyLengthsStepId,
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
             new ClassifyByFitSubmission(
             [
                 new(new UnitLength(1), FitClassification.Flush),
@@ -181,7 +147,7 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task NameFitClassification_WrongDomainIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.NameOddClassStepId,
+            ParityLadderScaffold.RemovePairedEvensStepId,
             new NameFitClassificationSubmission(IntegerDomain.EvenIntegers));
 
         await AssertNotSatisfied(evaluation);
@@ -191,7 +157,7 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task TraverseAllGaps_IncompleteTraversalIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
             new TraverseAllGapsSubmission(
             [
                 new(new UnitLength(1), new UnitLength(3), ParityLadderScaffold.OddStepRodId),
@@ -206,7 +172,7 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task TraverseAllGaps_ReversedTraversalIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
             new TraverseAllGapsSubmission(
             [
                 new(new UnitLength(3), new UnitLength(1), ParityLadderScaffold.OddStepRodId),
@@ -219,10 +185,10 @@ public sealed class ScaffoldStepEvaluatorTests
     }
 
     [Test]
-    public async Task JoinQuantities_WrongKnownPartCompositionIsNotSatisfied()
+    public async Task JoinQuantities_WrongPartCompositionIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinKnownQuantitiesStepId,
+            ParityLadderScaffold.JoinAndReadSumStepId,
             new JoinQuantitiesSubmission(
             [
                 new SemanticQuantityReference(PracticeItemOne.N.Id),
@@ -236,7 +202,7 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task EnterScalar_WrongValueIsNotSatisfied()
     {
         ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.CountBasePartsStepId,
+            ParityLadderScaffold.NameBarCountStepId,
             new EnterScalarSubmission(3m));
 
         await AssertNotSatisfied(evaluation);
@@ -245,8 +211,10 @@ public sealed class ScaffoldStepEvaluatorTests
     [Test]
     public async Task BuildExpression_KnownWrongMathObjectIsNotSatisfied()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ComposeExpressionStepId,
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            ExpressionStepId,
             new BuildExpressionSubmission(new MathObjectId("math-answer-a")));
 
         await AssertNotSatisfied(evaluation);
@@ -255,8 +223,10 @@ public sealed class ScaffoldStepEvaluatorTests
     [Test]
     public async Task SelectAnswerChoice_KnownDistractorIsNotSatisfied()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SelectAnswerStepId,
+        ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            AnswerStepId,
             new SelectAnswerChoiceSubmission(new AnswerChoiceId("answer-a")));
 
         await AssertNotSatisfied(evaluation);
@@ -353,8 +323,8 @@ public sealed class ScaffoldStepEvaluatorTests
             () => ScaffoldStepEvaluator.Evaluate(
                 ParityLadderScaffold.Definition,
                 PracticeItemTwo.Item,
-                ParityLadderScaffold.SelectAnswerStepId,
-                new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId)));
+                ParityLadderScaffold.JoinAndReadSumStepId,
+                ScaffoldSessionTestData.CorrectJoinSubmission()));
     }
 
     [Test]
@@ -364,7 +334,7 @@ public sealed class ScaffoldStepEvaluatorTests
             "does not exist",
             () => Evaluate(
                 new ScaffoldStepId("step-unknown"),
-                new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId)));
+                new EnterScalarSubmission(2m)));
     }
 
     [Test]
@@ -373,7 +343,7 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "incompatible",
             () => Evaluate(
-                ParityLadderScaffold.SelectAnswerStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
                 new MatchEquivalentLengthSubmission(new RodCount(2))));
     }
 
@@ -383,7 +353,7 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "Duplicate classification",
             () => Evaluate(
-                ParityLadderScaffold.ClassifyLengthsStepId,
+                ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
                 new ClassifyByFitSubmission(
                 [
                     new(new UnitLength(1), FitClassification.OneUnitLeftover),
@@ -397,7 +367,7 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "does not exist",
             () => Evaluate(
-                ParityLadderScaffold.TraverseOddGapsStepId,
+                ParityLadderScaffold.SelectConsecutiveOddsStepId,
                 new TraverseAllGapsSubmission(
                 [
                     new(new UnitLength(1), new UnitLength(3), new ScaffoldResourceId("resource-unknown"))
@@ -410,7 +380,7 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "Semantic entity",
             () => Evaluate(
-                ParityLadderScaffold.JoinKnownQuantitiesStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
                 new JoinQuantitiesSubmission(
                 [
                     new SemanticQuantityReference(new SemanticEntityId("entity-unknown")),
@@ -424,7 +394,7 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "Latent math",
             () => Evaluate(
-                ParityLadderScaffold.JoinKnownQuantitiesStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
                 new JoinQuantitiesSubmission(
                 [
                     new SemanticQuantityReference(PracticeItemOne.N.Id),
@@ -437,8 +407,10 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertInvalid(
             "Math object",
-            () => Evaluate(
-                ParityLadderScaffold.ComposeExpressionStepId,
+            () => ScaffoldStepEvaluator.Evaluate(
+                SymbolicScaffold(),
+                PracticeItemOne.Item,
+                ExpressionStepId,
                 new BuildExpressionSubmission(new MathObjectId("math-unknown"))));
     }
 
@@ -447,8 +419,10 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertInvalid(
             "does not belong to practice item",
-            () => Evaluate(
-                ParityLadderScaffold.SelectAnswerStepId,
+            () => ScaffoldStepEvaluator.Evaluate(
+                SymbolicScaffold(),
+                PracticeItemOne.Item,
+                AnswerStepId,
                 new SelectAnswerChoiceSubmission(new AnswerChoiceId("answer-unknown"))));
     }
 
@@ -476,23 +450,17 @@ public sealed class ScaffoldStepEvaluatorTests
                             new UnitLength(3)
                         ])
                 ],
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step"),
-                                Prompt: new ScaffoldPrompt("Classify.", []),
-                                Scene: new FreshScene(
-                                    new RodMeasurementScene(
-                                        ProbeRodId: new ScaffoldResourceId("resource-probe"),
-                                        SpanSeriesId: new ScaffoldResourceId("resource-spans"))),
-                                Action: new ClassifyByFit(),
-                                SuccessCheck: new MatchesComputedFit())
-                        ])
+                        Prompt: new ScaffoldPrompt("Classify.", []),
+                        Scene: new RodMeasurementScene(
+                            ProbeRodId: new ScaffoldResourceId("resource-probe"),
+                            SpanSeriesId: new ScaffoldResourceId("resource-spans")),
+                        Action: new ClassifyByFit(),
+                        SuccessCheck: new MatchesComputedFit())
                 ]));
     }
 
@@ -505,68 +473,44 @@ public sealed class ScaffoldStepEvaluatorTests
                 id: new ScaffoldId("scaffold-gap-rod-mismatch"),
                 practiceItem: PracticeItemOne.Item,
                 resources: ParityLadderScaffold.Definition.Resources,
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
-                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            ValidClassificationStep(),
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step-gap"),
-                                Prompt: new ScaffoldPrompt("Traverse gaps.", []),
-                                Scene: new FreshScene(
-                                    new RodGapScene(
-                                        StepRodId: ParityLadderScaffold.UnitRodId,
-                                        ClassificationStepId: ParityLadderScaffold.ClassifyLengthsStepId,
-                                        IncludedOutcome: FitClassification.OneUnitLeftover)),
-                                Action: new TraverseAllGaps(),
-                                SuccessCheck: new AllGapsTraversed(
-                                    ParityLadderScaffold.OddStepRodId))
-                        ])
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step-gap"),
+                        Purpose: ScaffoldPhasePurpose.LanguageInterpretation,
+                        Prompt: new ScaffoldPrompt("Traverse gaps.", []),
+                        Scene: new RodGapScene(
+                            StepRodId: ParityLadderScaffold.UnitRodId,
+                            SpanSeriesId: ParityLadderScaffold.MeasurandSeriesId,
+                            IncludedOutcome: FitClassification.OneUnitLeftover),
+                        Action: new TraverseAllGaps(),
+                        SuccessCheck: new AllGapsTraversed(
+                            ParityLadderScaffold.OddStepRodId))
                 ]));
     }
 
     [Test]
-    public async Task ScaffoldCreate_RejectsGapSceneReferencingNonClassificationStep()
+    public async Task ScaffoldCreate_RejectsGapSceneWithoutSeriesResource()
     {
-        ScaffoldStepId sourceStepId = new("step-equivalence-source");
-
         await AssertInvalid(
-            "must reference a prior classification step",
+            "missing or has the wrong type",
             () => Scaffold.Create(
-                id: new ScaffoldId("scaffold-gap-non-classification-source"),
+                id: new ScaffoldId("scaffold-gap-no-series"),
                 practiceItem: PracticeItemOne.Item,
                 resources: ParityLadderScaffold.Definition.Resources,
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
-                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: sourceStepId,
-                                Prompt: new ScaffoldPrompt("Match rods.", []),
-                                Scene: new FreshScene(
-                                    new RodEquivalenceScene(
-                                        UnitRodId: ParityLadderScaffold.UnitRodId,
-                                        ProbeRodId: ParityLadderScaffold.OddStepRodId)),
-                                Action: new MatchEquivalentLength(),
-                                SuccessCheck: new LengthsAreEquivalent()),
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step-gap"),
-                                Prompt: new ScaffoldPrompt("Traverse gaps.", []),
-                                Scene: new FreshScene(
-                                    new RodGapScene(
-                                        StepRodId: ParityLadderScaffold.OddStepRodId,
-                                        ClassificationStepId: sourceStepId,
-                                        IncludedOutcome: FitClassification.OneUnitLeftover)),
-                                Action: new TraverseAllGaps(),
-                                SuccessCheck: new AllGapsTraversed(
-                                    ParityLadderScaffold.OddStepRodId))
-                        ])
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step-gap"),
+                        Purpose: ScaffoldPhasePurpose.LanguageInterpretation,
+                        Prompt: new ScaffoldPrompt("Traverse gaps.", []),
+                        Scene: new RodGapScene(
+                            StepRodId: ParityLadderScaffold.OddStepRodId,
+                            SpanSeriesId: ParityLadderScaffold.UnitRodId,
+                            IncludedOutcome: FitClassification.OneUnitLeftover),
+                        Action: new TraverseAllGaps(),
+                        SuccessCheck: new AllGapsTraversed(
+                            ParityLadderScaffold.OddStepRodId))
                 ]));
     }
 
@@ -574,26 +518,35 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task ScaffoldCreate_RejectsEvaluatorActionWithIncompatibleScene()
     {
         await AssertInvalid(
-            "must use a fresh RodEquivalenceScene",
+            "must use a RodEquivalenceScene",
             () => Scaffold.Create(
                 id: new ScaffoldId("scaffold-action-scene-mismatch"),
                 practiceItem: PracticeItemOne.Item,
                 resources: ParityLadderScaffold.Definition.Resources,
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step"),
-                                Prompt: new ScaffoldPrompt("Match rods.", []),
-                                Scene: new FreshScene(new AnswerChoiceScene()),
-                                Action: new MatchEquivalentLength(),
-                                SuccessCheck: new LengthsAreEquivalent())
-                        ])
+                        Prompt: new ScaffoldPrompt("Match rods.", []),
+                        Scene: new AnswerChoiceScene(),
+                        Action: new MatchEquivalentLength(),
+                        SuccessCheck: new LengthsAreEquivalent())
                 ]));
+    }
+
+    [Test]
+    public async Task ScaffoldCreate_RejectsDuplicateStepIds()
+    {
+        ScaffoldStep step = ParityLadderScaffold.Definition.FloorStep;
+
+        await AssertInvalid(
+            "Duplicate scaffold step",
+            () => Scaffold.Create(
+                id: new ScaffoldId("scaffold-duplicate-step"),
+                practiceItem: PracticeItemOne.Item,
+                resources: ParityLadderScaffold.Definition.Resources,
+                steps: [step, step]));
     }
 
     [Test]
@@ -614,6 +567,54 @@ public sealed class ScaffoldStepEvaluatorTests
         await Assert.That(json).DoesNotContain("Value");
     }
 
+    private static readonly ScaffoldStepId EquivalenceStepId = new("step-equivalence");
+    private static readonly ScaffoldStepId ExpressionStepId = new("step-expression");
+    private static readonly ScaffoldStepId AnswerStepId = new("step-answer");
+
+    /// <summary>A one-step scaffold exercising the rod-equivalence move, which is in the shared vocabulary but not on the sample-1 path.</summary>
+    private static Scaffold EquivalenceScaffold() =>
+        Scaffold.Create(
+            id: new ScaffoldId("scaffold-equivalence"),
+            practiceItem: PracticeItemOne.Item,
+            resources: ParityLadderScaffold.Definition.Resources,
+            steps:
+            [
+                new ScaffoldStep(
+                    Id: EquivalenceStepId,
+                    Purpose: ScaffoldPhasePurpose.ConceptFormation,
+                    Prompt: new ScaffoldPrompt("Match rods.", []),
+                    Scene: new RodEquivalenceScene(
+                        UnitRodId: ParityLadderScaffold.UnitRodId,
+                        ProbeRodId: ParityLadderScaffold.OddStepRodId),
+                    Action: new MatchEquivalentLength(),
+                    SuccessCheck: new LengthsAreEquivalent())
+            ]);
+
+    /// <summary>A two-step scaffold exercising the symbolic moves, which are in the shared vocabulary but not on the sample-1 path.</summary>
+    private static Scaffold SymbolicScaffold() =>
+        Scaffold.Create(
+            id: new ScaffoldId("scaffold-symbolic"),
+            practiceItem: PracticeItemOne.Item,
+            resources: ParityLadderScaffold.Definition.Resources,
+            steps:
+            [
+                new ScaffoldStep(
+                    Id: ExpressionStepId,
+                    Purpose: ScaffoldPhasePurpose.Generalization,
+                    Prompt: new ScaffoldPrompt("Write the sum.", []),
+                    Scene: new AnswerChoiceScene(),
+                    Action: new BuildExpression(),
+                    SuccessCheck: new MatchesLatentExpression(
+                        PracticeItemOne.RequestedValueSimplified.Id)),
+                new ScaffoldStep(
+                    Id: AnswerStepId,
+                    Purpose: ScaffoldPhasePurpose.Verification,
+                    Prompt: new ScaffoldPrompt("Select the answer.", []),
+                    Scene: new AnswerChoiceScene(),
+                    Action: new SelectAnswerChoice(),
+                    SuccessCheck: new MatchesCorrectAnswer())
+            ]);
+
     private static ScaffoldStepEvaluation Evaluate(
         ScaffoldStepId stepId,
         ScaffoldStepSubmission submission) =>
@@ -622,33 +623,6 @@ public sealed class ScaffoldStepEvaluatorTests
             PracticeItemOne.Item,
             stepId,
             submission);
-
-    private static TraverseAllGapsSubmission CorrectGapSubmission() =>
-        new(
-        [
-            new(new UnitLength(1), new UnitLength(3), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(3), new UnitLength(5), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(5), new UnitLength(7), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(7), new UnitLength(9), ParityLadderScaffold.OddStepRodId)
-        ]);
-
-    private static JoinQuantitiesSubmission CorrectJoinSubmission() =>
-        new(
-        [
-            new LatentExpressionReference(PracticeItemOne.SecondMember.Id),
-            new SemanticQuantityReference(PracticeItemOne.N.Id)
-        ]);
-
-    private static ScaffoldStep ValidClassificationStep() =>
-        new(
-            Id: ParityLadderScaffold.ClassifyLengthsStepId,
-            Prompt: new ScaffoldPrompt("Classify.", []),
-            Scene: new FreshScene(
-                new RodMeasurementScene(
-                    ProbeRodId: ParityLadderScaffold.OddStepRodId,
-                    SpanSeriesId: ParityLadderScaffold.MeasurandSeriesId)),
-            Action: new ClassifyByFit(),
-            SuccessCheck: new MatchesComputedFit());
 
     private static NotSupportedException? CaptureMutationFailure(Action mutate)
     {

@@ -134,7 +134,7 @@ public sealed class ScaffoldSessionStoreTests
 
         ScaffoldSessionAppendResult afterCompletion = store.Append(
             started.Session.Id,
-            new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId),
+            new EnterScalarSubmission(2m),
             PracticeItemOne.Item,
             ParityLadderScaffold.Definition);
 
@@ -142,7 +142,7 @@ public sealed class ScaffoldSessionStoreTests
             .IsEqualTo(ScaffoldSessionAppendResultKind.Completed);
         await Assert.That(store.TryGet(started.Session.Id, out ScaffoldSession? latest))
             .IsTrue();
-        await Assert.That(latest!.Checks.Count).IsEqualTo(7);
+        await Assert.That(latest!.Checks.Count).IsEqualTo(3);
     }
 
     private static InMemoryScaffoldSessionStore CreateStore() =>

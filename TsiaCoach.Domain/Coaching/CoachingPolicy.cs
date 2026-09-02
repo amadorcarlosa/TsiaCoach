@@ -7,29 +7,37 @@ using TsiaCoach.Domain.ValueObjects;
 
 namespace TsiaCoach.Domain.Coaching;
 
+/// <summary>
+/// Authored routing from a check's misconception code to a step id on the
+/// item's scaffold path. The policy is an index into the path; it never
+/// searches for a step by purpose.
+/// </summary>
 public sealed class CoachingPolicy
 {
-    private readonly IReadOnlyDictionary<ScaffoldPhasePurpose, CoachingRoute> routeByPurpose;
+    private readonly Scaffold? scaffold;
 
     public PracticeItemId PracticeItemId { get; }
 
-    public IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> PurposeByCode { get; }
+    public IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> EntryStepByCode { get; }
+
+    public IReadOnlySet<MisconceptionCode> AuthoredCodes { get; }
 
     private CoachingPolicy(
         PracticeItemId practiceItemId,
-        IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> purposeByCode,
-        IReadOnlyDictionary<ScaffoldPhasePurpose, CoachingRoute> routeByPurpose)
+        IReadOnlySet<MisconceptionCode> authoredCodes,
+        IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
+        Scaffold? scaffold)
     {
         PracticeItemId = practiceItemId;
-        PurposeByCode = new ReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose>(
-            new Dictionary<MisconceptionCode, ScaffoldPhasePurpose>(purposeByCode));
-        this.routeByPurpose = new ReadOnlyDictionary<ScaffoldPhasePurpose, CoachingRoute>(
-            new Dictionary<ScaffoldPhasePurpose, CoachingRoute>(routeByPurpose));
+        AuthoredCodes = authoredCodes;
+        EntryStepByCode = new ReadOnlyDictionary<MisconceptionCode, ScaffoldStepId>(
+            new Dictionary<MisconceptionCode, ScaffoldStepId>(entryStepByCode));
+        this.scaffold = scaffold;
     }
 
     public static CoachingPolicy CreateWithScaffold(
         PracticeItem practiceItem,
-        IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> purposeByCode,
+        IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
         Scaffold scaffold)
     {
         if (scaffold is null)
@@ -38,32 +46,49 @@ public sealed class CoachingPolicy
                 "CreateWithScaffold requires an authored scaffold; use CreateWithoutScaffold when none exists.");
         }
 
-        CoachingPolicyValidator.Validate(practiceItem, purposeByCode, scaffold);
-        return CreateValidated(practiceItem, purposeByCode, scaffold);
+        CoachingPolicyValidator.Validate(practiceItem, entryStepByCode, scaffold);
+
+        return new CoachingPolicy(
+            practiceItem.Id,
+            entryStepByCode.Keys.ToHashSet(),
+            entryStepByCode,
+            scaffold);
     }
 
-    public static CoachingPolicy CreateWithoutScaffold(
-        PracticeItem practiceItem,
-        IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> purposeByCode)
-    {
-        CoachingPolicyValidator.Validate(practiceItem, purposeByCode, scaffold: null);
-        return CreateValidated(practiceItem, purposeByCode, scaffold: null);
-    }
+    public static CoachingPolicy CreateWithoutScaffold(PracticeItem practiceItem) =>
+        new(
+            practiceItem.Id,
+            practiceItem.Distractors.Values.ToHashSet(),
+            new Dictionary<MisconceptionCode, ScaffoldStepId>(),
+            scaffold: null);
 
-    public ScaffoldPhasePurpose PurposeFor(MisconceptionCode misconception)
+    public bool HasScaffold => scaffold is not null;
+
+    public CoachingRoute RouteFor(MisconceptionCode misconception)
     {
-        if (!PurposeByCode.TryGetValue(misconception, out ScaffoldPhasePurpose purpose))
+        if (!AuthoredCodes.Contains(misconception))
         {
             throw new InvalidOperationException(
-                $"No coaching purpose is authored for misconception '{misconception.Value}' " +
+                $"No coaching route is authored for misconception '{misconception.Value}' " +
                 $"on practice item '{PracticeItemId.Value}'.");
         }
 
-        return purpose;
+        return scaffold is null
+            ? new CoachingRoute(new NoScaffoldAuthored())
+            : new CoachingRoute(new ScaffoldEntry(scaffold.Id, EntryStepByCode[misconception]));
     }
 
-    public CoachingRoute RouteFor(MisconceptionCode misconception) =>
-        routeByPurpose[PurposeFor(misconception)];
+    /// <summary>
+    /// The entry used when no incorrect check has been made yet: the floor of
+    /// the path. Null when the item has no scaffold.
+    /// </summary>
+    public ScaffoldEntry? FloorEntry() =>
+        scaffold is null ? null : ScaffoldEntryResolver.Floor(scaffold);
+
+    public ScaffoldPhasePurpose? PurposeFor(MisconceptionCode misconception) =>
+        RouteFor(misconception).Value is ScaffoldEntry entry
+            ? scaffold!.Step(entry.EntryStepId).Purpose
+            : null;
 
     public CoachingDiagnosisProjection ProjectDiagnosis(
         Attempt attempt,
@@ -83,36 +108,18 @@ public sealed class CoachingPolicy
                 });
         }
 
-        ScaffoldPhasePurpose latestPurpose = PurposeFor(latestIncorrect.Misconception);
-        CoachingRoute route = routeByPurpose[latestPurpose];
-        int routeStreak = CountLatestPurposeStreak(attempt, practiceItem, latestPurpose);
+        CoachingRoute route = RouteFor(latestIncorrect.Misconception);
+        int routeStreak = CountLatestRouteStreak(attempt, practiceItem, route);
 
         return new CoachingDiagnosisProjection(
             SelectedAnswerId: latestIncorrect.SelectedAnswerId,
             Misconception: latestIncorrect.Misconception,
-            Purpose: latestPurpose,
+            Purpose: PurposeFor(latestIncorrect.Misconception),
             Route: route,
             RouteStreak: routeStreak,
             HintLevel: routeStreak == 1
                 ? CoachingHintLevel.Initial
                 : CoachingHintLevel.Escalated);
-    }
-
-    private static CoachingPolicy CreateValidated(
-        PracticeItem practiceItem,
-        IReadOnlyDictionary<MisconceptionCode, ScaffoldPhasePurpose> purposeByCode,
-        Scaffold? scaffold)
-    {
-        Dictionary<ScaffoldPhasePurpose, CoachingRoute> routeByPurpose = [];
-
-        foreach (ScaffoldPhasePurpose purpose in purposeByCode.Values.Distinct())
-        {
-            routeByPurpose[purpose] = scaffold is null
-                ? new CoachingRoute(new NoScaffoldAuthored())
-                : new CoachingRoute(ScaffoldEntryResolver.Resolve(scaffold, purpose));
-        }
-
-        return new CoachingPolicy(practiceItem.Id, purposeByCode, routeByPurpose);
     }
 
     private void EnsureTargetsMatch(Attempt attempt, PracticeItem practiceItem)
@@ -126,10 +133,10 @@ public sealed class CoachingPolicy
         }
     }
 
-    private int CountLatestPurposeStreak(
+    private int CountLatestRouteStreak(
         Attempt attempt,
         PracticeItem practiceItem,
-        ScaffoldPhasePurpose latestPurpose)
+        CoachingRoute latestRoute)
     {
         int streak = 0;
 
@@ -141,7 +148,7 @@ public sealed class CoachingPolicy
                 break;
             }
 
-            if (PurposeFor(incorrect.Misconception) != latestPurpose)
+            if (!RouteFor(incorrect.Misconception).Equals(latestRoute))
             {
                 break;
             }
