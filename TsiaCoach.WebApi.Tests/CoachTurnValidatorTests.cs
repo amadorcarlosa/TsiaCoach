@@ -7,25 +7,87 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class CoachTurnValidatorTests
 {
     [Test]
-    public async Task BeforeCheck_AllowsAskReadingQuestion()
+    public async Task Probe_AllowsAuthorizedShapeAndResolvesAuthoredRoute()
     {
         CoachTurnValidationResult result = Validate(
-            Output(CoachContractNames.AskReadingQuestion),
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            RouteOutput("structural"),
+            ProbeDefinition());
 
-        await AssertValid<AskReadingQuestionResponse>(result);
+        await AssertValid<RouteToStepResponse>(result);
+        var move = (RouteToStepResponse)result.Response!.Move;
+        await Assert.That(move.StepId).IsEqualTo("step-gap");
+        await Assert.That(move.Message).IsEqualTo("Right, one left over.");
+        await Assert.That(move.FocusPhraseIds).IsEquivalentTo(new[] { "phrase-a" });
+        await Assert.That(result.ResolvedProbeShapeId).IsEqualTo("structural");
     }
 
     [Test]
-    public async Task BeforeCheck_RejectsDiagnosisMove()
+    public async Task Probe_RejectsForeignShape()
+    {
+        CoachTurnValidationResult result = Validate(
+            RouteOutput("shape-not-authored"),
+            ProbeDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unauthorizedProbeShapeId");
+    }
+
+    [Test]
+    public async Task Probe_RejectsModelAuthoredMessageOrStep()
+    {
+        CoachTurnValidationResult result = Validate(
+            """
+            {"move":"routeToStep","shapeId":"structural","message":"Go here.","stepId":"step-floor"}
+            """,
+            ProbeDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unexpectedProperty");
+    }
+
+    [Test]
+    public async Task Probe_RejectsMissingShapeId()
+    {
+        CoachTurnValidationResult result = Validate(
+            """{"move":"routeToStep"}""",
+            ProbeDefinition());
+
+        await AssertInvalid(result);
+    }
+
+    [Test]
+    public async Task Probe_RejectsMessageMoves()
     {
         CoachTurnValidationResult result = Validate(
             Output(CoachContractNames.DiagnoseDifference),
+            ProbeDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("moveMissingOrNotAllowed");
+    }
+
+    [Test]
+    public async Task Incorrect_RejectsRouteToStep()
+    {
+        CoachTurnValidationResult result = Validate(
+            RouteOutput("structural"),
             Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+                CoachContractNames.AfterIncorrectCheck,
+                [CoachContractNames.DiagnoseDifference]));
+
+        await AssertInvalid(result);
+    }
+
+    [Test]
+    public async Task Incorrect_RejectsShapeIdOnMessageMove()
+    {
+        CoachTurnValidationResult result = Validate(
+            """
+            {"move":"diagnoseDifference","message":"Try the wording.","focusPhraseIds":[],"suggestedStepId":null,"provenanceFactIds":[],"shapeId":"structural"}
+            """,
+            Definition(
+                CoachContractNames.AfterIncorrectCheck,
+                [CoachContractNames.DiagnoseDifference]));
 
         await AssertInvalid(result);
     }
@@ -94,11 +156,9 @@ public sealed class CoachTurnValidatorTests
     {
         CoachTurnValidationResult result = Validate(
             Output(
-                CoachContractNames.AskReadingQuestion,
+                CoachContractNames.DiagnoseDifference,
                 focusPhraseIds: ["phrase-foreign"]),
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            IncorrectDefinition());
 
         await AssertInvalid(result);
     }
@@ -171,11 +231,9 @@ public sealed class CoachTurnValidatorTests
     {
         CoachTurnValidationResult result = Validate(
             Output(
-                CoachContractNames.AskReadingQuestion,
+                CoachContractNames.DiagnoseDifference,
                 message: " "),
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            IncorrectDefinition());
 
         await AssertInvalid(result);
     }
@@ -185,11 +243,9 @@ public sealed class CoachTurnValidatorTests
     {
         CoachTurnValidationResult result = Validate(
             Output(
-                CoachContractNames.AskReadingQuestion,
+                CoachContractNames.DiagnoseDifference,
                 message: new string('x', CoachTurnValidator.MaxMessageLength + 1)),
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            IncorrectDefinition());
 
         await AssertInvalid(result);
     }
@@ -199,9 +255,7 @@ public sealed class CoachTurnValidatorTests
     {
         CoachTurnValidationResult result = Validate(
             "{",
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            IncorrectDefinition());
 
         await AssertInvalid(result);
     }
@@ -212,12 +266,10 @@ public sealed class CoachTurnValidatorTests
         CoachTurnValidationResult result = Validate(
             """
             ```json
-            {"move":"askReadingQuestion","message":"Try the wording.","focusPhraseIds":[],"suggestedStepId":null,"provenanceFactIds":[]}
+            {"move":"routeToStep","shapeId":"structural"}
             ```
             """,
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            ProbeDefinition());
 
         await AssertInvalid(result);
     }
@@ -226,10 +278,8 @@ public sealed class CoachTurnValidatorTests
     public async Task Validator_RejectsTrailingContent()
     {
         CoachTurnValidationResult result = Validate(
-            Output(CoachContractNames.AskReadingQuestion) + " trailing",
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            RouteOutput("structural") + " trailing",
+            ProbeDefinition());
 
         await AssertInvalid(result);
     }
@@ -239,11 +289,9 @@ public sealed class CoachTurnValidatorTests
     {
         CoachTurnValidationResult result = Validate(
             """
-            {"move":"askReadingQuestion","message":"Try the wording.","focusPhraseIds":[],"suggestedStepId":null,"provenanceFactIds":[],"model":"gpt"}
+            {"move":"diagnoseDifference","message":"Try the wording.","focusPhraseIds":[],"suggestedStepId":null,"provenanceFactIds":[],"model":"gpt"}
             """,
-            Definition(
-                CoachContractNames.BeforeCheck,
-                [CoachContractNames.AskReadingQuestion]));
+            IncorrectDefinition());
 
         await AssertInvalid(result);
     }
@@ -253,11 +301,92 @@ public sealed class CoachTurnValidatorTests
         CoachingAgentDefinition definition) =>
         CoachTurnValidator.Validate(output, definition);
 
+    private static CoachingAgentDefinition IncorrectDefinition() =>
+        Definition(
+            CoachContractNames.AfterIncorrectCheck,
+            [CoachContractNames.DiagnoseDifference]);
+
+    private static CoachingAgentDefinition ProbeDefinition() =>
+        Definition(
+            CoachContractNames.BeforeCheck,
+            [CoachContractNames.RouteToStep],
+            authorizedProbeShapes: new Dictionary<string, ProbeShapeResolution>(StringComparer.Ordinal)
+            {
+                ["no-answer"] = new("step-floor", "Start at the floor.", ["phrase-a"]),
+                ["structural"] = new("step-gap", "Right, one left over.", ["phrase-a"])
+            });
+
+    [Test]
+    public async Task Question_AllowsAuthorizedShapeAndResolvesAuthoredReply()
+    {
+        CoachTurnValidationResult result = Validate(
+            AnswerOutput("why-refused"),
+            QuestionDefinition());
+
+        await AssertValid<AnswerQuestionResponse>(result);
+        var move = (AnswerQuestionResponse)result.Response!.Move;
+        await Assert.That(move.StepId).IsEqualTo("step-floor");
+        await Assert.That(move.Message).IsEqualTo("It broke the rule.");
+        await Assert.That(move.FocusPhraseIds).IsEquivalentTo(new[] { "phrase-a" });
+        await Assert.That(result.ResolvedProbeShapeId).IsNull();
+    }
+
+    [Test]
+    public async Task Question_RejectsForeignShape()
+    {
+        CoachTurnValidationResult result = Validate(
+            AnswerOutput("shape-not-authored"),
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unauthorizedQuestionShapeId");
+    }
+
+    [Test]
+    public async Task Question_RejectsModelAuthoredReply()
+    {
+        CoachTurnValidationResult result = Validate(
+            """
+            {"move":"answerQuestion","shapeId":"why-refused","message":"Because I say so."}
+            """,
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unexpectedProperty");
+    }
+
+    [Test]
+    public async Task Question_RejectsRouteMoves()
+    {
+        CoachTurnValidationResult result = Validate(
+            RouteOutput("why-refused"),
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("moveMissingOrNotAllowed");
+    }
+
+    private static CoachingAgentDefinition QuestionDefinition() =>
+        Definition(
+            CoachContractNames.OnStep,
+            [CoachContractNames.AnswerQuestion]) with
+        {
+            AuthorizedQuestionShapes = new Dictionary<string, QuestionShapeResolution>(StringComparer.Ordinal)
+            {
+                ["why-refused"] = new("step-floor", "It broke the rule.", ["phrase-a"]),
+                ["off-topic"] = new("step-floor", "Stay with the board.", ["phrase-a"])
+            }
+        };
+
+    private static string AnswerOutput(string shapeId) =>
+        $$"""{"move":"answerQuestion","shapeId":{{JsonSerializer.Serialize(shapeId)}}}""";
+
     private static CoachingAgentDefinition Definition(
         string phase,
         IReadOnlyList<string> allowedMoves,
         string? authorizedSuggestedStepId = null,
-        IReadOnlyList<string>? authorizedProvenanceFactIds = null)
+        IReadOnlyList<string>? authorizedProvenanceFactIds = null,
+        IReadOnlyDictionary<string, ProbeShapeResolution>? authorizedProbeShapes = null)
     {
         authorizedProvenanceFactIds ??= [];
 
@@ -273,8 +402,12 @@ public sealed class CoachTurnValidatorTests
             },
             AuthorizedSuggestedStepId: authorizedSuggestedStepId,
             AuthorizedProvenanceFactIds: authorizedProvenanceFactIds
-                .ToHashSet(StringComparer.Ordinal));
+                .ToHashSet(StringComparer.Ordinal),
+            AuthorizedProbeShapes: authorizedProbeShapes);
     }
+
+    private static string RouteOutput(string shapeId) =>
+        $$"""{"move":"routeToStep","shapeId":{{JsonSerializer.Serialize(shapeId)}}}""";
 
     private static string Output(
         string move,

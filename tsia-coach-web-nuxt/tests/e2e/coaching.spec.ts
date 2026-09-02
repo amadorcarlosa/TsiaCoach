@@ -91,12 +91,25 @@ async function requestCoaching(page: Page) {
   await coachResponse
 }
 
-test('before-check help sends only helpRequested and highlights returned phrase', async ({ page }) => {
-  const captured = mockCoachRoute(page, route => route.fulfill(coachMoveResponse({
-    type: 'askReadingQuestion',
-    message: 'Which phrase describes how the two integers are related?',
-    focusPhraseIds: ['phrase-ordered-step'],
-  })))
+test('before-check help asks the probe, takes an answer, and routes to the walkthrough', async ({ page }) => {
+  const captured = mockCoachRoute(page, async (route) => {
+    const body = route.request().postDataJSON() as { event: string }
+    if (body.event === 'probeAnswered') {
+      await route.fulfill(coachMoveResponse({
+        type: 'routeToStep',
+        message: 'Right: an odd number has one left over after pairing.',
+        focusPhraseIds: [],
+        stepId: 'step-select-consecutive-odds',
+      }))
+      return
+    }
+
+    await route.fulfill(coachMoveResponse({
+      type: 'askProbe',
+      message: 'Before we start: what makes a number odd?',
+      focusPhraseIds: ['phrase-set-declaration'],
+    }))
+  })
 
   await openSampleItems(page)
 
@@ -104,14 +117,32 @@ test('before-check help sends only helpRequested and highlights returned phrase'
   await requestCoaching(page)
 
   await expect(page.getByTestId('coaching-message'))
-    .toHaveText('Which phrase describes how the two integers are related?')
+    .toHaveText('Before we start: what makes a number odd?')
+  await expect(page.locator(
+    '.interactive-segment.is-focused[data-phrase-ids~="phrase-set-declaration"]',
+  ).first()).toBeVisible()
 
   expect(captured).toHaveLength(1)
   assertExactEventBody(captured[0]!, 'helpRequested')
 
-  await expect(page.locator(
-    '.interactive-segment.is-focused[data-phrase-ids~="phrase-ordered-step"]',
-  ).first()).toBeVisible()
+  const routed = page.waitForResponse('**/coach')
+  await page.getByTestId('coaching-probe-answer').fill('one is left over when you pair them')
+  await page.getByTestId('coaching-probe-submit').click()
+  await routed
+
+  await expect(page.getByTestId('coaching-message'))
+    .toHaveText('Right: an odd number has one left over after pairing.')
+  await expect(page.getByTestId('coaching-open-scaffold')).toBeVisible()
+
+  expect(captured).toHaveLength(2)
+  expect(captured[1]!.body).toEqual({
+    event: 'probeAnswered',
+    answer: 'one is left over when you pair them',
+  })
+  for (const key of FORBIDDEN_REQUEST_KEYS) {
+    expect(captured[1]!.body).not.toHaveProperty(key)
+  }
+  await expect(page.getByTestId('coaching-card')).not.toContainText('step-select-consecutive-odds')
 })
 
 test('incorrect answer changes control to Diagnosis and renders diagnosis move', async ({ page }) => {
@@ -218,7 +249,7 @@ test('rate-limited response shows safe retry state', async ({ page }) => {
     }
 
     await route.fulfill(coachMoveResponse({
-      type: 'askReadingQuestion',
+      type: 'askProbe',
       message: 'Read the first sentence again.',
       focusPhraseIds: [],
     }))

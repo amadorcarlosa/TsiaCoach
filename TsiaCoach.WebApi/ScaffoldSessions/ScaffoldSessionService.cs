@@ -37,15 +37,18 @@ public sealed class ScaffoldSessionService
     private readonly SamplePracticeCatalog catalog;
     private readonly InMemoryAttemptStore attemptStore;
     private readonly InMemoryScaffoldSessionStore sessionStore;
+    private readonly InMemoryProbeRouteStore probeRouteStore;
 
     public ScaffoldSessionService(
         SamplePracticeCatalog catalog,
         InMemoryAttemptStore attemptStore,
-        InMemoryScaffoldSessionStore sessionStore)
+        InMemoryScaffoldSessionStore sessionStore,
+        InMemoryProbeRouteStore probeRouteStore)
     {
         this.catalog = catalog;
         this.attemptStore = attemptStore;
         this.sessionStore = sessionStore;
+        this.probeRouteStore = probeRouteStore;
     }
 
     public ScaffoldSessionStartServiceResult Start(AttemptId attemptId)
@@ -56,11 +59,15 @@ public sealed class ScaffoldSessionService
         }
 
         PracticeItemCatalogEntry entry = RequireCatalogEntry(attempt.PracticeItemId);
+        ProbeRoute? probeRoute = probeRouteStore.TryGetLatest(attempt.Id, out ProbeRoute latest)
+            ? latest
+            : null;
         ScaffoldSessionAuthorization authorization =
             ScaffoldSessionAuthorizer.Authorize(
                 attempt,
                 entry.Item,
-                entry.CoachingPolicy);
+                entry.CoachingPolicy,
+                probeRoute);
 
         if (authorization.Value is ScaffoldSessionGrant grant)
         {

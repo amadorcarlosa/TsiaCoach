@@ -3,7 +3,8 @@ import type { AttemptProjection, CoachingButton } from '#shared/types/sample-ite
 import { AttemptPhaseKinds, isVisibleCoachingButton } from '#shared/types/sample-items'
 import type { CoachMoveResponse } from '#shared/types/coaching'
 import {
-  isAskReadingQuestionMove,
+  isAskProbeMove,
+  isRouteToStepMove,
   isSuggestScaffoldMove
 } from '#shared/types/coaching'
 
@@ -69,6 +70,8 @@ export interface CoachingCardView {
   role: 'question' | 'message'
   message: string
   ariaLive: 'polite'
+  /** The authored probe expects a free-text answer from the student. */
+  probeInput: boolean
   walkthroughHref: string | null
 }
 
@@ -80,11 +83,14 @@ export function coachingCardView(
     return null
   }
 
+  const opensWalkthrough = isSuggestScaffoldMove(move) || isRouteToStepMove(move)
+
   return {
-    role: isAskReadingQuestionMove(move) ? 'question' : 'message',
+    role: isAskProbeMove(move) ? 'question' : 'message',
     message: move.message,
     ariaLive: 'polite',
-    walkthroughHref: isSuggestScaffoldMove(move) && attemptId
+    probeInput: isAskProbeMove(move),
+    walkthroughHref: opensWalkthrough && attemptId
       ? `/scaffolds/${encodeURIComponent(attemptId)}`
       : null
   }

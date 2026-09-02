@@ -33,7 +33,7 @@ public sealed class ScaffoldSession
 {
     public ScaffoldSessionId Id { get; }
     public AttemptId AttemptId { get; }
-    public CheckResultId AuthorizedByCheckResultId { get; }
+    public CheckResultId? AuthorizedByCheckResultId { get; }
     public PracticeItemId PracticeItemId { get; }
     public ScaffoldId ScaffoldId { get; }
     public ScaffoldStepId EntryStepId { get; }
@@ -210,27 +210,58 @@ public sealed class ScaffoldSession
         }
     }
 
+    /// <summary>
+    /// The latest accepted submission for the current step, or null when the
+    /// step has none yet. This is the learner's own evidence, safe to return
+    /// so a reload can resume a half-built board.
+    /// </summary>
+    public ScaffoldStepSubmission? CurrentStepEvidence(
+        PracticeItem practiceItem,
+        Scaffold scaffold)
+    {
+        EnsureTargetsMatch(practiceItem, scaffold);
+        ScaffoldStep[] authorizedSteps = AuthorizedSteps(EntryStepId, scaffold);
+        int currentStepIndex = 0;
+        ScaffoldStepSubmission? evidence = null;
+
+        foreach (ScaffoldCheckResult check in Checks)
+        {
+            if (currentStepIndex >= authorizedSteps.Length)
+            {
+                break;
+            }
+
+            ScaffoldStepEvaluation evaluation = ScaffoldStepEvaluator.Evaluate(
+                scaffold,
+                practiceItem,
+                authorizedSteps[currentStepIndex].Id,
+                check.Submission);
+
+            switch (evaluation.Value)
+            {
+                case ScaffoldStepSatisfied:
+                    currentStepIndex++;
+                    evidence = null;
+                    break;
+                case ScaffoldStepAccepted:
+                    evidence = check.Submission;
+                    break;
+            }
+        }
+
+        return evidence;
+    }
+
     private static ScaffoldStep[] AuthorizedSteps(
         ScaffoldStepId entryStepId,
         Scaffold scaffold)
     {
-        ScaffoldStep[] allSteps = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .ToArray();
-        int entryIndex = Array.FindIndex(allSteps, step => step.Id == entryStepId);
-
-        if (entryIndex < 0)
+        if (!scaffold.ContainsStep(entryStepId))
         {
             throw new InvalidOperationException(
                 $"Scaffold entry step '{entryStepId.Value}' does not exist in scaffold '{scaffold.Id.Value}'.");
         }
 
-        if (!allSteps[entryIndex].CanStartCold)
-        {
-            throw new InvalidOperationException(
-                $"Scaffold entry step '{entryStepId.Value}' cannot start cold.");
-        }
-
-        return allSteps[entryIndex..];
+        return scaffold.PathFrom(entryStepId).ToArray();
     }
 }

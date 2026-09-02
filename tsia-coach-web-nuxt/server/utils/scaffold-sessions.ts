@@ -62,6 +62,22 @@ const scaffoldSubmission = z.discriminatedUnion('type', [
     type: z.literal('selectAnswerChoice'),
     answerChoiceId: z.string().trim().min(1),
   }).strict(),
+  z.object({
+    type: z.literal('placePieces'),
+    pieces: z.array(z.object({
+      length: z.number().int().positive(),
+      x: z.number().int().nonnegative(),
+      y: z.number().int().nonnegative(),
+    }).strict()),
+  }).strict(),
+  z.object({
+    type: z.literal('moveRows'),
+    movedRows: z.array(z.number().int().nonnegative()),
+  }).strict(),
+  z.object({
+    type: z.literal('selectRows'),
+    rows: z.array(z.number().int().nonnegative()),
+  }).strict(),
 ])
 
 function apiUrlFor(event: H3Event): string {

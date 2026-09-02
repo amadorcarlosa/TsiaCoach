@@ -9,5 +9,6 @@ public interface IAgentExecutor
         AIAgent agent,
         string model,
         IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        ChatResponseFormat? responseFormat = null);
 }

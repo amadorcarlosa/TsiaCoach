@@ -9,7 +9,7 @@ import {
 } from '#shared/types/sample-items'
 import type { CoachMoveResponse, CoachTurnEvent } from '#shared/types/coaching'
 import { AttemptPhaseKinds } from '#shared/types/sample-items'
-import { CoachTurnEvents } from '#shared/types/coaching'
+import { CoachTurnEvents, MaxProbeAnswerLength, isAskProbeMove } from '#shared/types/coaching'
 import {
   FocusTargetKinds,
   LoadStates,
@@ -397,6 +397,42 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       return
     }
 
+    return sendCoachingTurn(itemId, { event })
+  }
+
+  /**
+   * Answers the authored probe in the student's own words. The server
+   * classifies the answer into an authored shape and returns the route;
+   * the browser never sees shape ids and never picks a step.
+   */
+  async function answerProbe(answer: string): Promise<void> {
+    const itemId = selectedItemId.value
+    const session = itemId ? attemptSessions.value[itemId] ?? null : null
+    const projection = session?.projection
+    const trimmed = answer.trim()
+
+    if (
+      !itemId || !session || !projection || !session.attemptId
+      || projection.phase.type !== AttemptPhaseKinds.BeforeCheck
+      || !session.coachingMove || !isAskProbeMove(session.coachingMove)
+      || trimmed.length === 0 || trimmed.length > MaxProbeAnswerLength
+    ) {
+      return
+    }
+
+    return sendCoachingTurn(itemId, { event: CoachTurnEvents.ProbeAnswered, answer: trimmed })
+  }
+
+  async function sendCoachingTurn(
+    itemId: string,
+    body: { event: CoachTurnEvent, answer?: string }
+  ): Promise<void> {
+    const session = attemptSessions.value[itemId]
+    const projection = session?.projection
+    if (!session || !projection || !session.attemptId) {
+      return
+    }
+
     const existing = coachingInFlight.get(itemId)
     if (existing) {
       return existing
@@ -426,7 +462,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
           `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
           {
             method: 'POST',
-            body: { event }
+            body
           }
         )
 
@@ -586,6 +622,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     coachingMove,
     coachingError,
     requestCoaching,
+    answerProbe,
     retryCoaching,
     clearCoaching,
     ensureAttemptForItem,

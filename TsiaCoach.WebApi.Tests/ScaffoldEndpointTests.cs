@@ -43,7 +43,7 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
     }
 
     [Test]
-    public async Task Detail_PreservesSceneFadingAndTypedScalarReadings()
+    public async Task Detail_ExposesOneFlatPathWithPurposeLabelsAndSideSteps()
     {
         using HttpClient client = Factory.CreateClient();
 
@@ -51,31 +51,73 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
             "/api/scaffolds/scaffold-parity-ladder");
 
         await Assert.That(scaffold is not null).IsTrue();
-        await Assert.That(scaffold!.Phases.Count).IsEqualTo(5);
-        await Assert.That(scaffold.Phases.SelectMany(phase => phase.Steps).Count())
-            .IsEqualTo(12);
+        await Assert.That(scaffold!.Steps.Select(step => step.Id))
+            .IsEquivalentTo(
+            [
+                "step-rebuild-from-twos-and-ones",
+                "step-contrast-pair",
+                "step-mark-the-whites",
+                "step-sort-paired-evens",
+                "step-select-consecutive-odds",
+                "step-fill-the-gap",
+                "step-name-the-smaller",
+                "step-join-and-read-sum",
+                "step-name-bar-count",
+                "step-name-leftover-length"
+            ]);
+        await Assert.That(scaffold.Steps[0].Purpose).IsEqualTo("conceptFormation");
+        await Assert.That(scaffold.Steps[0].EntryOnly).IsFalse();
+        await Assert.That(FindStep(scaffold, "step-contrast-pair").EntryOnly).IsTrue();
+        await Assert.That(FindStep(scaffold, "step-mark-the-whites").EntryOnly).IsTrue();
+        await Assert.That(scaffold.Steps[^1].Purpose).IsEqualTo("generalization");
+    }
 
-        ScaffoldStepResponse knownStep = FindStep(
-            scaffold,
-            "step-join-known-quantities");
-        ScaffoldStepResponse unknownStep = FindStep(
-            scaffold,
-            "step-join-unknown-quantities");
-        QuantityJoinSceneResponse known = QuantityJoinSceneFor(knownStep);
-        QuantityJoinSceneResponse unknown = QuantityJoinSceneFor(unknownStep);
+    [Test]
+    public async Task Detail_ExposesGridScenesAndTheirMoves()
+    {
+        using HttpClient client = Factory.CreateClient();
 
-        await Assert.That(known.Parts)
-            .IsEquivalentTo(unknown.Parts);
-        await Assert.That(known.Bindings.Single().SemanticEntityId)
-            .IsEqualTo("entity-n");
-        await Assert.That(known.Bindings.Single().Value)
-            .IsEqualTo(15);
-        await Assert.That(known.ShowSizedTarget).IsTrue();
-        await Assert.That(unknown.Bindings.Count).IsEqualTo(0);
-        await Assert.That(unknown.ShowSizedTarget).IsFalse();
+        ScaffoldResponse? scaffold = await client.GetFromJsonAsync<ScaffoldResponse>(
+            "/api/scaffolds/scaffold-parity-ladder");
 
-        ScaffoldStepResponse countStep = FindStep(scaffold, "step-count-base-parts");
-        ScaffoldStepResponse lengthStep = FindStep(scaffold, "step-measure-remainder");
+        ScaffoldStepResponse rebuild = FindStep(scaffold!, "step-rebuild-from-twos-and-ones");
+        GridSceneResponse staircase = rebuild.Scene as GridSceneResponse ??
+            throw new InvalidOperationException("Expected a grid scene.");
+        PlacePiecesActionResponse place = rebuild.Action as PlacePiecesActionResponse ??
+            throw new InvalidOperationException("Expected a place-pieces action.");
+
+        await Assert.That(staircase.Reference.Count).IsEqualTo(10);
+        await Assert.That(staircase.Reference.All(piece => piece.Kind == "rod")).IsTrue();
+        await Assert.That(staircase.TargetRows.Count).IsEqualTo(10);
+        await Assert.That(staircase.UnitLines).IsTrue();
+        await Assert.That(place.AllowedLengths).IsEquivalentTo(new[] { 2, 1 });
+
+        ScaffoldStepResponse sort = FindStep(scaffold, "step-sort-paired-evens");
+        MoveRowsActionResponse move = sort.Action as MoveRowsActionResponse ??
+            throw new InvalidOperationException("Expected a move-rows action.");
+        MatchesRowPartitionCheckResponse partition = sort.SuccessCheck as MatchesRowPartitionCheckResponse ??
+            throw new InvalidOperationException("Expected a row-partition check.");
+        await Assert.That(move.CompareColumn).IsEqualTo(12);
+        await Assert.That(partition.ExpectedMovedRows).IsEquivalentTo(new[] { 2, 4, 6, 8, 10 });
+
+        ScaffoldStepResponse consecutive = FindStep(scaffold, "step-select-consecutive-odds");
+        MatchesRowSelectionCheckResponse selection = consecutive.SuccessCheck as MatchesRowSelectionCheckResponse ??
+            throw new InvalidOperationException("Expected a row-selection check.");
+        await Assert.That(consecutive.Action).IsTypeOf<SelectRowsActionResponse>();
+        await Assert.That(selection.Rule).IsEqualTo("adjacentInList");
+        await Assert.That(selection.RequiredCount).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Detail_PreservesTypedScalarReadings()
+    {
+        using HttpClient client = Factory.CreateClient();
+
+        ScaffoldResponse? scaffold = await client.GetFromJsonAsync<ScaffoldResponse>(
+            "/api/scaffolds/scaffold-parity-ladder");
+
+        ScaffoldStepResponse countStep = FindStep(scaffold!, "step-name-bar-count");
+        ScaffoldStepResponse lengthStep = FindStep(scaffold, "step-name-leftover-length");
         EnterScalarActionResponse countAction =
             countStep.Action as EnterScalarActionResponse ??
             throw new InvalidOperationException("Expected a scalar-entry action.");
@@ -95,6 +137,8 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
         await Assert.That(lengthAction.Reading).IsEqualTo("unitLength");
         await Assert.That(lengthCheck.ExpectedValueId)
             .IsEqualTo("latent-ordered-step");
+        await Assert.That(QuantityJoinSceneFor(countStep).Parts)
+            .IsEquivalentTo(QuantityJoinSceneFor(lengthStep).Parts);
     }
 
     [Test]
@@ -112,17 +156,10 @@ public sealed class ScaffoldEndpointTests : ApiTestBase
     private static ScaffoldStepResponse FindStep(
         ScaffoldResponse scaffold,
         string id) =>
-        scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .Single(step => step.Id == id);
+        scaffold.Steps.Single(step => step.Id == id);
 
     private static QuantityJoinSceneResponse QuantityJoinSceneFor(
-        ScaffoldStepResponse step)
-    {
-        FreshSceneResponse fresh = step.Scene as FreshSceneResponse ??
-            throw new InvalidOperationException("Expected a fresh scene.");
-
-        return fresh.Definition as QuantityJoinSceneResponse ??
+        ScaffoldStepResponse step) =>
+        step.Scene as QuantityJoinSceneResponse ??
             throw new InvalidOperationException("Expected a quantity-join scene.");
-    }
 }

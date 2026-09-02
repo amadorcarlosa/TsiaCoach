@@ -23,7 +23,11 @@ public static class AttemptProjectionMapper
 
         CoachingButtonResponse button = phase switch
         {
-            BeforeCheckResponse => new VisibleCoachingButtonResponse("Help"),
+            // Help before a check is the authored probe; without one there is
+            // nothing to ask, so the control is hidden rather than improvised.
+            BeforeCheckResponse => policy.Probe is null
+                ? new HiddenCoachingButtonResponse()
+                : new VisibleCoachingButtonResponse("Help"),
             AfterIncorrectCheckResponse => new VisibleCoachingButtonResponse("Diagnosis"),
             AfterCorrectCheckResponse => new VisibleCoachingButtonResponse("Why it works"),
             _ => throw new InvalidOperationException("Unsupported attempt projection phase.")
@@ -46,7 +50,7 @@ public static class AttemptProjectionMapper
         return new(
             SelectedAnswerId: diagnosis.SelectedAnswerId.Value,
             MisconceptionCode: diagnosis.Misconception.Value,
-            Purpose: ContractName(diagnosis.Purpose),
+            Purpose: diagnosis.Purpose is null ? null : ContractName(diagnosis.Purpose.Value),
             Route: ToResponse(diagnosis.Route),
             RouteStreak: diagnosis.RouteStreak,
             HintLevel: ContractName(diagnosis.HintLevel));

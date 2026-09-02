@@ -52,10 +52,10 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
   await page.goto(`/scaffolds/${attempt.attemptId}`)
   await waitForNuxtHydration(page)
 
-  await expect(page.locator('[data-step-id="step-join-known-quantities"]')).toBeVisible()
-  await movePartToSum(page, 'First part, 15')
+  await expect(page.locator('[data-step-id="step-join-and-read-sum"]')).toBeVisible()
+  await movePartToSum(page, 'First part, n')
   await page.getByTestId('check-scaffold-response').click()
-  await expect(page.locator('[data-step-id="step-join-known-quantities"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-join-and-read-sum"]')).toBeVisible()
   await expect(page.getByText(/does not match the model yet/i)).toBeVisible()
   expect(submittedBodies[0]).toEqual({
     type: 'joinQuantities',
@@ -67,9 +67,9 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
   expect(firstBody).not.toContain('correct')
   expect(firstBody).not.toContain('successCheck')
 
-  await movePartToSum(page, 'Next part, 17')
+  await movePartToSum(page, 'Next part, n + 2')
   await page.getByTestId('check-scaffold-response').click()
-  await expect(page.locator('[data-step-id="step-count-base-parts"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-name-bar-count"]')).toBeVisible()
   expect(submittedBodies[1]).toEqual({
     type: 'joinQuantities',
     parts: [
@@ -83,12 +83,68 @@ test('wrong evidence stays, correct evidence advances, and reload resumes', asyn
 
   await page.reload()
   await waitForNuxtHydration(page)
-  await expect(page.locator('[data-step-id="step-count-base-parts"]')).toBeVisible()
+  await expect(page.locator('[data-step-id="step-name-bar-count"]')).toBeVisible()
 })
 
-test('unauthorized scaffold entry shows a safe error', async ({ page, request }) => {
+test('help before any check opens the walkthrough at the floor step', async ({ page, request }) => {
   const started = await request.post('/api/attempts', {
     data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
+})
+
+async function dragPiece(page: Page, length: number, targetX: number, targetY: number) {
+  const supply = page.locator(`[data-step-id="step-rebuild-from-twos-and-ones"] .supply-piece[data-length="${length}"]`)
+  const box = await supply.boundingBox()
+  if (!box) throw new Error('supply piece not visible')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + 40, { steps: 4 })
+  await page.mouse.move(targetX, targetY, { steps: 12 })
+  await page.mouse.up()
+}
+
+test('a legal drop stays, a rule-breaking drop reverts, and the board survives a reload', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  const board = page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')
+  await expect(board).toBeVisible()
+  const grid = await board.locator('.grid').boundingBox()
+  if (!grid) throw new Error('grid not visible')
+  const unit = 28
+
+  // A red two on the 4, from column 1: legal and accepted.
+  const accepted = page.waitForResponse('**/checks')
+  await dragPiece(page, 2, grid.x + 1 * unit + unit, grid.y + 4 * unit + unit / 2)
+  await accepted
+  await expect(board.locator('[data-role="placed"][data-length="2"][data-y="4"]')).toHaveCount(1)
+
+  // A white on the 4 breaks "as many twos as fit": shown, then taken back.
+  const rejected = page.waitForResponse('**/checks')
+  await dragPiece(page, 1, grid.x + 3 * unit + unit / 2, grid.y + 4 * unit + unit / 2)
+  await rejected
+  await expect(board.locator('[data-role="placed"][data-length="1"]')).toHaveCount(0, { timeout: 3000 })
+  await expect(board.locator('[data-role="placed"]')).toHaveCount(1)
+
+  await page.reload()
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"] [data-role="placed"][data-length="2"][data-y="4"]')).toHaveCount(1)
+})
+
+test('an item without a scaffold shows a safe error', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-2' },
   })
   expect(started.ok()).toBeTruthy()
   const attempt = await started.json() as { attemptId: string }
@@ -103,5 +159,47 @@ test('unauthorized scaffold entry shows a safe error', async ({ page, request })
   const alert = page.getByTestId('scaffold-safe-error')
   await expect(alert).toBeVisible()
   await expect(alert).toContainText('not available yet')
-  await expect(alert).not.toContainText('stopped-at-second-integer')
+  await expect(alert).not.toContainText('stopped-at-this-year')
+})
+
+test('ask the coach sends only the step id and the question, and shows the authored reply', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  const captured: Record<string, unknown>[] = []
+  await page.route('**/api/attempts/*/coach', async (route) => {
+    captured.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        move: {
+          type: 'answerQuestion',
+          message: 'A piece comes back when it breaks the rule.',
+          focusPhraseIds: [],
+          stepId: 'step-rebuild-from-twos-and-ones',
+        },
+      }),
+    })
+  })
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
+
+  await page.getByTestId('ask-coach').click()
+  await page.getByLabel('Your question for the coach').fill('why did my white come back?')
+  await page.getByTestId('coach-send').click()
+
+  await expect(page.getByTestId('coach-reply')).toContainText('A piece comes back when it breaks the rule.')
+  expect(captured).toEqual([{
+    event: 'stepQuestionAsked',
+    stepId: 'step-rebuild-from-twos-and-ones',
+    question: 'why did my white come back?',
+  }])
+  // The student stays on the step: a question never routes.
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
 })

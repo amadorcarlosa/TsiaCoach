@@ -20,11 +20,21 @@ public static class ScaffoldStepEvaluator
                 $"'{scaffold.PracticeItemId.Value}', not '{practiceItem.Id.Value}'.");
         }
 
-        ScaffoldStep step = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .SingleOrDefault(step => step.Id == stepId)
-            ?? throw new InvalidOperationException(
-                $"Scaffold step '{stepId.Value}' does not exist.");
+        ScaffoldStep step = scaffold.Step(stepId);
+
+        switch (step.Action.Value, step.SuccessCheck.Value, submission.Value)
+        {
+            case (PlacePieces place, MatchesRowCompositions compositions, PlacePiecesSubmission placed):
+                return EvaluateRowCompositions(step, place, compositions, placed);
+            case (MoveRows, MatchesRowPartition partition, MoveRowsSubmission moved):
+                return EvaluateRowPartition(step, partition, moved);
+            case (SelectRows, MatchesRowSelection selection, SelectRowsSubmission selected):
+                return EvaluateRowSelection(selection, selected);
+            case (PlacePieces or MoveRows or SelectRows, _, _):
+            case (_, _, PlacePiecesSubmission or MoveRowsSubmission or SelectRowsSubmission):
+                throw new InvalidOperationException(
+                    $"Submission is incompatible with scaffold step '{step.Id.Value}'.");
+        }
 
         bool satisfied = (step.Action.Value, step.SuccessCheck.Value, submission.Value) switch
         {
@@ -62,13 +72,187 @@ public static class ScaffoldStepEvaluator
             : new ScaffoldStepNotSatisfied();
     }
 
+    /// <summary>
+    /// The build is rejected if any piece is off a target row, past its span,
+    /// overlapping, or breaks "as many step-length rods as fit" (which bounds
+    /// the multiset per row to floor(L / S) step rods and L mod S unit rods).
+    /// It is complete when every target row is covered exactly.
+    /// </summary>
+    private static ScaffoldStepEvaluation EvaluateRowCompositions(
+        ScaffoldStep step,
+        PlacePieces place,
+        MatchesRowCompositions compositions,
+        PlacePiecesSubmission submission)
+    {
+        GridScene grid = SceneFor<GridScene>(step);
+        int stepLength = compositions.StepLength;
+
+        foreach (PlacedPiece piece in submission.Pieces)
+        {
+            if (!place.AllowedLengths.Contains(piece.Length))
+            {
+                throw new InvalidOperationException(
+                    $"Piece length {piece.Length} is not allowed on scaffold step '{step.Id.Value}'.");
+            }
+        }
+
+        Dictionary<int, GridRow> targets = grid.TargetRows.ToDictionary(row => row.Y);
+        bool allComplete = true;
+
+        foreach (IGrouping<int, PlacedPiece> rowPieces in submission.Pieces.GroupBy(piece => piece.Y))
+        {
+            if (!targets.TryGetValue(rowPieces.Key, out GridRow? target))
+            {
+                return new ScaffoldStepNotSatisfied();
+            }
+
+            PlacedPiece[] ordered = rowPieces.OrderBy(piece => piece.X).ToArray();
+            int end = target.Start + target.Length;
+
+            for (int index = 0; index < ordered.Length; index++)
+            {
+                PlacedPiece piece = ordered[index];
+                if (piece.X < target.Start || piece.X + piece.Length > end)
+                {
+                    return new ScaffoldStepNotSatisfied();
+                }
+
+                if (index > 0 && ordered[index - 1].X + ordered[index - 1].Length > piece.X)
+                {
+                    return new ScaffoldStepNotSatisfied();
+                }
+            }
+
+            int stepRods = ordered.Count(piece => piece.Length == stepLength);
+            int unitRods = ordered.Count(piece => piece.Length == 1);
+            if (stepRods > target.Length / stepLength || unitRods > target.Length % stepLength)
+            {
+                return new ScaffoldStepNotSatisfied();
+            }
+        }
+
+        foreach (GridRow target in grid.TargetRows)
+        {
+            PlacedPiece[] ordered = submission.Pieces
+                .Where(piece => piece.Y == target.Y)
+                .OrderBy(piece => piece.X)
+                .ToArray();
+
+            int cursor = target.Start;
+            foreach (PlacedPiece piece in ordered)
+            {
+                if (piece.X != cursor)
+                {
+                    allComplete = false;
+                    break;
+                }
+
+                cursor += piece.Length;
+            }
+
+            if (cursor != target.Start + target.Length)
+            {
+                allComplete = false;
+            }
+        }
+
+        return allComplete
+            ? new ScaffoldStepSatisfied()
+            : new ScaffoldStepAccepted();
+    }
+
+    /// <summary>Moving a row outside the expected set is rejected; a subset is accepted; the exact set completes.</summary>
+    private static ScaffoldStepEvaluation EvaluateRowPartition(
+        ScaffoldStep step,
+        MatchesRowPartition partition,
+        MoveRowsSubmission submission)
+    {
+        GridScene grid = SceneFor<GridScene>(step);
+        HashSet<int> referenceRows = grid.Reference.Select(piece => piece.Y).ToHashSet();
+        HashSet<int> moved = submission.MovedRows.ToHashSet();
+
+        foreach (int row in moved)
+        {
+            if (!referenceRows.Contains(row))
+            {
+                throw new InvalidOperationException(
+                    $"Row {row} has nothing to move on scaffold step '{step.Id.Value}'.");
+            }
+        }
+
+        HashSet<int> expected = partition.ExpectedMovedRows.ToHashSet();
+        if (!moved.IsSubsetOf(expected))
+        {
+            return new ScaffoldStepNotSatisfied();
+        }
+
+        return moved.SetEquals(expected)
+            ? new ScaffoldStepSatisfied()
+            : new ScaffoldStepAccepted();
+    }
+
+    /// <summary>
+    /// A selection outside the selectable rows, beyond the required count, or
+    /// that can no longer complete is rejected; a partial that could still
+    /// complete is accepted.
+    /// </summary>
+    private static ScaffoldStepEvaluation EvaluateRowSelection(
+        MatchesRowSelection selection,
+        SelectRowsSubmission submission)
+    {
+        int[] rows = submission.Rows.Distinct().ToArray();
+        if (rows.Length != submission.Rows.Count ||
+            rows.Length > selection.RequiredCount ||
+            rows.Any(row => !selection.SelectableRows.Contains(row)))
+        {
+            return new ScaffoldStepNotSatisfied();
+        }
+
+        switch (selection.Rule)
+        {
+            case SelectionRule.ExactSet:
+            {
+                HashSet<int> expected = selection.ExpectedRows.ToHashSet();
+                if (!rows.All(expected.Contains))
+                {
+                    return new ScaffoldStepNotSatisfied();
+                }
+
+                return rows.Length == expected.Count
+                    ? new ScaffoldStepSatisfied()
+                    : new ScaffoldStepAccepted();
+            }
+
+            case SelectionRule.AdjacentInList:
+            {
+                if (rows.Length < selection.RequiredCount)
+                {
+                    return new ScaffoldStepAccepted();
+                }
+
+                int[] positions = rows
+                    .Select(row => selection.SelectableRows.ToList().IndexOf(row))
+                    .OrderBy(position => position)
+                    .ToArray();
+                bool adjacent = positions.Zip(positions.Skip(1)).All(pair => pair.Second - pair.First == 1);
+
+                return adjacent
+                    ? new ScaffoldStepSatisfied()
+                    : new ScaffoldStepNotSatisfied();
+            }
+
+            default:
+                throw Unsupported("selection rule", selection.Rule);
+        }
+    }
+
     private static bool EvaluateLengthsAreEquivalent(
         Scaffold scaffold,
         PracticeItem practiceItem,
         ScaffoldStep step,
         MatchEquivalentLengthSubmission submission)
     {
-        RodEquivalenceScene scene = FreshSceneFor<RodEquivalenceScene>(step);
+        RodEquivalenceScene scene = SceneFor<RodEquivalenceScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
         RodResource unitRod = RequireResource<RodResource>(scene.UnitRodId, resources);
         RodResource probeRod = RequireResource<RodResource>(scene.ProbeRodId, resources);
@@ -85,7 +269,7 @@ public static class ScaffoldStepEvaluator
         ScaffoldStep step,
         ClassifyByFitSubmission submission)
     {
-        RodMeasurementScene scene = FreshSceneFor<RodMeasurementScene>(step);
+        RodMeasurementScene scene = SceneFor<RodMeasurementScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
         RodResource probeRod = RequireResource<RodResource>(scene.ProbeRodId, resources);
         RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(scene.SpanSeriesId, resources);
@@ -120,19 +304,13 @@ public static class ScaffoldStepEvaluator
         AllGapsTraversed check,
         TraverseAllGapsSubmission submission)
     {
-        RodGapScene scene = FreshSceneFor<RodGapScene>(step);
+        RodGapScene scene = SceneFor<RodGapScene>(step);
         IReadOnlyDictionary<ScaffoldResourceId, ScaffoldResource> resources = ResourceMap(scaffold);
 
         RodResource requiredRod = RequireResource<RodResource>(check.RequiredResourceId, resources);
         UnitLength requiredLength = ResolveLength(requiredRod.Length, practiceItem);
-        ScaffoldStep classificationStep = scaffold.Phases
-            .SelectMany(phase => phase.Steps)
-            .SingleOrDefault(candidate => candidate.Id == scene.ClassificationStepId)
-            ?? throw new InvalidOperationException(
-                $"Scaffold step '{scene.ClassificationStepId.Value}' does not exist.");
-        RodMeasurementScene measurement = FreshSceneFor<RodMeasurementScene>(classificationStep);
-        RodResource probeRod = RequireResource<RodResource>(measurement.ProbeRodId, resources);
-        RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(measurement.SpanSeriesId, resources);
+        RodResource probeRod = RequireResource<RodResource>(scene.StepRodId, resources);
+        RodSeriesResource spanSeries = RequireResource<RodSeriesResource>(scene.SpanSeriesId, resources);
         UnitLength probeLength = ResolveLength(probeRod.Length, practiceItem);
 
         List<UnitLength> includedLengths = spanSeries.Lengths
@@ -166,7 +344,7 @@ public static class ScaffoldStepEvaluator
         ScaffoldStep step,
         JoinQuantitiesSubmission submission)
     {
-        QuantityJoinScene scene = FreshSceneFor<QuantityJoinScene>(step);
+        QuantityJoinScene scene = SceneFor<QuantityJoinScene>(step);
 
         foreach (QuantityReference part in submission.Parts)
         {
@@ -266,11 +444,10 @@ public static class ScaffoldStepEvaluator
             _ => throw Unsupported("semantic entity", entity.Value)
         };
 
-    private static TScene FreshSceneFor<TScene>(ScaffoldStep step)
+    private static TScene SceneFor<TScene>(ScaffoldStep step)
         where TScene : class
     {
-        if (step.Scene.Value is not FreshScene fresh ||
-            fresh.Definition.Value is not TScene scene)
+        if (step.Scene.Value is not TScene scene)
         {
             throw new InvalidOperationException(
                 $"Scaffold step '{step.Id.Value}' does not use a {typeof(TScene).Name}.");

@@ -12,6 +12,5 @@ public readonly record struct SymbolId(string Value);
 public readonly record struct LatentMathId(string Value);
 
 public readonly record struct ScaffoldId(string Value);
-public readonly record struct ScaffoldPhaseId(string Value);
 public readonly record struct ScaffoldStepId(string Value);
 public readonly record struct ScaffoldResourceId(string Value);

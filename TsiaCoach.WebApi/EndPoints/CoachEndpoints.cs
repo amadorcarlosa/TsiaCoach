@@ -34,7 +34,7 @@ public static class CoachEndpoints
     {
         CoachingTurnResult result = await service.RunAsync(
             new AttemptId(attemptId),
-            request.Event,
+            request,
             cancellationToken);
 
         return result.Kind switch
@@ -44,7 +44,7 @@ public static class CoachEndpoints
             CoachingTurnResultKind.BadRequest =>
                 TypedResults.BadRequest(Problem(
                     StatusCodes.Status400BadRequest,
-                    "Coaching event is malformed or unsupported.")),
+                    "Coaching request is malformed or unsupported.")),
             CoachingTurnResultKind.NotFound =>
                 TypedResults.NotFound(Problem(
                     StatusCodes.Status404NotFound,

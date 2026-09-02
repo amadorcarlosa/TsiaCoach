@@ -38,6 +38,7 @@ const emit = defineEmits<{
   submit: []
   requestCoaching: []
   retryCoaching: []
+  answerProbe: [answer: string]
 }>()
 </script>
 
@@ -131,7 +132,9 @@ const emit = defineEmits<{
         :move="coachingMove"
         :error="coachingError"
         :attempt-id="coachingAttemptId"
+        :is-requesting="isCoachingRequesting"
         @retry="emit('retryCoaching')"
+        @answer-probe="emit('answerProbe', $event)"
       />
     </div>
   </article>

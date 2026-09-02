@@ -8,6 +8,9 @@ public sealed class CoachingAgentRunner(
     IAgentExecutor agentExecutor)
     : ICoachingAgentRunner
 {
+    internal const string JsonContextPreamble =
+        "Coaching context (JSON). Reply with exactly one JSON object.";
+
     public async Task<CoachingAgentRunResult> RunAsync(
         CoachingAgentDefinition definition,
         CancellationToken cancellationToken)
@@ -33,16 +36,20 @@ public sealed class CoachingAgentRunner(
         CoachingAgentDefinition definition,
         CancellationToken cancellationToken)
     {
+        // The OpenAI Responses API rejects a json_object response format
+        // unless an input message literally contains the word "json";
+        // the system instructions do not count.
         ChatMessage[] messages =
         [
-            new(ChatRole.User, definition.Prompt)
+            new(ChatRole.User, JsonContextPreamble + definition.Prompt)
         ];
 
         AgentReply reply = await agentExecutor.RunAsync(
             created.Agent,
             definition.Model,
             messages,
-            cancellationToken);
+            cancellationToken,
+            ChatResponseFormat.Json);
 
         return reply switch
         {

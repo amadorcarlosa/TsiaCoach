@@ -1,34 +1,27 @@
 using TsiaCoach.Domain.Scaffolds;
+using TsiaCoach.Domain.ValueObjects;
 
 namespace TsiaCoach.Domain.Coaching;
 
+/// <summary>
+/// Any step on the scaffold's ordered path is a valid landing point. The
+/// resolver only confirms the authored id exists; it never searches.
+/// </summary>
 public static class ScaffoldEntryResolver
 {
     public static ScaffoldEntry Resolve(
         Scaffold scaffold,
-        ScaffoldPhasePurpose purpose)
+        ScaffoldStepId entryStepId)
     {
-        ScaffoldPhase[] matchingPhases = scaffold.Phases
-            .Where(phase => phase.Purpose == purpose)
-            .ToArray();
-
-        if (matchingPhases.Length != 1)
+        if (!scaffold.ContainsStep(entryStepId))
         {
             throw new InvalidOperationException(
-                matchingPhases.Length == 0
-                    ? $"Scaffold '{scaffold.Id.Value}' has no phase for purpose '{purpose}'."
-                    : $"Scaffold '{scaffold.Id.Value}' has multiple phases for purpose '{purpose}'.");
+                $"Scaffold '{scaffold.Id.Value}' has no step '{entryStepId.Value}'.");
         }
 
-        ScaffoldStep? entryStep = matchingPhases[0].Steps
-            .FirstOrDefault(step => step.CanStartCold);
-
-        if (entryStep is null)
-        {
-            throw new InvalidOperationException(
-                $"Scaffold phase '{matchingPhases[0].Id.Value}' has no cold-start step.");
-        }
-
-        return new ScaffoldEntry(scaffold.Id, entryStep.Id);
+        return new ScaffoldEntry(scaffold.Id, entryStepId);
     }
+
+    public static ScaffoldEntry Floor(Scaffold scaffold) =>
+        new(scaffold.Id, scaffold.FloorStep.Id);
 }

@@ -577,11 +577,11 @@ interface CoachingHarnessOptions {
   onRead?: (attemptId: string) => unknown
 }
 
-function askMove(focusPhraseIds: string[] = []) {
+function probeMove(focusPhraseIds: string[] = []) {
   return {
     move: {
-      type: 'askReadingQuestion',
-      message: 'What quantity does the phrase describe?',
+      type: 'askProbe',
+      message: 'What makes a number odd?',
       focusPhraseIds
     }
   }
@@ -606,7 +606,7 @@ async function createCoachingHarness(options: CoachingHarnessOptions = {}) {
       if (options.onCoach) {
         return options.onCoach(requestOptions ?? {})
       }
-      return askMove()
+      return probeMove()
     }
 
     if (url.endsWith('/checks') && options.onCheck) {
@@ -648,7 +648,66 @@ describe('sample item coaching store', () => {
     )
     expect(coachCalls[0]?.body).toEqual({ event: 'helpRequested' })
     expect(store.coachingState).toBe('shown')
-    expect(store.coachingMove).toMatchObject({ type: 'askReadingQuestion' })
+    expect(store.coachingMove).toMatchObject({ type: 'askProbe' })
+  })
+
+  it('answerProbe_SendsProbeAnsweredWithTrimmedAnswer', async () => {
+    const { store, coachCalls } = await createCoachingHarness({
+      onCoach: (options) => {
+        if (options.body?.event === 'probeAnswered') {
+          return {
+            move: {
+              type: 'routeToStep',
+              message: 'Right, one left over. Let us use that.',
+              focusPhraseIds: [],
+              stepId: 'step-secret-entry'
+            }
+          }
+        }
+        return probeMove()
+      }
+    })
+
+    await store.requestCoaching()
+    await store.answerProbe('  one is left over after pairing  ')
+
+    expect(coachCalls[1]?.body).toEqual({
+      event: 'probeAnswered',
+      answer: 'one is left over after pairing'
+    })
+    expect(store.coachingState).toBe('shown')
+    expect(store.coachingMove).toMatchObject({ type: 'routeToStep' })
+
+    const view = coachingCardView(store.coachingMove, store.attemptProjection!.attemptId)
+    expect(view?.walkthroughHref).toBe('/scaffolds/attempt-item-1')
+    expect(view?.probeInput).toBe(false)
+    expect(JSON.stringify(view)).not.toContain('step-secret-entry')
+  })
+
+  it('answerProbe_RequiresAnOpenProbeAndAnAnswer', async () => {
+    const { store, coachCalls } = await createCoachingHarness()
+
+    await store.answerProbe('odd numbers')
+    expect(coachCalls).toHaveLength(0)
+
+    await store.requestCoaching()
+    await store.answerProbe('   ')
+    expect(coachCalls).toHaveLength(1)
+  })
+
+  it('answerProbe_IsNotOfferedAfterACheck', async () => {
+    const { store, coachCalls } = await createCoachingHarness({
+      startProjection: coachableIncorrect,
+      onCoach: () => ({
+        move: { type: 'diagnoseDifference', message: 'Not the sum.', focusPhraseIds: [] }
+      })
+    })
+
+    await store.requestCoaching()
+    await store.answerProbe('odd numbers')
+
+    expect(coachCalls).toHaveLength(1)
+    expect(coachCalls[0]?.body).toEqual({ event: 'diagnosisRequested' })
   })
 
   it('requestCoaching_AfterIncorrectSendsDiagnosisRequested', async () => {
@@ -708,7 +767,7 @@ describe('sample item coaching store', () => {
 
     expect(coachCalls).toHaveLength(1)
 
-    deferred.resolve(askMove())
+    deferred.resolve(probeMove())
     await Promise.all([first, second])
 
     expect(coachCalls).toHaveLength(1)
@@ -738,7 +797,7 @@ describe('sample item coaching store', () => {
     store.selectAnswer('a-2')
     await store.submitSelectedAnswer()
 
-    deferred.resolve(askMove())
+    deferred.resolve(probeMove())
     await pending
 
     expect(store.coachingMove).toBeNull()
@@ -800,7 +859,7 @@ describe('sample item coaching store', () => {
           failNext = false
           throw new Error('network down')
         }
-        return askMove()
+        return probeMove()
       }
     })
 
@@ -855,7 +914,7 @@ describe('sample item coaching store', () => {
 
   it('coachingFocus_UsesFirstKnownPhrase', async () => {
     const { store } = await createCoachingHarness({
-      onCoach: () => askMove(['foreign-phrase', 'item-1-phrase-1'])
+      onCoach: () => probeMove(['foreign-phrase', 'item-1-phrase-1'])
     })
 
     await store.requestCoaching()
@@ -868,7 +927,7 @@ describe('sample item coaching store', () => {
 
   it('coachingFocus_IgnoresForeignPhraseId', async () => {
     const { store } = await createCoachingHarness({
-      onCoach: () => askMove(['foreign-phrase', 'item-2-phrase-1'])
+      onCoach: () => probeMove(['foreign-phrase', 'item-2-phrase-1'])
     })
 
     await store.requestCoaching()

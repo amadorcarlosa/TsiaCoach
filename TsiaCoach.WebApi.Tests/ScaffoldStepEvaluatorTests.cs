@@ -1,6 +1,5 @@
 using System.Text.Json;
 
-using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.SampleQuestions;
 using TsiaCoach.Domain.SampleScaffolds;
@@ -13,311 +12,333 @@ namespace TsiaCoach.WebApi.Tests;
 
 public sealed class ScaffoldStepEvaluatorTests
 {
-    [Test]
-    public async Task EstablishRodLength_TwoUnitRodsSatisfyLengthsAreEquivalent()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.EstablishRodLengthStepId,
-            new MatchEquivalentLengthSubmission(new RodCount(2)));
+    // ------------------------------------------------------------ step 1: rebuild
 
-        await AssertSatisfied(evaluation);
+    [Test]
+    public async Task Rebuild_CompleteCompositionOnEveryRowIsSatisfied()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            ScaffoldSessionTestData.CompleteRebuildSubmission()));
     }
 
     [Test]
-    public async Task ClassifyLengths_CompleteComputedFitMapSatisfiesCheck()
+    public async Task Rebuild_LegalPartialIsAccepted()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ClassifyLengthsStepId,
-            new ClassifyByFitSubmission(
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(2, 1, 5), new PlacedPiece(2, 1, 8)])));
+    }
+
+    [Test]
+    public async Task Rebuild_EmptyBoardIsAccepted()
+    {
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([])));
+    }
+
+    [Test]
+    public async Task Rebuild_WhiteWhereATwoFitsIsRejected()
+    {
+        // Row 4 is even: no white belongs on it at all.
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 1, 4)])));
+    }
+
+    [Test]
+    public async Task Rebuild_SecondWhiteOnAnOddRowIsRejected()
+    {
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 1, 5), new PlacedPiece(1, 2, 5)])));
+    }
+
+    [Test]
+    public async Task Rebuild_PiecePastTheRodIsRejected()
+    {
+        // Row 3 spans columns 1..3; a red at 3 would end at 5.
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(2, 3, 3)])));
+    }
+
+    [Test]
+    public async Task Rebuild_OverlappingPiecesAreRejected()
+    {
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(2, 1, 6), new PlacedPiece(2, 2, 6)])));
+    }
+
+    [Test]
+    public async Task Rebuild_PieceOffAnyTargetRowIsRejected()
+    {
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(2, 1, 11)])));
+    }
+
+    [Test]
+    public async Task Rebuild_CompositionWithAGapIsAcceptedNotComplete()
+    {
+        // Row 6 holds its three reds but the first sits at column 3, not 1.
+        PlacedPiece[] pieces = ScaffoldSessionTestData.CompleteRebuildSubmission().Pieces
+            .Where(piece => piece.Y != 6)
+            .Append(new PlacedPiece(2, 3, 6))
+            .Append(new PlacedPiece(2, 5, 6))
+            .ToArray();
+
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission(pieces)));
+    }
+
+    [Test]
+    public async Task Rebuild_RejectsALengthTheStepDoesNotOffer()
+    {
+        await AssertInvalid(
+            "not allowed",
+            () => Evaluate(
+                ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+                new PlacePiecesSubmission([new PlacedPiece(3, 1, 3)])));
+    }
+
+    // ------------------------------------------------------------ step 1b and 1c landings
+
+    [Test]
+    public async Task ContrastPair_EightAndNineRebuiltIsSatisfied()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.ContrastPairStepId,
+            new PlacePiecesSubmission(
             [
-                new(new UnitLength(1), FitClassification.OneUnitLeftover),
-                new(new UnitLength(2), FitClassification.Flush),
-                new(new UnitLength(3), FitClassification.OneUnitLeftover),
-                new(new UnitLength(4), FitClassification.Flush),
-                new(new UnitLength(5), FitClassification.OneUnitLeftover),
-                new(new UnitLength(6), FitClassification.Flush),
-                new(new UnitLength(7), FitClassification.OneUnitLeftover),
-                new(new UnitLength(8), FitClassification.Flush),
-                new(new UnitLength(9), FitClassification.OneUnitLeftover),
-                new(new UnitLength(10), FitClassification.Flush)
-            ]));
-
-        await AssertSatisfied(evaluation);
+                .. ParityLadderScaffold.Composition(8, startX: 1, y: 2).Select(ToPlaced),
+                .. ParityLadderScaffold.Composition(9, startX: 1, y: 4).Select(ToPlaced)
+            ])));
     }
 
     [Test]
-    public async Task NameOddClass_OddIntegerDomainSatisfiesCheck()
+    public async Task MarkTheWhites_AllOddRowsIsSatisfiedAndAnEvenRowIsRejected()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.NameOddClassStepId,
-            new NameFitClassificationSubmission(IntegerDomain.OddIntegers));
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.MarkTheWhitesStepId,
+            new SelectRowsSubmission([1, 3, 5, 7, 9])));
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.MarkTheWhitesStepId,
+            new SelectRowsSubmission([1, 3])));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.MarkTheWhitesStepId,
+            new SelectRowsSubmission([1, 2])));
+    }
 
-        await AssertSatisfied(evaluation);
+    // ------------------------------------------------------------ step 2: sort
+
+    [Test]
+    public async Task Sort_AllRedOnlyRowsMovedIsSatisfied()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.SortPairedEvensStepId,
+            ScaffoldSessionTestData.SortEvensSubmission()));
     }
 
     [Test]
-    public async Task TraverseOddGaps_AllFourOrderedTraversalsSatisfyCheck()
+    public async Task Sort_SomeRedOnlyRowsMovedIsAccepted()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
-            CorrectGapSubmission());
-
-        await AssertSatisfied(evaluation);
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.SortPairedEvensStepId,
+            new MoveRowsSubmission([2, 4])));
     }
 
     [Test]
-    public async Task StateOddStepLength_TwoSatisfiesLatentScalar()
+    public async Task Sort_MovingAWhiteEndedRowIsRejected()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.StateOddStepLengthStepId,
-            new EnterScalarSubmission(2m));
-
-        await AssertSatisfied(evaluation);
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.SortPairedEvensStepId,
+            new MoveRowsSubmission([2, 3])));
     }
 
     [Test]
-    public async Task JoinKnownQuantities_AuthoredPartsSatisfyComposition()
+    public async Task Sort_RejectsARowWithNothingOnIt()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinKnownQuantitiesStepId,
-            CorrectJoinSubmission());
+        await AssertInvalid(
+            "nothing to move",
+            () => Evaluate(
+                ParityLadderScaffold.SortPairedEvensStepId,
+                new MoveRowsSubmission([11])));
+    }
 
-        await AssertSatisfied(evaluation);
+    // ------------------------------------------------------------ step 3: consecutive odds
+
+    [Test]
+    public async Task Consecutive_NeighbouringOddsAreSatisfied()
+    {
+        foreach ((int first, int second) in new[] { (1, 3), (3, 5), (5, 7), (7, 9), (9, 7) })
+        {
+            await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+                ParityLadderScaffold.SelectConsecutiveOddsStepId,
+                new SelectRowsSubmission([first, second])));
+        }
     }
 
     [Test]
-    public async Task CountBaseParts_TwoSatisfiesRodCountScalar()
+    public async Task Consecutive_FirstClickIsAccepted()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.CountBasePartsStepId,
-            new EnterScalarSubmission(2m));
-
-        await AssertSatisfied(evaluation);
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            new SelectRowsSubmission([3])));
     }
 
     [Test]
-    public async Task MeasureRemainder_TwoSatisfiesUnitLengthScalar()
+    public async Task Consecutive_NonNeighboursTooManyOrEvenRowsAreRejected()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.MeasureRemainderStepId,
-            new EnterScalarSubmission(2m));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            new SelectRowsSubmission([3, 7])));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            new SelectRowsSubmission([3, 5, 7])));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            new SelectRowsSubmission([2, 3])));
+    }
 
-        await AssertSatisfied(evaluation);
+    // ------------------------------------------------------------ step 3b and 4
+
+    [Test]
+    public async Task FillTheGap_OneRedAfterTheThreeIsSatisfied()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.FillTheGapStepId,
+            ScaffoldSessionTestData.FillTheGapSubmission()));
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.FillTheGapStepId,
+            new PlacePiecesSubmission([])));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.FillTheGapStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 4, 3)])));
     }
 
     [Test]
-    public async Task JoinUnknownQuantities_AuthoredPartsSatisfyComposition()
+    public async Task NameTheSmaller_ThreeIsSatisfiedAndFiveIsRejected()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinUnknownQuantitiesStepId,
-            CorrectJoinSubmission());
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.NameTheSmallerStepId,
+            ScaffoldSessionTestData.NameTheSmallerSubmission()));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.NameTheSmallerStepId,
+            new SelectRowsSubmission([4])));
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.NameTheSmallerStepId,
+            new SelectRowsSubmission([])));
+    }
 
-        await AssertSatisfied(evaluation);
+    // ------------------------------------------------------------ steps 5 to 7
+
+    [Test]
+    public async Task JoinAndReadSum_AuthoredPartsSatisfyComposition()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.JoinAndReadSumStepId,
+            ScaffoldSessionTestData.CorrectJoinSubmission()));
     }
 
     [Test]
-    public async Task ComposeExpression_ComposedMathObjectSatisfiesCheck()
+    public async Task JoinQuantities_WrongPartCompositionIsNotSatisfied()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ComposeExpressionStepId,
-            new BuildExpressionSubmission(PracticeItemOne.RequestedValueComposed.MathObjectId));
-
-        await AssertSatisfied(evaluation);
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.JoinAndReadSumStepId,
+            new JoinQuantitiesSubmission(
+            [
+                new SemanticQuantityReference(PracticeItemOne.N.Id),
+                new SemanticQuantityReference(PracticeItemOne.ConsecutiveOddIntegers.Id)
+            ])));
     }
 
     [Test]
-    public async Task SimplifyExpression_SimplifiedMathObjectSatisfiesCheck()
+    public async Task NameBarCount_TwoSatisfiesRodCountScalar()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SimplifyExpressionStepId,
-            new BuildExpressionSubmission(PracticeItemOne.RequestedValueSimplified.MathObjectId));
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.NameBarCountStepId,
+            new EnterScalarSubmission(2m)));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.NameBarCountStepId,
+            new EnterScalarSubmission(3m)));
+    }
 
-        await AssertSatisfied(evaluation);
+    [Test]
+    public async Task NameLeftoverLength_TwoSatisfiesUnitLengthScalar()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(Evaluate(
+            ParityLadderScaffold.NameLeftoverLengthStepId,
+            new EnterScalarSubmission(2m)));
+    }
+
+    // ------------------------------------------------------------ shared vocabulary not on this path
+
+    [Test]
+    public async Task MatchEquivalentLength_TwoUnitRodsSatisfyLengthsAreEquivalent()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            EquivalenceScaffold(),
+            PracticeItemOne.Item,
+            EquivalenceStepId,
+            new MatchEquivalentLengthSubmission(new RodCount(2))));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            EquivalenceScaffold(),
+            PracticeItemOne.Item,
+            EquivalenceStepId,
+            new MatchEquivalentLengthSubmission(new RodCount(1))));
+    }
+
+    [Test]
+    public async Task BuildExpression_SimplifiedMathObjectSatisfiesCheck()
+    {
+        await AssertOutcome<ScaffoldStepSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            ExpressionStepId,
+            new BuildExpressionSubmission(PracticeItemOne.RequestedValueSimplified.MathObjectId)));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            ExpressionStepId,
+            new BuildExpressionSubmission(new MathObjectId("math-answer-a"))));
     }
 
     [Test]
     public async Task SelectAnswer_CorrectChoiceSatisfiesCheck()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SelectAnswerStepId,
-            new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId));
-
-        await AssertSatisfied(evaluation);
+        await AssertOutcome<ScaffoldStepSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            AnswerStepId,
+            new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId)));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(ScaffoldStepEvaluator.Evaluate(
+            SymbolicScaffold(),
+            PracticeItemOne.Item,
+            AnswerStepId,
+            new SelectAnswerChoiceSubmission(new AnswerChoiceId("answer-a"))));
     }
 
-    [Test]
-    public async Task MatchEquivalentLength_WrongRodCountIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.EstablishRodLengthStepId,
-            new MatchEquivalentLengthSubmission(new RodCount(1)));
-
-        await AssertNotSatisfied(evaluation);
-    }
+    // ------------------------------------------------------------ immutability
 
     [Test]
-    public async Task ClassifyByFit_WrongClassificationIsNotSatisfied()
+    public async Task PlacePiecesSubmission_CannotBeMutatedAfterConstruction()
     {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ClassifyLengthsStepId,
-            new ClassifyByFitSubmission(
-            [
-                new(new UnitLength(1), FitClassification.Flush),
-                new(new UnitLength(2), FitClassification.Flush),
-                new(new UnitLength(3), FitClassification.OneUnitLeftover),
-                new(new UnitLength(4), FitClassification.Flush),
-                new(new UnitLength(5), FitClassification.OneUnitLeftover),
-                new(new UnitLength(6), FitClassification.Flush),
-                new(new UnitLength(7), FitClassification.OneUnitLeftover),
-                new(new UnitLength(8), FitClassification.Flush),
-                new(new UnitLength(9), FitClassification.OneUnitLeftover),
-                new(new UnitLength(10), FitClassification.Flush)
-            ]));
+        var original = new PlacedPiece(2, 1, 1);
+        var replacement = new PlacedPiece(1, 3, 1);
+        var pieces = new List<PlacedPiece> { original };
+        var submission = new PlacePiecesSubmission(pieces);
 
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task NameFitClassification_WrongDomainIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.NameOddClassStepId,
-            new NameFitClassificationSubmission(IntegerDomain.EvenIntegers));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task TraverseAllGaps_IncompleteTraversalIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
-            new TraverseAllGapsSubmission(
-            [
-                new(new UnitLength(1), new UnitLength(3), ParityLadderScaffold.OddStepRodId),
-                new(new UnitLength(3), new UnitLength(5), ParityLadderScaffold.OddStepRodId),
-                new(new UnitLength(5), new UnitLength(7), ParityLadderScaffold.OddStepRodId)
-            ]));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task TraverseAllGaps_ReversedTraversalIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.TraverseOddGapsStepId,
-            new TraverseAllGapsSubmission(
-            [
-                new(new UnitLength(3), new UnitLength(1), ParityLadderScaffold.OddStepRodId),
-                new(new UnitLength(3), new UnitLength(5), ParityLadderScaffold.OddStepRodId),
-                new(new UnitLength(5), new UnitLength(7), ParityLadderScaffold.OddStepRodId),
-                new(new UnitLength(7), new UnitLength(9), ParityLadderScaffold.OddStepRodId)
-            ]));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task JoinQuantities_WrongKnownPartCompositionIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.JoinKnownQuantitiesStepId,
-            new JoinQuantitiesSubmission(
-            [
-                new SemanticQuantityReference(PracticeItemOne.N.Id),
-                new SemanticQuantityReference(PracticeItemOne.ConsecutiveOddIntegers.Id)
-            ]));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task EnterScalar_WrongValueIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.CountBasePartsStepId,
-            new EnterScalarSubmission(3m));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task BuildExpression_KnownWrongMathObjectIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.ComposeExpressionStepId,
-            new BuildExpressionSubmission(new MathObjectId("math-answer-a")));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task SelectAnswerChoice_KnownDistractorIsNotSatisfied()
-    {
-        ScaffoldStepEvaluation evaluation = Evaluate(
-            ParityLadderScaffold.SelectAnswerStepId,
-            new SelectAnswerChoiceSubmission(new AnswerChoiceId("answer-a")));
-
-        await AssertNotSatisfied(evaluation);
-    }
-
-    [Test]
-    public async Task ClassifyByFitSubmission_CannotBeMutatedAfterConstruction()
-    {
-        var original = new FitClassificationEntry(
-            new UnitLength(1),
-            FitClassification.OneUnitLeftover);
-        var replacement = new FitClassificationEntry(
-            new UnitLength(2),
-            FitClassification.Flush);
-        var classifications = new List<FitClassificationEntry> { original };
-        var submission = new ClassifyByFitSubmission(classifications);
-
-        classifications[0] = replacement;
+        pieces[0] = replacement;
         NotSupportedException? exception = CaptureMutationFailure(
-            () => ((IList<FitClassificationEntry>)submission.Classifications)[0] = replacement);
+            () => ((IList<PlacedPiece>)submission.Pieces)[0] = replacement);
 
-        await Assert.That(submission.Classifications[0])
-            .IsEqualTo(original);
-        await Assert.That(submission.Classifications is FitClassificationEntry[])
-            .IsFalse();
-        await Assert.That(typeof(ClassifyByFitSubmission)
-                .GetProperty(nameof(ClassifyByFitSubmission.Classifications))!
-                .SetMethod is null)
-            .IsTrue();
-        await Assert.That(exception is not null)
-            .IsTrue();
-    }
-
-    [Test]
-    public async Task TraverseAllGapsSubmission_CannotBeMutatedAfterConstruction()
-    {
-        var original = new GapTraversal(
-            new UnitLength(1),
-            new UnitLength(3),
-            ParityLadderScaffold.OddStepRodId);
-        var replacement = new GapTraversal(
-            new UnitLength(3),
-            new UnitLength(5),
-            ParityLadderScaffold.OddStepRodId);
-        var traversals = new List<GapTraversal> { original };
-        var submission = new TraverseAllGapsSubmission(traversals);
-
-        traversals[0] = replacement;
-        NotSupportedException? exception = CaptureMutationFailure(
-            () => ((IList<GapTraversal>)submission.Traversals)[0] = replacement);
-
-        await Assert.That(submission.Traversals[0])
-            .IsEqualTo(original);
-        await Assert.That(submission.Traversals is GapTraversal[])
-            .IsFalse();
-        await Assert.That(typeof(TraverseAllGapsSubmission)
-                .GetProperty(nameof(TraverseAllGapsSubmission.Traversals))!
-                .SetMethod is null)
-            .IsTrue();
-        await Assert.That(exception is not null)
-            .IsTrue();
+        await Assert.That(submission.Pieces[0]).IsEqualTo(original);
+        await Assert.That(submission.Pieces is PlacedPiece[]).IsFalse();
+        await Assert.That(exception is not null).IsTrue();
     }
 
     [Test]
@@ -333,17 +354,12 @@ public sealed class ScaffoldStepEvaluatorTests
         NotSupportedException? exception = CaptureMutationFailure(
             () => ((IList<QuantityReference>)submission.Parts)[0] = replacement);
 
-        await Assert.That(submission.Parts[0])
-            .IsEqualTo(original);
-        await Assert.That(submission.Parts is QuantityReference[])
-            .IsFalse();
-        await Assert.That(typeof(JoinQuantitiesSubmission)
-                .GetProperty(nameof(JoinQuantitiesSubmission.Parts))!
-                .SetMethod is null)
-            .IsTrue();
-        await Assert.That(exception is not null)
-            .IsTrue();
+        await Assert.That(submission.Parts[0]).IsEqualTo(original);
+        await Assert.That(submission.Parts is QuantityReference[]).IsFalse();
+        await Assert.That(exception is not null).IsTrue();
     }
+
+    // ------------------------------------------------------------ contract violations
 
     [Test]
     public async Task Evaluate_RejectsForeignPracticeItem()
@@ -353,8 +369,8 @@ public sealed class ScaffoldStepEvaluatorTests
             () => ScaffoldStepEvaluator.Evaluate(
                 ParityLadderScaffold.Definition,
                 PracticeItemTwo.Item,
-                ParityLadderScaffold.SelectAnswerStepId,
-                new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId)));
+                ParityLadderScaffold.JoinAndReadSumStepId,
+                ScaffoldSessionTestData.CorrectJoinSubmission()));
     }
 
     [Test]
@@ -364,7 +380,7 @@ public sealed class ScaffoldStepEvaluatorTests
             "does not exist",
             () => Evaluate(
                 new ScaffoldStepId("step-unknown"),
-                new SelectAnswerChoiceSubmission(PracticeItemOne.Item.CorrectAnswerId)));
+                new EnterScalarSubmission(2m)));
     }
 
     [Test]
@@ -373,58 +389,36 @@ public sealed class ScaffoldStepEvaluatorTests
         await AssertInvalid(
             "incompatible",
             () => Evaluate(
-                ParityLadderScaffold.SelectAnswerStepId,
-                new MatchEquivalentLengthSubmission(new RodCount(2))));
-    }
-
-    [Test]
-    public async Task ClassifyByFit_RejectsDuplicateLengthEntry()
-    {
+                ParityLadderScaffold.JoinAndReadSumStepId,
+                new MoveRowsSubmission([2])));
         await AssertInvalid(
-            "Duplicate classification",
+            "incompatible",
             () => Evaluate(
-                ParityLadderScaffold.ClassifyLengthsStepId,
-                new ClassifyByFitSubmission(
-                [
-                    new(new UnitLength(1), FitClassification.OneUnitLeftover),
-                    new(new UnitLength(1), FitClassification.Flush)
-                ])));
-    }
-
-    [Test]
-    public async Task TraverseAllGaps_RejectsUnknownResource()
-    {
+                ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+                new SelectRowsSubmission([1])));
         await AssertInvalid(
-            "does not exist",
+            "incompatible",
             () => Evaluate(
-                ParityLadderScaffold.TraverseOddGapsStepId,
-                new TraverseAllGapsSubmission(
-                [
-                    new(new UnitLength(1), new UnitLength(3), new ScaffoldResourceId("resource-unknown"))
-                ])));
+                ParityLadderScaffold.SortPairedEvensStepId,
+                ScaffoldSessionTestData.CorrectJoinSubmission()));
     }
 
     [Test]
-    public async Task JoinQuantities_RejectsUnknownSemanticEntity()
+    public async Task JoinQuantities_RejectsUnknownSemanticEntityOrLatentExpression()
     {
         await AssertInvalid(
             "Semantic entity",
             () => Evaluate(
-                ParityLadderScaffold.JoinKnownQuantitiesStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
                 new JoinQuantitiesSubmission(
                 [
                     new SemanticQuantityReference(new SemanticEntityId("entity-unknown")),
                     new LatentExpressionReference(PracticeItemOne.SecondMember.Id)
                 ])));
-    }
-
-    [Test]
-    public async Task JoinQuantities_RejectsUnknownLatentExpression()
-    {
         await AssertInvalid(
             "Latent math",
             () => Evaluate(
-                ParityLadderScaffold.JoinKnownQuantitiesStepId,
+                ParityLadderScaffold.JoinAndReadSumStepId,
                 new JoinQuantitiesSubmission(
                 [
                     new SemanticQuantityReference(PracticeItemOne.N.Id),
@@ -432,24 +426,69 @@ public sealed class ScaffoldStepEvaluatorTests
                 ])));
     }
 
+    // ------------------------------------------------------------ authoring validation
+
     [Test]
-    public async Task BuildExpression_RejectsUnknownMathObject()
+    public async Task ScaffoldCreate_RejectsGridTargetRowOutsideTheGrid()
     {
         await AssertInvalid(
-            "Math object",
-            () => Evaluate(
-                ParityLadderScaffold.ComposeExpressionStepId,
-                new BuildExpressionSubmission(new MathObjectId("math-unknown"))));
+            "target row outside the grid",
+            () => Scaffold.Create(
+                id: new ScaffoldId("scaffold-grid-row-outside"),
+                practiceItem: PracticeItemOne.Item,
+                resources: ParityLadderScaffold.Definition.Resources,
+                steps:
+                [
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
+                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
+                        Prompt: new ScaffoldPrompt("Build.", []),
+                        Scene: new GridScene(8, 4, [new GridPiece(PieceKind.Rod, 3, 1, 1)], [new GridRow(1, 6, 3)]),
+                        Action: new PlacePieces([2, 1]),
+                        SuccessCheck: new MatchesRowCompositions(2))
+                ]));
     }
 
     [Test]
-    public async Task SelectAnswerChoice_RejectsUnknownAnswerChoice()
+    public async Task ScaffoldCreate_RejectsPlacingWithoutTargetRows()
     {
         await AssertInvalid(
-            "does not belong to practice item",
-            () => Evaluate(
-                ParityLadderScaffold.SelectAnswerStepId,
-                new SelectAnswerChoiceSubmission(new AnswerChoiceId("answer-unknown"))));
+            "no target rows",
+            () => Scaffold.Create(
+                id: new ScaffoldId("scaffold-grid-no-targets"),
+                practiceItem: PracticeItemOne.Item,
+                resources: ParityLadderScaffold.Definition.Resources,
+                steps:
+                [
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
+                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
+                        Prompt: new ScaffoldPrompt("Build.", []),
+                        Scene: new GridScene(8, 4, [new GridPiece(PieceKind.Rod, 3, 1, 1)], []),
+                        Action: new PlacePieces([2, 1]),
+                        SuccessCheck: new MatchesRowCompositions(2))
+                ]));
+    }
+
+    [Test]
+    public async Task ScaffoldCreate_RejectsExpectedMovedRowWithNothingOnIt()
+    {
+        await AssertInvalid(
+            "nothing is on it",
+            () => Scaffold.Create(
+                id: new ScaffoldId("scaffold-grid-move-empty"),
+                practiceItem: PracticeItemOne.Item,
+                resources: ParityLadderScaffold.Definition.Resources,
+                steps:
+                [
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
+                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
+                        Prompt: new ScaffoldPrompt("Sort.", []),
+                        Scene: new GridScene(20, 4, [new GridPiece(PieceKind.Rod, 2, 1, 1)], []),
+                        Action: new MoveRows(10),
+                        SuccessCheck: new MatchesRowPartition([1, 2]))
+                ]));
     }
 
     [Test]
@@ -469,104 +508,19 @@ public sealed class ScaffoldStepEvaluatorTests
                         Role: RodRole.ProbeAndStep),
                     new RodSeriesResource(
                         Id: new ScaffoldResourceId("resource-spans"),
-                        Lengths:
-                        [
-                            new UnitLength(1),
-                            new UnitLength(2),
-                            new UnitLength(3)
-                        ])
+                        Lengths: [new UnitLength(1), new UnitLength(2), new UnitLength(3)])
                 ],
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step"),
-                                Prompt: new ScaffoldPrompt("Classify.", []),
-                                Scene: new FreshScene(
-                                    new RodMeasurementScene(
-                                        ProbeRodId: new ScaffoldResourceId("resource-probe"),
-                                        SpanSeriesId: new ScaffoldResourceId("resource-spans"))),
-                                Action: new ClassifyByFit(),
-                                SuccessCheck: new MatchesComputedFit())
-                        ])
-                ]));
-    }
-
-    [Test]
-    public async Task ScaffoldCreate_RejectsGapCheckUsingDifferentRodThanScene()
-    {
-        await AssertInvalid(
-            "must use the scene step rod",
-            () => Scaffold.Create(
-                id: new ScaffoldId("scaffold-gap-rod-mismatch"),
-                practiceItem: PracticeItemOne.Item,
-                resources: ParityLadderScaffold.Definition.Resources,
-                phases:
-                [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
-                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            ValidClassificationStep(),
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step-gap"),
-                                Prompt: new ScaffoldPrompt("Traverse gaps.", []),
-                                Scene: new FreshScene(
-                                    new RodGapScene(
-                                        StepRodId: ParityLadderScaffold.UnitRodId,
-                                        ClassificationStepId: ParityLadderScaffold.ClassifyLengthsStepId,
-                                        IncludedOutcome: FitClassification.OneUnitLeftover)),
-                                Action: new TraverseAllGaps(),
-                                SuccessCheck: new AllGapsTraversed(
-                                    ParityLadderScaffold.OddStepRodId))
-                        ])
-                ]));
-    }
-
-    [Test]
-    public async Task ScaffoldCreate_RejectsGapSceneReferencingNonClassificationStep()
-    {
-        ScaffoldStepId sourceStepId = new("step-equivalence-source");
-
-        await AssertInvalid(
-            "must reference a prior classification step",
-            () => Scaffold.Create(
-                id: new ScaffoldId("scaffold-gap-non-classification-source"),
-                practiceItem: PracticeItemOne.Item,
-                resources: ParityLadderScaffold.Definition.Resources,
-                phases:
-                [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
-                        Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: sourceStepId,
-                                Prompt: new ScaffoldPrompt("Match rods.", []),
-                                Scene: new FreshScene(
-                                    new RodEquivalenceScene(
-                                        UnitRodId: ParityLadderScaffold.UnitRodId,
-                                        ProbeRodId: ParityLadderScaffold.OddStepRodId)),
-                                Action: new MatchEquivalentLength(),
-                                SuccessCheck: new LengthsAreEquivalent()),
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step-gap"),
-                                Prompt: new ScaffoldPrompt("Traverse gaps.", []),
-                                Scene: new FreshScene(
-                                    new RodGapScene(
-                                        StepRodId: ParityLadderScaffold.OddStepRodId,
-                                        ClassificationStepId: sourceStepId,
-                                        IncludedOutcome: FitClassification.OneUnitLeftover)),
-                                Action: new TraverseAllGaps(),
-                                SuccessCheck: new AllGapsTraversed(
-                                    ParityLadderScaffold.OddStepRodId))
-                        ])
+                        Prompt: new ScaffoldPrompt("Classify.", []),
+                        Scene: new RodMeasurementScene(
+                            ProbeRodId: new ScaffoldResourceId("resource-probe"),
+                            SpanSeriesId: new ScaffoldResourceId("resource-spans")),
+                        Action: new ClassifyByFit(),
+                        SuccessCheck: new MatchesComputedFit())
                 ]));
     }
 
@@ -574,26 +528,35 @@ public sealed class ScaffoldStepEvaluatorTests
     public async Task ScaffoldCreate_RejectsEvaluatorActionWithIncompatibleScene()
     {
         await AssertInvalid(
-            "must use a fresh RodEquivalenceScene",
+            "must use a RodEquivalenceScene",
             () => Scaffold.Create(
                 id: new ScaffoldId("scaffold-action-scene-mismatch"),
                 practiceItem: PracticeItemOne.Item,
                 resources: ParityLadderScaffold.Definition.Resources,
-                phases:
+                steps:
                 [
-                    new ScaffoldPhase(
-                        Id: new ScaffoldPhaseId("phase"),
+                    new ScaffoldStep(
+                        Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
-                        Steps:
-                        [
-                            new ScaffoldStep(
-                                Id: new ScaffoldStepId("step"),
-                                Prompt: new ScaffoldPrompt("Match rods.", []),
-                                Scene: new FreshScene(new AnswerChoiceScene()),
-                                Action: new MatchEquivalentLength(),
-                                SuccessCheck: new LengthsAreEquivalent())
-                        ])
+                        Prompt: new ScaffoldPrompt("Match rods.", []),
+                        Scene: new AnswerChoiceScene(),
+                        Action: new MatchEquivalentLength(),
+                        SuccessCheck: new LengthsAreEquivalent())
                 ]));
+    }
+
+    [Test]
+    public async Task ScaffoldCreate_RejectsDuplicateStepIds()
+    {
+        ScaffoldStep step = ParityLadderScaffold.Definition.FloorStep;
+
+        await AssertInvalid(
+            "Duplicate scaffold step",
+            () => Scaffold.Create(
+                id: new ScaffoldId("scaffold-duplicate-step"),
+                practiceItem: PracticeItemOne.Item,
+                resources: ParityLadderScaffold.Definition.Resources,
+                steps: [step, step]));
     }
 
     [Test]
@@ -602,6 +565,7 @@ public sealed class ScaffoldStepEvaluatorTests
         ScaffoldStepEvaluation[] outcomes =
         [
             new ScaffoldStepSatisfied(),
+            new ScaffoldStepAccepted(),
             new ScaffoldStepNotSatisfied()
         ];
 
@@ -614,6 +578,57 @@ public sealed class ScaffoldStepEvaluatorTests
         await Assert.That(json).DoesNotContain("Value");
     }
 
+    // ------------------------------------------------------------ helpers
+
+    private static readonly ScaffoldStepId EquivalenceStepId = new("step-equivalence");
+    private static readonly ScaffoldStepId ExpressionStepId = new("step-expression");
+    private static readonly ScaffoldStepId AnswerStepId = new("step-answer");
+
+    private static Scaffold EquivalenceScaffold() =>
+        Scaffold.Create(
+            id: new ScaffoldId("scaffold-equivalence"),
+            practiceItem: PracticeItemOne.Item,
+            resources: ParityLadderScaffold.Definition.Resources,
+            steps:
+            [
+                new ScaffoldStep(
+                    Id: EquivalenceStepId,
+                    Purpose: ScaffoldPhasePurpose.ConceptFormation,
+                    Prompt: new ScaffoldPrompt("Match rods.", []),
+                    Scene: new RodEquivalenceScene(
+                        UnitRodId: ParityLadderScaffold.UnitRodId,
+                        ProbeRodId: ParityLadderScaffold.OddStepRodId),
+                    Action: new MatchEquivalentLength(),
+                    SuccessCheck: new LengthsAreEquivalent())
+            ]);
+
+    private static Scaffold SymbolicScaffold() =>
+        Scaffold.Create(
+            id: new ScaffoldId("scaffold-symbolic"),
+            practiceItem: PracticeItemOne.Item,
+            resources: ParityLadderScaffold.Definition.Resources,
+            steps:
+            [
+                new ScaffoldStep(
+                    Id: ExpressionStepId,
+                    Purpose: ScaffoldPhasePurpose.Generalization,
+                    Prompt: new ScaffoldPrompt("Write the sum.", []),
+                    Scene: new AnswerChoiceScene(),
+                    Action: new BuildExpression(),
+                    SuccessCheck: new MatchesLatentExpression(
+                        PracticeItemOne.RequestedValueSimplified.Id)),
+                new ScaffoldStep(
+                    Id: AnswerStepId,
+                    Purpose: ScaffoldPhasePurpose.Verification,
+                    Prompt: new ScaffoldPrompt("Select the answer.", []),
+                    Scene: new AnswerChoiceScene(),
+                    Action: new SelectAnswerChoice(),
+                    SuccessCheck: new MatchesCorrectAnswer())
+            ]);
+
+    private static PlacedPiece ToPlaced(GridPiece piece) =>
+        new(piece.Length, piece.X, piece.Y);
+
     private static ScaffoldStepEvaluation Evaluate(
         ScaffoldStepId stepId,
         ScaffoldStepSubmission submission) =>
@@ -622,33 +637,6 @@ public sealed class ScaffoldStepEvaluatorTests
             PracticeItemOne.Item,
             stepId,
             submission);
-
-    private static TraverseAllGapsSubmission CorrectGapSubmission() =>
-        new(
-        [
-            new(new UnitLength(1), new UnitLength(3), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(3), new UnitLength(5), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(5), new UnitLength(7), ParityLadderScaffold.OddStepRodId),
-            new(new UnitLength(7), new UnitLength(9), ParityLadderScaffold.OddStepRodId)
-        ]);
-
-    private static JoinQuantitiesSubmission CorrectJoinSubmission() =>
-        new(
-        [
-            new LatentExpressionReference(PracticeItemOne.SecondMember.Id),
-            new SemanticQuantityReference(PracticeItemOne.N.Id)
-        ]);
-
-    private static ScaffoldStep ValidClassificationStep() =>
-        new(
-            Id: ParityLadderScaffold.ClassifyLengthsStepId,
-            Prompt: new ScaffoldPrompt("Classify.", []),
-            Scene: new FreshScene(
-                new RodMeasurementScene(
-                    ProbeRodId: ParityLadderScaffold.OddStepRodId,
-                    SpanSeriesId: ParityLadderScaffold.MeasurandSeriesId)),
-            Action: new ClassifyByFit(),
-            SuccessCheck: new MatchesComputedFit());
 
     private static NotSupportedException? CaptureMutationFailure(Action mutate)
     {
@@ -663,14 +651,9 @@ public sealed class ScaffoldStepEvaluatorTests
         }
     }
 
-    private static async Task AssertSatisfied(ScaffoldStepEvaluation evaluation)
+    private static async Task AssertOutcome<TOutcome>(ScaffoldStepEvaluation evaluation)
     {
-        await Assert.That(evaluation.Value).IsTypeOf<ScaffoldStepSatisfied>();
-    }
-
-    private static async Task AssertNotSatisfied(ScaffoldStepEvaluation evaluation)
-    {
-        await Assert.That(evaluation.Value).IsTypeOf<ScaffoldStepNotSatisfied>();
+        await Assert.That(evaluation.Value).IsTypeOf<TOutcome>();
     }
 
     private static async Task AssertInvalid(

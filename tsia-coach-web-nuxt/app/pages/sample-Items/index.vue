@@ -182,6 +182,7 @@ const coachingButtonLabel = computed(() =>
           @submit="store.submitSelectedAnswer"
           @request-coaching="store.requestCoaching"
           @retry-coaching="store.retryCoaching"
+          @answer-probe="store.answerProbe"
         />
       </template>
 

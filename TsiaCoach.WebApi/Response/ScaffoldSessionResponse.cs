@@ -37,8 +37,14 @@ public sealed record ScaffoldLearnerRodSeriesResourceResponse(
 [JsonDerivedType(typeof(CompletedScaffoldSessionResponse), "completed")]
 public abstract record ScaffoldSessionStateResponse;
 
+/// <param name="Evidence">
+/// The learner's latest accepted submission on the current step, so a reload
+/// resumes a half-built board. Null when the step has none yet. It is the
+/// learner's own input and carries no verdict or solution data.
+/// </param>
 public sealed record ActiveScaffoldSessionResponse(
-    ScaffoldLearnerStepResponse CurrentStep)
+    ScaffoldLearnerStepResponse CurrentStep,
+    ScaffoldStepEvidenceResponse? Evidence)
     : ScaffoldSessionStateResponse;
 
 public sealed record CompletedScaffoldSessionResponse
@@ -50,6 +56,35 @@ public sealed record ScaffoldLearnerStepResponse(
     ScaffoldSceneResponse Scene,
     LearnerActionResponse Action);
 
+/// <param name="Outcome">
+/// "complete" when the step's done condition was met, "accepted" when the
+/// move was legal but the step is unfinished, "rejected" when the move broke
+/// the rule and the browser should revert it.
+/// </param>
 public sealed record ScaffoldLastCheckResponse(
     string StepId,
-    bool Satisfied);
+    bool Satisfied,
+    string Outcome);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(PlacePiecesEvidenceResponse), "placePieces")]
+[JsonDerivedType(typeof(MoveRowsEvidenceResponse), "moveRows")]
+[JsonDerivedType(typeof(SelectRowsEvidenceResponse), "selectRows")]
+public abstract record ScaffoldStepEvidenceResponse;
+
+public sealed record PlacedPieceResponse(
+    int Length,
+    int X,
+    int Y);
+
+public sealed record PlacePiecesEvidenceResponse(
+    IReadOnlyList<PlacedPieceResponse> Pieces)
+    : ScaffoldStepEvidenceResponse;
+
+public sealed record MoveRowsEvidenceResponse(
+    IReadOnlyList<int> MovedRows)
+    : ScaffoldStepEvidenceResponse;
+
+public sealed record SelectRowsEvidenceResponse(
+    IReadOnlyList<int> Rows)
+    : ScaffoldStepEvidenceResponse;

@@ -25,16 +25,24 @@ public sealed class FakeAgentExecutor : IAgentExecutor
         private set;
     }
 
+    public ChatResponseFormat? LastResponseFormat
+    {
+        get;
+        private set;
+    }
+
     public Task<AgentReply> RunAsync(
         AIAgent agent,
         string model,
         IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatResponseFormat? responseFormat = null)
     {
         CallCount++;
         LastModel = model;
         LastMessages = messages.ToArray();
         LastCancellationToken = cancellationToken;
+        LastResponseFormat = responseFormat;
 
         AgentReply result =
             Result

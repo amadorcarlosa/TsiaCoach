@@ -354,7 +354,7 @@ export interface components {
             type?: "afterIncorrectCheck";
             selectedAnswerId: string;
             misconceptionCode: string;
-            purpose: string;
+            purpose: null | string;
             route: components["schemas"]["CoachingRouteResponse"];
             /** Format: int32 */
             routeStreak: number | string;
@@ -402,10 +402,17 @@ export interface components {
             scaffoldId: string;
             entryStepId: string;
         };
-        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskReadingQuestionResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"];
-        CoachMoveResponseAskReadingQuestionResponse: {
+        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskProbeResponse"] | components["schemas"]["CoachMoveResponseRouteToStepResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"] | components["schemas"]["CoachMoveResponseAnswerQuestionResponse"];
+        CoachMoveResponseAnswerQuestionResponse: {
             /** @enum {string} */
-            type?: "askReadingQuestion";
+            type?: "answerQuestion";
+            stepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseAskProbeResponse: {
+            /** @enum {string} */
+            type?: "askProbe";
             message: string;
             focusPhraseIds: string[];
         };
@@ -422,6 +429,13 @@ export interface components {
             message: string;
             focusPhraseIds: string[];
         };
+        CoachMoveResponseRouteToStepResponse: {
+            /** @enum {string} */
+            type?: "routeToStep";
+            stepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
         CoachMoveResponseSuggestScaffoldResponse: {
             /** @enum {string} */
             type?: "suggestScaffold";
@@ -430,9 +444,12 @@ export interface components {
             focusPhraseIds: string[];
         };
         /** @enum {unknown} */
-        CoachTurnEvent: "helpRequested" | "diagnosisRequested" | "explainCorrect";
+        CoachTurnEvent: "helpRequested" | "probeAnswered" | "diagnosisRequested" | "explainCorrect" | "stepQuestionAsked";
         CoachTurnRequest: {
             event: components["schemas"]["CoachTurnEvent"];
+            answer?: null | string;
+            stepId?: null | string;
+            question?: null | string;
         };
         CoachTurnResponse: {
             move: components["schemas"]["CoachMoveResponse"];
@@ -454,6 +471,24 @@ export interface components {
             name: string;
             displayName: string;
             vendor: components["schemas"]["VendorName"];
+        };
+        GridPieceResponse: {
+            kind: string;
+            /** Format: int32 */
+            length: number | string;
+            /** Format: int32 */
+            x: number | string;
+            /** Format: int32 */
+            y: number | string;
+            symbol: null | string;
+        };
+        GridRowResponse: {
+            /** Format: int32 */
+            y: number | string;
+            /** Format: int32 */
+            start: number | string;
+            /** Format: int32 */
+            length: number | string;
         };
         InstructionalBindingResponse: {
             semanticEntityId: string;
@@ -485,7 +520,7 @@ export interface components {
             value: number | string;
             provenance: components["schemas"]["LatentMathProvenanceResponse"];
         };
-        LearnerActionResponse: components["schemas"]["LearnerActionResponseMatchEquivalentLengthActionResponse"] | components["schemas"]["LearnerActionResponseClassifyByFitActionResponse"] | components["schemas"]["LearnerActionResponseNameFitClassificationActionResponse"] | components["schemas"]["LearnerActionResponseTraverseAllGapsActionResponse"] | components["schemas"]["LearnerActionResponseJoinQuantitiesActionResponse"] | components["schemas"]["LearnerActionResponseEnterScalarActionResponse"] | components["schemas"]["LearnerActionResponseBuildExpressionActionResponse"] | components["schemas"]["LearnerActionResponseSelectAnswerChoiceActionResponse"];
+        LearnerActionResponse: components["schemas"]["LearnerActionResponseMatchEquivalentLengthActionResponse"] | components["schemas"]["LearnerActionResponseClassifyByFitActionResponse"] | components["schemas"]["LearnerActionResponseNameFitClassificationActionResponse"] | components["schemas"]["LearnerActionResponseTraverseAllGapsActionResponse"] | components["schemas"]["LearnerActionResponseJoinQuantitiesActionResponse"] | components["schemas"]["LearnerActionResponseEnterScalarActionResponse"] | components["schemas"]["LearnerActionResponseBuildExpressionActionResponse"] | components["schemas"]["LearnerActionResponseSelectAnswerChoiceActionResponse"] | components["schemas"]["LearnerActionResponsePlacePiecesActionResponse"] | components["schemas"]["LearnerActionResponseMoveRowsActionResponse"] | components["schemas"]["LearnerActionResponseSelectRowsActionResponse"];
         LearnerActionResponseBuildExpressionActionResponse: {
             /** @enum {string} */
             type?: "buildExpression";
@@ -507,14 +542,29 @@ export interface components {
             /** @enum {string} */
             type?: "matchEquivalentLength";
         };
+        LearnerActionResponseMoveRowsActionResponse: {
+            /** @enum {string} */
+            type?: "moveRows";
+            /** Format: int32 */
+            compareColumn: number | string;
+        };
         LearnerActionResponseNameFitClassificationActionResponse: {
             /** @enum {string} */
             type?: "nameFitClassification";
             classification: string;
         };
+        LearnerActionResponsePlacePiecesActionResponse: {
+            /** @enum {string} */
+            type?: "placePieces";
+            allowedLengths: (number | string)[];
+        };
         LearnerActionResponseSelectAnswerChoiceActionResponse: {
             /** @enum {string} */
             type?: "selectAnswerChoice";
+        };
+        LearnerActionResponseSelectRowsActionResponse: {
+            /** @enum {string} */
+            type?: "selectRows";
         };
         LearnerActionResponseTraverseAllGapsActionResponse: {
             /** @enum {string} */
@@ -561,6 +611,14 @@ export interface components {
             id: string;
             span: components["schemas"]["TokenSpanResponse"];
             characterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
+        PlacedPieceResponse: {
+            /** Format: int32 */
+            length: number | string;
+            /** Format: int32 */
+            x: number | string;
+            /** Format: int32 */
+            y: number | string;
         };
         PracticeItemPromptResponse: {
             id: string;
@@ -614,6 +672,7 @@ export interface components {
         ScaffoldLastCheckResponse: {
             stepId: string;
             satisfied: boolean;
+            outcome: string;
         };
         ScaffoldLearnerResourceResponse: components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse"] | components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodSeriesResourceResponse"];
         ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse: {
@@ -636,11 +695,6 @@ export interface components {
             prompt: components["schemas"]["ScaffoldPromptResponse"];
             scene: components["schemas"]["ScaffoldSceneResponse"];
             action: components["schemas"]["LearnerActionResponse"];
-        };
-        ScaffoldPhaseResponse: {
-            id: string;
-            purpose: string;
-            steps: components["schemas"]["ScaffoldStepResponse"][];
         };
         ScaffoldPromptResponse: {
             text: string;
@@ -665,12 +719,23 @@ export interface components {
             id: string;
             practiceItemId: string;
             resources: components["schemas"]["ScaffoldResourceResponse"][];
-            phases: components["schemas"]["ScaffoldPhaseResponse"][];
+            steps: components["schemas"]["ScaffoldStepResponse"][];
         };
-        ScaffoldSceneResponse: components["schemas"]["ScaffoldSceneResponseRodEquivalenceSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodMeasurementSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodGapSceneResponse"] | components["schemas"]["ScaffoldSceneResponseQuantityJoinSceneResponse"] | components["schemas"]["ScaffoldSceneResponseAnswerChoiceSceneResponse"];
+        ScaffoldSceneResponse: components["schemas"]["ScaffoldSceneResponseRodEquivalenceSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodMeasurementSceneResponse"] | components["schemas"]["ScaffoldSceneResponseRodGapSceneResponse"] | components["schemas"]["ScaffoldSceneResponseQuantityJoinSceneResponse"] | components["schemas"]["ScaffoldSceneResponseAnswerChoiceSceneResponse"] | components["schemas"]["ScaffoldSceneResponseGridSceneResponse"];
         ScaffoldSceneResponseAnswerChoiceSceneResponse: {
             /** @enum {string} */
             type?: "answerChoiceScene";
+        };
+        ScaffoldSceneResponseGridSceneResponse: {
+            /** @enum {string} */
+            type?: "gridScene";
+            /** Format: int32 */
+            cols: number | string;
+            /** Format: int32 */
+            rows: number | string;
+            reference: components["schemas"]["GridPieceResponse"][];
+            targetRows: components["schemas"]["GridRowResponse"][];
+            unitLines: boolean;
         };
         ScaffoldSceneResponseQuantityJoinSceneResponse: {
             /** @enum {string} */
@@ -689,7 +754,7 @@ export interface components {
             /** @enum {string} */
             type?: "rodGapScene";
             stepRodId: string;
-            classificationStepId: string;
+            spanSeriesId: string;
             includedOutcome: string;
         };
         ScaffoldSceneResponseRodMeasurementSceneResponse: {
@@ -719,15 +784,34 @@ export interface components {
             /** @enum {string} */
             type?: "active";
             currentStep: components["schemas"]["ScaffoldLearnerStepResponse"];
+            evidence: null | components["schemas"]["ScaffoldStepEvidenceResponse"];
         };
         ScaffoldSessionStateResponseCompletedScaffoldSessionResponse: {
             /** @enum {string} */
             type?: "completed";
         };
+        ScaffoldStepEvidenceResponse: components["schemas"]["ScaffoldStepEvidenceResponsePlacePiecesEvidenceResponse"] | components["schemas"]["ScaffoldStepEvidenceResponseMoveRowsEvidenceResponse"] | components["schemas"]["ScaffoldStepEvidenceResponseSelectRowsEvidenceResponse"];
+        ScaffoldStepEvidenceResponseMoveRowsEvidenceResponse: {
+            /** @enum {string} */
+            type?: "moveRows";
+            movedRows: (number | string)[];
+        };
+        ScaffoldStepEvidenceResponsePlacePiecesEvidenceResponse: {
+            /** @enum {string} */
+            type?: "placePieces";
+            pieces: components["schemas"]["PlacedPieceResponse"][];
+        };
+        ScaffoldStepEvidenceResponseSelectRowsEvidenceResponse: {
+            /** @enum {string} */
+            type?: "selectRows";
+            rows: (number | string)[];
+        };
         ScaffoldStepResponse: {
             id: string;
+            purpose: string;
+            entryOnly: boolean;
             prompt: components["schemas"]["ScaffoldPromptResponse"];
-            scene: components["schemas"]["StepSceneResponse"];
+            scene: components["schemas"]["ScaffoldSceneResponse"];
             action: components["schemas"]["LearnerActionResponse"];
             successCheck: components["schemas"]["SuccessCheckResponse"];
         };
@@ -803,19 +887,7 @@ export interface components {
         StartAttemptRequest: {
             practiceItemId: string;
         };
-        StepSceneResponse: components["schemas"]["StepSceneResponseFreshSceneResponse"] | components["schemas"]["StepSceneResponseContinuedSceneResponse"];
-        StepSceneResponseContinuedSceneResponse: {
-            /** @enum {string} */
-            type?: "continuedScene";
-            sourceStepId: string;
-            access: string;
-        };
-        StepSceneResponseFreshSceneResponse: {
-            /** @enum {string} */
-            type?: "freshScene";
-            definition: components["schemas"]["ScaffoldSceneResponse"];
-        };
-        SuccessCheckResponse: components["schemas"]["SuccessCheckResponseLengthsAreEquivalentCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesComputedFitCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesIntegerDomainCheckResponse"] | components["schemas"]["SuccessCheckResponseAllGapsTraversedCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesPartCompositionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentScalarCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentExpressionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesCorrectAnswerCheckResponse"];
+        SuccessCheckResponse: components["schemas"]["SuccessCheckResponseLengthsAreEquivalentCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesComputedFitCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesIntegerDomainCheckResponse"] | components["schemas"]["SuccessCheckResponseAllGapsTraversedCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesPartCompositionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentScalarCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentExpressionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesCorrectAnswerCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowCompositionsCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowPartitionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowSelectionCheckResponse"];
         SuccessCheckResponseAllGapsTraversedCheckResponse: {
             /** @enum {string} */
             type?: "allGapsTraversed";
@@ -853,6 +925,26 @@ export interface components {
         SuccessCheckResponseMatchesPartCompositionCheckResponse: {
             /** @enum {string} */
             type?: "matchesPartComposition";
+        };
+        SuccessCheckResponseMatchesRowCompositionsCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesRowCompositions";
+            /** Format: int32 */
+            stepLength: number | string;
+        };
+        SuccessCheckResponseMatchesRowPartitionCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesRowPartition";
+            expectedMovedRows: (number | string)[];
+        };
+        SuccessCheckResponseMatchesRowSelectionCheckResponse: {
+            /** @enum {string} */
+            type?: "matchesRowSelection";
+            selectableRows: (number | string)[];
+            /** Format: int32 */
+            requiredCount: number | string;
+            rule: string;
+            expectedRows: (number | string)[];
         };
         TextStructureResponse: {
             sourceText: string;

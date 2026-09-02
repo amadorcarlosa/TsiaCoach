@@ -12,30 +12,141 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class CoachingPolicyTests
 {
     [Test]
-    public async Task FreshSceneStep_CanStartCold()
+    public async Task Resolver_AcceptsAnyStepOnThePath()
     {
-        ScaffoldStep step = FindStep(ParityLadderScaffold.EstablishRodLengthStepId);
+        foreach (ScaffoldStep step in ParityLadderScaffold.Definition.Steps)
+        {
+            ScaffoldEntry entry = ScaffoldEntryResolver.Resolve(
+                ParityLadderScaffold.Definition,
+                step.Id);
 
-        await Assert.That(step.CanStartCold).IsTrue();
+            await Assert.That(entry.ScaffoldId)
+                .IsEqualTo(ParityLadderScaffold.Definition.Id);
+            await Assert.That(entry.EntryStepId).IsEqualTo(step.Id);
+        }
     }
 
     [Test]
-    public async Task ContinuedSceneStep_CannotStartCold()
+    public async Task Resolver_RejectsUnknownStep()
     {
-        ScaffoldStep step = FindStep(ParityLadderScaffold.NameOddClassStepId);
-
-        await Assert.That(step.CanStartCold).IsFalse();
-    }
-
-    [Test]
-    public async Task ResolverWithMultipleColdSteps_SelectsFirstAuthoredStep()
-    {
-        ScaffoldEntry entry = ScaffoldEntryResolver.Resolve(
+        await AssertInvalid(() => _ = ScaffoldEntryResolver.Resolve(
             ParityLadderScaffold.Definition,
-            ScaffoldPhasePurpose.ConceptFormation);
+            new ScaffoldStepId("step-not-on-path")));
+    }
 
-        await Assert.That(entry.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.EstablishRodLengthStepId);
+    [Test]
+    public async Task Floor_IsTheFirstStepOfThePath()
+    {
+        ScaffoldEntry floor = ScaffoldEntryResolver.Floor(ParityLadderScaffold.Definition);
+
+        await Assert.That(floor.EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(PracticeItemOneCoachingPolicy.Definition.FloorEntry())
+            .IsEqualTo(floor);
+    }
+
+    [Test]
+    public async Task Probe_ShapesRouteOntoThePath()
+    {
+        CoachingPolicy policy = PracticeItemOneCoachingPolicy.Definition;
+
+        await Assert.That(policy.Probe).IsNotNull();
+        await Assert.That(policy.Probe!.Text).Contains("what makes a number odd");
+        foreach (ProbeAnswerShape shape in policy.Probe.Shapes)
+        {
+            await Assert.That(ParityLadderScaffold.Definition.ContainsStep(shape.EntryStepId)).IsTrue();
+            await Assert.That(policy.EntryForShape(shape.Id).EntryStepId).IsEqualTo(shape.EntryStepId);
+        }
+
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.NoAnswerShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.LookupRuleShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.RebuildFromTwosAndOnesStepId);
+        await Assert.That(policy.EntryForShape(PracticeItemOneCoachingPolicy.StructuralShapeId).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
+    }
+
+    [Test]
+    public async Task EntryForShape_RejectsUnknownShape()
+    {
+        await AssertInvalid(() => _ = PracticeItemOneCoachingPolicy.Definition
+            .EntryForShape(new ProbeShapeId("shape-not-authored")));
+    }
+
+    [Test]
+    public async Task Create_RejectsProbeShapeOffThePath()
+    {
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with
+        {
+            Shapes =
+            [
+                new ProbeAnswerShape(
+                    new ProbeShapeId("structural"),
+                    "Structural.",
+                    new ScaffoldStepId("step-not-on-path"),
+                    "Go.")
+            ]
+        };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
+    }
+
+    [Test]
+    public async Task Create_RejectsDuplicateProbeShape()
+    {
+        ProbeAnswerShape shape = PracticeItemOneCoachingPolicy.Probe.Shapes[0];
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with
+        {
+            Shapes = [shape, shape]
+        };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
+    }
+
+    [Test]
+    public async Task Create_RejectsProbeWithoutShapes()
+    {
+        ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with { Shapes = [] };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
+    }
+
+    [Test]
+    public async Task StepQuestions_CoverEveryStepOnThePath()
+    {
+        foreach (ScaffoldStep step in ParityLadderScaffold.Definition.Steps)
+        {
+            StepQuestionSet? set = PracticeItemOneCoachingPolicy.Definition.StepQuestionsFor(step.Id);
+
+            await Assert.That(set is not null).IsTrue();
+            await Assert.That(set!.ContainsShape(PracticeItemOneCoachingPolicy.OffTopicShapeId)).IsTrue();
+        }
+
+        await Assert.That(PracticeItemOneCoachingPolicy.Definition.StepQuestionsFor(new ScaffoldStepId("step-not-on-path")))
+            .IsNull();
+    }
+
+    [Test]
+    public async Task Create_RejectsAStepWithoutQuestions()
+    {
+        IReadOnlyList<StepQuestionSet> missingFirst = PracticeItemOneCoachingPolicy.StepQuestions.Skip(1).ToList();
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, missingFirst));
+    }
+
+    [Test]
+    public async Task Create_RejectsQuestionShapeWithoutReply()
+    {
+        StepQuestionSet first = PracticeItemOneCoachingPolicy.StepQuestions[0];
+        StepQuestionSet broken = first with { Shapes = [first.Shapes[0] with { Reply = " " }] };
+        var sets = new List<StepQuestionSet>(PracticeItemOneCoachingPolicy.StepQuestions) { [0] = broken };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, sets));
     }
 
     [Test]
@@ -43,54 +154,41 @@ public sealed class CoachingPolicyTests
     {
         CoachingPolicy policy = PracticeItemOneCoachingPolicy.Definition;
 
-        await Assert.That(policy.PurposeByCode.Keys)
+        await Assert.That(policy.EntryStepByCode.Keys)
             .IsEquivalentTo(PracticeItemOne.Item.Distractors.Values.Distinct());
+        await Assert.That(policy.HasScaffold).IsTrue();
     }
 
     [Test]
-    public async Task OrdinaryStepAndMissingSum_MapsToLanguageInterpretation()
+    public async Task OrdinaryStepAndMissingSum_LandsOnSelectConsecutiveOdds()
     {
-        await Assert.That(PracticeItemOneCoachingPolicy.Definition.PurposeFor(
-                new("ordinary-step-and-missing-sum")))
-            .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
+        await Assert.That(EntryStepFor(new("ordinary-step-and-missing-sum")))
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
     }
 
     [Test]
-    public async Task StoppedAtSecondInteger_MapsToRepresentation()
+    public async Task StoppedAtSecondInteger_LandsOnJoinAndReadSum()
+    {
+        await Assert.That(EntryStepFor(new("stopped-at-second-integer")))
+            .IsEqualTo(ParityLadderScaffold.JoinAndReadSumStepId);
+    }
+
+    [Test]
+    public async Task OrdinaryStepInSum_LandsOnSelectConsecutiveOdds()
+    {
+        await Assert.That(EntryStepFor(new("ordinary-step-in-sum")))
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
+    }
+
+    [Test]
+    public async Task Purpose_IsTheLabelOfTheEntryStep()
     {
         await Assert.That(PracticeItemOneCoachingPolicy.Definition.PurposeFor(
                 new("stopped-at-second-integer")))
             .IsEqualTo(ScaffoldPhasePurpose.Representation);
-    }
-
-    [Test]
-    public async Task OrdinaryStepInSum_MapsToLanguageInterpretation()
-    {
         await Assert.That(PracticeItemOneCoachingPolicy.Definition.PurposeFor(
                 new("ordinary-step-in-sum")))
             .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
-    }
-
-    [Test]
-    public async Task LanguageInterpretation_ResolvesToTraverseOddGaps()
-    {
-        ScaffoldEntry entry = RequireScaffoldEntry(
-            PracticeItemOneCoachingPolicy.Definition.RouteFor(
-                new("ordinary-step-and-missing-sum")));
-
-        await Assert.That(entry.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.TraverseOddGapsStepId);
-    }
-
-    [Test]
-    public async Task Representation_ResolvesToJoinKnownQuantities()
-    {
-        ScaffoldEntry entry = RequireScaffoldEntry(
-            PracticeItemOneCoachingPolicy.Definition.RouteFor(
-                new("stopped-at-second-integer")));
-
-        await Assert.That(entry.EntryStepId)
-            .IsEqualTo(ParityLadderScaffold.JoinKnownQuantitiesStepId);
     }
 
     [Test]
@@ -98,32 +196,11 @@ public sealed class CoachingPolicyTests
     {
         CoachingPolicy policy = PracticeItemTwoCoachingPolicy.Definition;
 
-        await Assert.That(policy.PurposeByCode.Keys)
+        await Assert.That(policy.AuthoredCodes)
             .IsEquivalentTo(PracticeItemTwo.Item.Distractors.Values.Distinct());
-    }
-
-    [Test]
-    public async Task ThisYearResolvedAsW_MapsToLanguageInterpretation()
-    {
-        await Assert.That(PracticeItemTwoCoachingPolicy.Definition.PurposeFor(
-                new("this-year-resolved-as-w")))
-            .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
-    }
-
-    [Test]
-    public async Task StoppedAtThisYear_MapsToLanguageInterpretation()
-    {
-        await Assert.That(PracticeItemTwoCoachingPolicy.Definition.PurposeFor(
-                new("stopped-at-this-year")))
-            .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
-    }
-
-    [Test]
-    public async Task ScaledVariableOnly_MapsToRepresentation()
-    {
-        await Assert.That(PracticeItemTwoCoachingPolicy.Definition.PurposeFor(
-                new("scaled-variable-only")))
-            .IsEqualTo(ScaffoldPhasePurpose.Representation);
+        await Assert.That(policy.HasScaffold).IsFalse();
+        await Assert.That(policy.FloorEntry()).IsNull();
+        await Assert.That(policy.Probe).IsNull();
     }
 
     [Test]
@@ -134,27 +211,29 @@ public sealed class CoachingPolicyTests
             CoachingRoute route = PracticeItemTwoCoachingPolicy.Definition.RouteFor(code);
 
             await Assert.That(route.Value is NoScaffoldAuthored).IsTrue();
+            await Assert.That(PracticeItemTwoCoachingPolicy.Definition.PurposeFor(code))
+                .IsNull();
         }
     }
 
     [Test]
-    public async Task Create_RejectsMissingMisconceptionPurpose()
+    public async Task Create_RejectsMissingMisconception()
     {
-        Dictionary<MisconceptionCode, ScaffoldPhasePurpose> map = ItemOneMap();
+        Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
         map.Remove(new("ordinary-step-in-sum"));
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
-    public async Task Create_RejectsExtraMisconceptionPurpose()
+    public async Task Create_RejectsExtraMisconception()
     {
-        Dictionary<MisconceptionCode, ScaffoldPhasePurpose> map = ItemOneMap();
-        map[new("foreign-misconception")] = ScaffoldPhasePurpose.Representation;
+        Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
+        map[new("foreign-misconception")] = ParityLadderScaffold.JoinAndReadSumStepId;
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -166,80 +245,37 @@ public sealed class CoachingPolicyTests
         };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), foreignScaffold));
+            PracticeItemOne.Item, ItemOneMap(), foreignScaffold, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
-    public async Task Create_RejectsMissingTargetPurposePhase()
+    public async Task Create_RejectsEntryStepNotOnThePath()
     {
-        Scaffold scaffold = ParityLadderScaffold.Definition with
-        {
-            Phases = ParityLadderScaffold.Definition.Phases
-                .Where(phase => phase.Purpose != ScaffoldPhasePurpose.LanguageInterpretation)
-                .ToArray()
-        };
+        Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
+        map[new("stopped-at-second-integer")] = new ScaffoldStepId("step-not-on-path");
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), scaffold));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
-    public async Task Create_RejectsDuplicateTargetPurposePhases()
+    public async Task Create_DefensivelyCopiesEntryMap()
     {
-        ScaffoldPhase duplicate = new(
-            new("phase-duplicate-language"),
-            ScaffoldPhasePurpose.LanguageInterpretation,
-            []);
-        Scaffold scaffold = ParityLadderScaffold.Definition with
-        {
-            Phases = ParityLadderScaffold.Definition.Phases
-                .Append(duplicate)
-                .ToArray()
-        };
-
-        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), scaffold));
-    }
-
-    [Test]
-    public async Task Create_RejectsTargetPurposeWithoutColdStep()
-    {
-        ScaffoldPhase languagePhase = ParityLadderScaffold.Definition.Phases
-            .Single(phase => phase.Purpose == ScaffoldPhasePurpose.LanguageInterpretation);
-        ScaffoldPhase continuedOnly = languagePhase with
-        {
-            Steps = [languagePhase.Steps[1]]
-        };
-        Scaffold scaffold = ParityLadderScaffold.Definition with
-        {
-            Phases = ParityLadderScaffold.Definition.Phases
-                .Select(phase => phase.Purpose == ScaffoldPhasePurpose.LanguageInterpretation
-                    ? continuedOnly
-                    : phase)
-                .ToArray()
-        };
-
-        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), scaffold));
-    }
-
-    [Test]
-    public async Task Create_DefensivelyCopiesPurposeMap()
-    {
-        Dictionary<MisconceptionCode, ScaffoldPhasePurpose> map = ItemOneMap();
+        Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
         CoachingPolicy policy = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition);
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions);
 
-        map[new("ordinary-step-and-missing-sum")] = ScaffoldPhasePurpose.Representation;
+        map[new("ordinary-step-and-missing-sum")] = ParityLadderScaffold.JoinAndReadSumStepId;
 
-        await Assert.That(policy.PurposeFor(new("ordinary-step-and-missing-sum")))
-            .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
+        await Assert.That(RequireScaffoldEntry(policy.RouteFor(
+                new("ordinary-step-and-missing-sum"))).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
     }
 
     [Test]
-    public async Task PurposeFor_RejectsUnknownMisconception()
+    public async Task RouteFor_RejectsUnknownMisconception()
     {
-        await AssertInvalid(() => _ = PracticeItemOneCoachingPolicy.Definition.PurposeFor(
+        await AssertInvalid(() => _ = PracticeItemOneCoachingPolicy.Definition.RouteFor(
             new("unknown-misconception")));
     }
 
@@ -283,10 +319,12 @@ public sealed class CoachingPolicyTests
 
         await Assert.That(projection.RouteStreak).IsEqualTo(1);
         await Assert.That(projection.HintLevel).IsEqualTo(CoachingHintLevel.Initial);
+        await Assert.That(RequireScaffoldEntry(projection.Route).EntryStepId)
+            .IsEqualTo(ParityLadderScaffold.SelectConsecutiveOddsStepId);
     }
 
     [Test]
-    public async Task SecondIncorrectOnSamePurpose_UsesEscalatedHintLevel()
+    public async Task SecondIncorrectOnSameRoute_UsesEscalatedHintLevel()
     {
         CoachingDiagnosisProjection projection = PracticeItemOneCoachingPolicy.Definition
             .ProjectDiagnosis(IncorrectAttempt("answer-a", "answer-c"), PracticeItemOne.Item);
@@ -296,7 +334,7 @@ public sealed class CoachingPolicyTests
     }
 
     [Test]
-    public async Task DifferentPurpose_ResetsRouteStreak()
+    public async Task DifferentRoute_ResetsRouteStreak()
     {
         CoachingDiagnosisProjection projection = PracticeItemOneCoachingPolicy.Definition
             .ProjectDiagnosis(IncorrectAttempt("answer-a", "answer-b"), PracticeItemOne.Item);
@@ -306,7 +344,7 @@ public sealed class CoachingPolicyTests
     }
 
     [Test]
-    public async Task DifferentCodesOnSamePurpose_ContinueRouteStreak()
+    public async Task DifferentCodesOnSameRoute_ContinueRouteStreak()
     {
         CoachingDiagnosisProjection projection = PracticeItemOneCoachingPolicy.Definition
             .ProjectDiagnosis(IncorrectAttempt("answer-a", "answer-c"), PracticeItemOne.Item);
@@ -317,26 +355,28 @@ public sealed class CoachingPolicyTests
     }
 
     [Test]
-    public async Task NoScaffoldDiagnosis_StillProjectsPurposeAndHintLevel()
+    public async Task NoScaffoldDiagnosis_StillProjectsHintLevel()
     {
         CoachingDiagnosisProjection projection = PracticeItemTwoCoachingPolicy.Definition
             .ProjectDiagnosis(
                 IncorrectAttemptFor(PracticeItemTwo.Item, "answer-a", "answer-b"),
                 PracticeItemTwo.Item);
 
-        await Assert.That(projection.Purpose)
-            .IsEqualTo(ScaffoldPhasePurpose.LanguageInterpretation);
+        await Assert.That(projection.Purpose).IsNull();
         await Assert.That(projection.Route.Value is NoScaffoldAuthored).IsTrue();
         await Assert.That(projection.RouteStreak).IsEqualTo(2);
         await Assert.That(projection.HintLevel).IsEqualTo(CoachingHintLevel.Escalated);
     }
 
-    private static Dictionary<MisconceptionCode, ScaffoldPhasePurpose> ItemOneMap() =>
+    private static ScaffoldStepId EntryStepFor(MisconceptionCode code) =>
+        RequireScaffoldEntry(PracticeItemOneCoachingPolicy.Definition.RouteFor(code)).EntryStepId;
+
+    private static Dictionary<MisconceptionCode, ScaffoldStepId> ItemOneMap() =>
         new()
         {
-            [new("ordinary-step-and-missing-sum")] = ScaffoldPhasePurpose.LanguageInterpretation,
-            [new("stopped-at-second-integer")] = ScaffoldPhasePurpose.Representation,
-            [new("ordinary-step-in-sum")] = ScaffoldPhasePurpose.LanguageInterpretation
+            [new("ordinary-step-and-missing-sum")] = ParityLadderScaffold.SelectConsecutiveOddsStepId,
+            [new("stopped-at-second-integer")] = ParityLadderScaffold.JoinAndReadSumStepId,
+            [new("ordinary-step-in-sum")] = ParityLadderScaffold.SelectConsecutiveOddsStepId
         };
 
     private static Attempt IncorrectAttempt(params string[] answerIds)
@@ -362,11 +402,6 @@ public sealed class CoachingPolicyTests
 
     private static DateTimeOffset Timestamp(int seconds) =>
         new(2026, 1, 1, 0, 0, seconds, TimeSpan.Zero);
-
-    private static ScaffoldStep FindStep(ScaffoldStepId id) =>
-        ParityLadderScaffold.Definition.Phases
-            .SelectMany(phase => phase.Steps)
-            .Single(step => step.Id == id);
 
     private static ScaffoldEntry RequireScaffoldEntry(CoachingRoute route) =>
         route.Value as ScaffoldEntry ?? throw new InvalidOperationException(

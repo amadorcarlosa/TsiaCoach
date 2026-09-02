@@ -22,6 +22,26 @@ describe('scaffold session learner-evidence boundary', () => {
     },
   )
 
+  it('accepts the grid moves the sample-1 path uses', () => {
+    expect(parseScaffoldSubmission({
+      type: 'placePieces',
+      pieces: [{ length: 2, x: 1, y: 4 }],
+    })).toEqual({ type: 'placePieces', pieces: [{ length: 2, x: 1, y: 4 }] })
+    expect(parseScaffoldSubmission({ type: 'moveRows', movedRows: [2, 4] }))
+      .toEqual({ type: 'moveRows', movedRows: [2, 4] })
+    expect(parseScaffoldSubmission({ type: 'selectRows', rows: [3, 5] }))
+      .toEqual({ type: 'selectRows', rows: [3, 5] })
+  })
+
+  it('rejects grid moves that carry the outcome', () => {
+    expect(() => parseScaffoldSubmission({
+      type: 'placePieces',
+      pieces: [{ length: 2, x: 1, y: 4, accepted: true }],
+    })).toThrow()
+    expect(() => parseScaffoldSubmission({ type: 'moveRows', movedRows: [2], satisfied: true }))
+      .toThrow()
+  })
+
   it('requires a learner-submission discriminator', () => {
     expect(() => parseScaffoldSubmission({ value: 2 })).toThrow()
   })

@@ -218,6 +218,13 @@ public static class AgentEndpoints
                     title: "The model provider rate-limited the request"),
 
             Cancelled =>
-                TypedResults.StatusCode(499)
+                TypedResults.StatusCode(499),
+
+            ProviderRejected rejected =>
+                TypedResults.Problem(
+                    statusCode: StatusCodes.Status502BadGateway,
+                    title: "The model provider rejected the request",
+                    detail:
+                        $"Provider returned HTTP {rejected.Status}.")
         };
 }

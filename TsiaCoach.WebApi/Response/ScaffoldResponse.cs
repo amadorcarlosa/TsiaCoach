@@ -6,19 +6,15 @@ public sealed record ScaffoldResponse(
     string Id,
     string PracticeItemId,
     IReadOnlyList<ScaffoldResourceResponse> Resources,
-    IReadOnlyList<ScaffoldPhaseResponse> Phases
-);
-
-public sealed record ScaffoldPhaseResponse(
-    string Id,
-    string Purpose,
     IReadOnlyList<ScaffoldStepResponse> Steps
 );
 
 public sealed record ScaffoldStepResponse(
     string Id,
+    string Purpose,
+    bool EntryOnly,
     ScaffoldPromptResponse Prompt,
-    StepSceneResponse Scene,
+    ScaffoldSceneResponse Scene,
     LearnerActionResponse Action,
     SuccessCheckResponse SuccessCheck
 );
@@ -59,25 +55,12 @@ public sealed record LatentLengthReferenceResponse(
 ) : LengthSourceResponse;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(FreshSceneResponse), "freshScene")]
-[JsonDerivedType(typeof(ContinuedSceneResponse), "continuedScene")]
-public abstract record StepSceneResponse;
-
-public sealed record FreshSceneResponse(
-    ScaffoldSceneResponse Definition
-) : StepSceneResponse;
-
-public sealed record ContinuedSceneResponse(
-    string SourceStepId,
-    string Access
-) : StepSceneResponse;
-
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(RodEquivalenceSceneResponse), "rodEquivalenceScene")]
 [JsonDerivedType(typeof(RodMeasurementSceneResponse), "rodMeasurementScene")]
 [JsonDerivedType(typeof(RodGapSceneResponse), "rodGapScene")]
 [JsonDerivedType(typeof(QuantityJoinSceneResponse), "quantityJoinScene")]
 [JsonDerivedType(typeof(AnswerChoiceSceneResponse), "answerChoiceScene")]
+[JsonDerivedType(typeof(GridSceneResponse), "gridScene")]
 public abstract record ScaffoldSceneResponse;
 
 public sealed record RodEquivalenceSceneResponse(
@@ -92,7 +75,7 @@ public sealed record RodMeasurementSceneResponse(
 
 public sealed record RodGapSceneResponse(
     string StepRodId,
-    string ClassificationStepId,
+    string SpanSeriesId,
     string IncludedOutcome
 ) : ScaffoldSceneResponse;
 
@@ -103,6 +86,28 @@ public sealed record QuantityJoinSceneResponse(
 ) : ScaffoldSceneResponse;
 
 public sealed record AnswerChoiceSceneResponse : ScaffoldSceneResponse;
+
+public sealed record GridPieceResponse(
+    string Kind,
+    int Length,
+    int X,
+    int Y,
+    string? Symbol
+);
+
+public sealed record GridRowResponse(
+    int Y,
+    int Start,
+    int Length
+);
+
+public sealed record GridSceneResponse(
+    int Cols,
+    int Rows,
+    IReadOnlyList<GridPieceResponse> Reference,
+    IReadOnlyList<GridRowResponse> TargetRows,
+    bool UnitLines
+) : ScaffoldSceneResponse;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(SemanticQuantityReferenceResponse), "semanticQuantityReference")]
@@ -131,6 +136,9 @@ public sealed record InstructionalBindingResponse(
 [JsonDerivedType(typeof(EnterScalarActionResponse), "enterScalar")]
 [JsonDerivedType(typeof(BuildExpressionActionResponse), "buildExpression")]
 [JsonDerivedType(typeof(SelectAnswerChoiceActionResponse), "selectAnswerChoice")]
+[JsonDerivedType(typeof(PlacePiecesActionResponse), "placePieces")]
+[JsonDerivedType(typeof(MoveRowsActionResponse), "moveRows")]
+[JsonDerivedType(typeof(SelectRowsActionResponse), "selectRows")]
 public abstract record LearnerActionResponse;
 
 public sealed record MatchEquivalentLengthActionResponse : LearnerActionResponse;
@@ -150,6 +158,16 @@ public sealed record EnterScalarActionResponse(
 public sealed record BuildExpressionActionResponse : LearnerActionResponse;
 public sealed record SelectAnswerChoiceActionResponse : LearnerActionResponse;
 
+public sealed record PlacePiecesActionResponse(
+    IReadOnlyList<int> AllowedLengths
+) : LearnerActionResponse;
+
+public sealed record MoveRowsActionResponse(
+    int CompareColumn
+) : LearnerActionResponse;
+
+public sealed record SelectRowsActionResponse : LearnerActionResponse;
+
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(LengthsAreEquivalentCheckResponse), "lengthsAreEquivalent")]
 [JsonDerivedType(typeof(MatchesComputedFitCheckResponse), "matchesComputedFit")]
@@ -159,6 +177,9 @@ public sealed record SelectAnswerChoiceActionResponse : LearnerActionResponse;
 [JsonDerivedType(typeof(MatchesLatentScalarCheckResponse), "matchesLatentScalar")]
 [JsonDerivedType(typeof(MatchesLatentExpressionCheckResponse), "matchesLatentExpression")]
 [JsonDerivedType(typeof(MatchesCorrectAnswerCheckResponse), "matchesCorrectAnswer")]
+[JsonDerivedType(typeof(MatchesRowCompositionsCheckResponse), "matchesRowCompositions")]
+[JsonDerivedType(typeof(MatchesRowPartitionCheckResponse), "matchesRowPartition")]
+[JsonDerivedType(typeof(MatchesRowSelectionCheckResponse), "matchesRowSelection")]
 public abstract record SuccessCheckResponse;
 
 public sealed record LengthsAreEquivalentCheckResponse : SuccessCheckResponse;
@@ -185,3 +206,18 @@ public sealed record MatchesLatentExpressionCheckResponse(
 ) : SuccessCheckResponse;
 
 public sealed record MatchesCorrectAnswerCheckResponse : SuccessCheckResponse;
+
+public sealed record MatchesRowCompositionsCheckResponse(
+    int StepLength
+) : SuccessCheckResponse;
+
+public sealed record MatchesRowPartitionCheckResponse(
+    IReadOnlyList<int> ExpectedMovedRows
+) : SuccessCheckResponse;
+
+public sealed record MatchesRowSelectionCheckResponse(
+    IReadOnlyList<int> SelectableRows,
+    int RequiredCount,
+    string Rule,
+    IReadOnlyList<int> ExpectedRows
+) : SuccessCheckResponse;

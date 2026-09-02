@@ -4,11 +4,18 @@ using TsiaCoach.WebApi.Response;
 
 namespace TsiaCoach.WebApi.CoachingAgents;
 
+/// <summary>
+/// Treats model output as untrusted input. Exactly one JSON object, a move
+/// from the phase allow-list, ids from the authorized sets only. A
+/// <c>routeToStep</c> or <c>answerQuestion</c> reply carries a bare shape id;
+/// the student-facing step and message come from the authored resolution,
+/// never from the model.
+/// </summary>
 public static class CoachTurnValidator
 {
     public const int MaxMessageLength = 600;
 
-    private static readonly ISet<string> ExpectedProperties =
+    private static readonly ISet<string> MessageMoveProperties =
         new HashSet<string>(StringComparer.Ordinal)
         {
             "move",
@@ -18,6 +25,13 @@ public static class CoachTurnValidator
             "provenanceFactIds"
         };
 
+    private static readonly ISet<string> RouteMoveProperties =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "move",
+            "shapeId"
+        };
+
     public static CoachTurnValidationResult Validate(
         string modelText,
         CoachingAgentDefinition definition)
@@ -25,48 +39,111 @@ public static class CoachTurnValidator
         using JsonDocument? document = ParseSingleJsonObject(modelText);
         if (document is null)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("malformedJson");
         }
 
         JsonElement root = document.RootElement;
-        if (!HasOnlyExpectedProperties(root))
-        {
-            return CoachTurnValidationResult.Invalid();
-        }
 
         if (!TryReadString(root, "move", out string? move) ||
             !definition.AllowedMoves.Contains(move))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("moveMissingOrNotAllowed");
+        }
+
+        return move switch
+        {
+            CoachContractNames.RouteToStep => ValidateRouteToStep(root, definition),
+            CoachContractNames.AnswerQuestion => ValidateAnswerQuestion(root, definition),
+            _ => ValidateMessageMove(root, move, definition)
+        };
+    }
+
+    private static CoachTurnValidationResult ValidateAnswerQuestion(
+        JsonElement root,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, RouteMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
+        }
+
+        if (!TryReadString(root, "shapeId", out string? shapeId) ||
+            definition.AuthorizedQuestionShapes is null ||
+            !definition.AuthorizedQuestionShapes.TryGetValue(shapeId, out QuestionShapeResolution? resolution))
+        {
+            return CoachTurnValidationResult.Invalid("unauthorizedQuestionShapeId");
+        }
+
+        return CoachTurnValidationResult.Valid(
+            new CoachTurnResponse(
+                new AnswerQuestionResponse(
+                    resolution.Message,
+                    resolution.FocusPhraseIds,
+                    resolution.StepId)));
+    }
+
+    private static CoachTurnValidationResult ValidateRouteToStep(
+        JsonElement root,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, RouteMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
+        }
+
+        if (!TryReadString(root, "shapeId", out string? shapeId) ||
+            definition.AuthorizedProbeShapes is null ||
+            !definition.AuthorizedProbeShapes.TryGetValue(shapeId, out ProbeShapeResolution? resolution))
+        {
+            return CoachTurnValidationResult.Invalid("unauthorizedProbeShapeId");
+        }
+
+        return CoachTurnValidationResult.Valid(
+            new CoachTurnResponse(
+                new RouteToStepResponse(
+                    resolution.Message,
+                    resolution.FocusPhraseIds,
+                    resolution.StepId)),
+            resolvedProbeShapeId: shapeId);
+    }
+
+    private static CoachTurnValidationResult ValidateMessageMove(
+        JsonElement root,
+        string move,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, MessageMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
         }
 
         if (!TryReadString(root, "message", out string? message) ||
             string.IsNullOrWhiteSpace(message) ||
             message.Length > MaxMessageLength)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidMessage");
         }
 
         if (!TryReadStringArray(root, "focusPhraseIds", out string[] focusPhraseIds) ||
             focusPhraseIds.Any(id => !definition.AuthorizedFocusPhraseIds.Contains(id)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidFocusPhraseIds");
         }
 
         if (!TryReadOptionalString(root, "suggestedStepId", out string? suggestedStepId))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidSuggestedStepId");
         }
 
         if (!TryReadStringArray(root, "provenanceFactIds", out string[] provenanceFactIds))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("invalidProvenanceFactIds");
         }
 
         if (move != CoachContractNames.SuggestScaffold &&
             suggestedStepId is not null)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unexpectedSuggestedStepId");
         }
 
         if (move == CoachContractNames.SuggestScaffold &&
@@ -77,25 +154,23 @@ public static class CoachTurnValidator
                  definition.AuthorizedSuggestedStepId,
                  StringComparison.Ordinal)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unauthorizedSuggestedStepId");
         }
 
         if (move != CoachContractNames.ExplainWhy &&
             provenanceFactIds.Length > 0)
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unexpectedProvenanceFactIds");
         }
 
         if (move == CoachContractNames.ExplainWhy &&
             provenanceFactIds.Any(id => !definition.AuthorizedProvenanceFactIds.Contains(id)))
         {
-            return CoachTurnValidationResult.Invalid();
+            return CoachTurnValidationResult.Invalid("unauthorizedProvenanceFactIds");
         }
 
         CoachMoveResponse responseMove = move switch
         {
-            CoachContractNames.AskReadingQuestion =>
-                new AskReadingQuestionResponse(message, focusPhraseIds),
             CoachContractNames.DiagnoseDifference =>
                 new DiagnoseDifferenceResponse(message, focusPhraseIds),
             CoachContractNames.SuggestScaffold =>
@@ -148,12 +223,12 @@ public static class CoachTurnValidator
         }
     }
 
-    private static bool HasOnlyExpectedProperties(JsonElement root)
+    private static bool HasOnlyProperties(JsonElement root, ISet<string> expected)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (JsonProperty property in root.EnumerateObject())
         {
-            if (!ExpectedProperties.Contains(property.Name) ||
+            if (!expected.Contains(property.Name) ||
                 !seen.Add(property.Name))
             {
                 return false;
@@ -234,12 +309,16 @@ public static class CoachTurnValidator
 
 public sealed record CoachTurnValidationResult(
     bool IsValid,
-    CoachTurnResponse? Response)
+    CoachTurnResponse? Response,
+    string? FailureReason,
+    string? ResolvedProbeShapeId = null)
 {
     public static CoachTurnValidationResult Valid(
-        CoachTurnResponse response) =>
-        new(true, response);
+        CoachTurnResponse response,
+        string? resolvedProbeShapeId = null) =>
+        new(true, response, null, resolvedProbeShapeId);
 
-    public static CoachTurnValidationResult Invalid() =>
-        new(false, null);
+    public static CoachTurnValidationResult Invalid(
+        string failureReason = "unknown") =>
+        new(false, null, failureReason);
 }

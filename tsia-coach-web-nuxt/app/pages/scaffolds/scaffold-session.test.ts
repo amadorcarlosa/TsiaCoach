@@ -28,6 +28,7 @@ function activeSession(stepId: string, completedStepCount = 0, satisfied: boolea
     resources: [],
     state: {
       type: 'active',
+      evidence: null,
       currentStep: {
         id: stepId,
         prompt: { text: 'Prompt', focusPhraseIds: [] },

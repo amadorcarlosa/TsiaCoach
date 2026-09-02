@@ -47,11 +47,13 @@ builder.Services.AddOptions<CoachingAgentOptions>()
     .Bind(builder.Configuration.GetSection("CoachingAgent"));
 builder.Services.AddSingleton<CoachingAgentDefinitionFactory>();
 builder.Services.AddSingleton<ICoachingAgentRunner, CoachingAgentRunner>();
+builder.Services.AddSingleton<ICoachingMoveRecorder, InMemoryCoachingMoveRecorder>();
 builder.Services.AddSingleton<CoachingTurnService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<SamplePracticeCatalog>();
 builder.Services.AddSingleton<InMemoryAttemptStore>();
+builder.Services.AddSingleton<InMemoryProbeRouteStore>();
 builder.Services.AddSingleton<InMemoryScaffoldSessionStore>();
 builder.Services.AddSingleton<ScaffoldSessionService>();
 
