@@ -9,16 +9,22 @@ import type {
 type ProblemDetails = components['schemas']['ProblemDetails']
 
 const MAX_PROBE_ANSWER_LENGTH = 500
+const MAX_QUESTION_LENGTH = 500
 
-const coachTurnRequest = z.object({
-  event: z.enum(['helpRequested', 'probeAnswered', 'diagnosisRequested', 'explainCorrect']),
-  answer: z.string().trim().min(1).max(MAX_PROBE_ANSWER_LENGTH).optional(),
-}).strict().refine(
-  request => request.event === 'probeAnswered'
-    ? request.answer !== undefined
-    : request.answer === undefined,
-  { message: 'An answer is required for probeAnswered and not allowed otherwise.' },
-)
+const coachTurnRequest = z.discriminatedUnion('event', [
+  z.object({ event: z.literal('helpRequested') }).strict(),
+  z.object({
+    event: z.literal('probeAnswered'),
+    answer: z.string().trim().min(1).max(MAX_PROBE_ANSWER_LENGTH),
+  }).strict(),
+  z.object({ event: z.literal('diagnosisRequested') }).strict(),
+  z.object({ event: z.literal('explainCorrect') }).strict(),
+  z.object({
+    event: z.literal('stepQuestionAsked'),
+    stepId: z.string().trim().min(1),
+    question: z.string().trim().min(1).max(MAX_QUESTION_LENGTH),
+  }).strict(),
+])
 
 function apiUrlFor(event: H3Event): string {
   const { apiUrl } = useRuntimeConfig(event)
@@ -54,7 +60,9 @@ export async function coachAttempt(
 ): Promise<CoachTurnResponse> {
   const body: CoachTurnRequest = request.event === 'probeAnswered'
     ? { event: request.event, answer: request.answer }
-    : { event: request.event }
+    : request.event === 'stepQuestionAsked'
+      ? { event: request.event, stepId: request.stepId, question: request.question }
+      : { event: request.event }
 
   let response
 

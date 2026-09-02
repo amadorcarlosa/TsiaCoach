@@ -161,3 +161,45 @@ test('an item without a scaffold shows a safe error', async ({ page, request }) 
   await expect(alert).toContainText('not available yet')
   await expect(alert).not.toContainText('stopped-at-this-year')
 })
+
+test('ask the coach sends only the step id and the question, and shows the authored reply', async ({ page, request }) => {
+  const started = await request.post('/api/attempts', {
+    data: { practiceItemId: 'practice-item-sample-1' },
+  })
+  expect(started.ok()).toBeTruthy()
+  const attempt = await started.json() as { attemptId: string }
+
+  const captured: Record<string, unknown>[] = []
+  await page.route('**/api/attempts/*/coach', async (route) => {
+    captured.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        move: {
+          type: 'answerQuestion',
+          message: 'A piece comes back when it breaks the rule.',
+          focusPhraseIds: [],
+          stepId: 'step-rebuild-from-twos-and-ones',
+        },
+      }),
+    })
+  })
+
+  await page.goto(`/scaffolds/${attempt.attemptId}`)
+  await waitForNuxtHydration(page)
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
+
+  await page.getByTestId('ask-coach').click()
+  await page.getByLabel('Your question for the coach').fill('why did my white come back?')
+  await page.getByTestId('coach-send').click()
+
+  await expect(page.getByTestId('coach-reply')).toContainText('A piece comes back when it breaks the rule.')
+  expect(captured).toEqual([{
+    event: 'stepQuestionAsked',
+    stepId: 'step-rebuild-from-twos-and-ones',
+    question: 'why did my white come back?',
+  }])
+  // The student stays on the step: a question never routes.
+  await expect(page.locator('[data-step-id="step-rebuild-from-twos-and-ones"]')).toBeVisible()
+})

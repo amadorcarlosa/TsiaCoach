@@ -402,7 +402,14 @@ export interface components {
             scaffoldId: string;
             entryStepId: string;
         };
-        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskProbeResponse"] | components["schemas"]["CoachMoveResponseRouteToStepResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"];
+        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskProbeResponse"] | components["schemas"]["CoachMoveResponseRouteToStepResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"] | components["schemas"]["CoachMoveResponseAnswerQuestionResponse"];
+        CoachMoveResponseAnswerQuestionResponse: {
+            /** @enum {string} */
+            type?: "answerQuestion";
+            stepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
         CoachMoveResponseAskProbeResponse: {
             /** @enum {string} */
             type?: "askProbe";
@@ -437,10 +444,12 @@ export interface components {
             focusPhraseIds: string[];
         };
         /** @enum {unknown} */
-        CoachTurnEvent: "helpRequested" | "probeAnswered" | "diagnosisRequested" | "explainCorrect";
+        CoachTurnEvent: "helpRequested" | "probeAnswered" | "diagnosisRequested" | "explainCorrect" | "stepQuestionAsked";
         CoachTurnRequest: {
             event: components["schemas"]["CoachTurnEvent"];
             answer?: null | string;
+            stepId?: null | string;
+            question?: null | string;
         };
         CoachTurnResponse: {
             move: components["schemas"]["CoachMoveResponse"];

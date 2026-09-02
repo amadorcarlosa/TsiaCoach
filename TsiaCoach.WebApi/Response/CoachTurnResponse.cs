@@ -11,6 +11,7 @@ public sealed record CoachTurnResponse(
 [JsonDerivedType(typeof(DiagnoseDifferenceResponse), "diagnoseDifference")]
 [JsonDerivedType(typeof(SuggestScaffoldResponse), "suggestScaffold")]
 [JsonDerivedType(typeof(ExplainWhyResponse), "explainWhy")]
+[JsonDerivedType(typeof(AnswerQuestionResponse), "answerQuestion")]
 public abstract record CoachMoveResponse(
     string Message,
     IReadOnlyList<string> FocusPhraseIds);
@@ -40,6 +41,16 @@ public sealed record SuggestScaffoldResponse(
     string Message,
     IReadOnlyList<string> FocusPhraseIds,
     string SuggestedStepId)
+    : CoachMoveResponse(Message, FocusPhraseIds);
+
+/// <summary>
+/// The authored reply for the shape a student's step question resolved to.
+/// The student stays on the step; nothing here routes.
+/// </summary>
+public sealed record AnswerQuestionResponse(
+    string Message,
+    IReadOnlyList<string> FocusPhraseIds,
+    string StepId)
     : CoachMoveResponse(Message, FocusPhraseIds);
 
 public sealed record ExplainWhyResponse(

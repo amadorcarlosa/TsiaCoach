@@ -4,13 +4,16 @@ namespace TsiaCoach.WebApi.Request;
 
 /// <summary>
 /// The browser sends only a coaching event, plus the student's free-text
-/// probe answer when the event is <c>probeAnswered</c>. Everything else
-/// (phase, diagnosis, route, model) is derived on the server.
+/// probe answer when the event is <c>probeAnswered</c>, or the step id and
+/// free-text question when the event is <c>stepQuestionAsked</c>. Everything
+/// else (phase, diagnosis, route, model) is derived on the server.
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CoachTurnRequest(
     [property: JsonRequired] CoachTurnEvent Event,
-    string? Answer = null);
+    string? Answer = null,
+    string? StepId = null,
+    string? Question = null);
 
 public enum CoachTurnEvent
 {
@@ -24,5 +27,8 @@ public enum CoachTurnEvent
     DiagnosisRequested,
 
     [JsonStringEnumMemberName("explainCorrect")]
-    ExplainCorrect
+    ExplainCorrect,
+
+    [JsonStringEnumMemberName("stepQuestionAsked")]
+    StepQuestionAsked
 }

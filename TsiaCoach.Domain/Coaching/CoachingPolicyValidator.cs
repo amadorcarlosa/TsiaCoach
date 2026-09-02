@@ -10,7 +10,8 @@ public static class CoachingPolicyValidator
         PracticeItem practiceItem,
         IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
         Scaffold scaffold,
-        ProbeQuestion probe)
+        ProbeQuestion probe,
+        IReadOnlyList<StepQuestionSet> stepQuestions)
     {
         if (entryStepByCode is null)
         {
@@ -37,6 +38,71 @@ public static class CoachingPolicyValidator
         }
 
         ValidateProbe(practiceItem, scaffold, probe);
+        ValidateStepQuestions(practiceItem, scaffold, stepQuestions);
+    }
+
+    /// <summary>
+    /// Ask the coach is available on every step, so every step on the path
+    /// must author at least one question shape, each with a reply.
+    /// </summary>
+    private static void ValidateStepQuestions(
+        PracticeItem practiceItem,
+        Scaffold scaffold,
+        IReadOnlyList<StepQuestionSet> stepQuestions)
+    {
+        if (stepQuestions is null)
+        {
+            throw new InvalidOperationException(
+                $"Coaching policy for practice item '{practiceItem.Id.Value}' must author step questions.");
+        }
+
+        var seenSteps = new HashSet<ScaffoldStepId>();
+        foreach (StepQuestionSet set in stepQuestions)
+        {
+            if (!scaffold.ContainsStep(set.StepId))
+            {
+                throw new InvalidOperationException(
+                    $"Step questions reference unknown scaffold step '{set.StepId.Value}'.");
+            }
+
+            if (!seenSteps.Add(set.StepId))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate step question set for '{set.StepId.Value}'.");
+            }
+
+            if (set.Shapes.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Step '{set.StepId.Value}' must author at least one question shape.");
+            }
+
+            var seenShapes = new HashSet<QuestionShapeId>();
+            foreach (QuestionShape shape in set.Shapes)
+            {
+                if (!seenShapes.Add(shape.Id))
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate question shape '{shape.Id.Value}' on step '{set.StepId.Value}'.");
+                }
+
+                if (string.IsNullOrWhiteSpace(shape.Description) ||
+                    string.IsNullOrWhiteSpace(shape.Reply))
+                {
+                    throw new InvalidOperationException(
+                        $"Question shape '{shape.Id.Value}' on step '{set.StepId.Value}' must have a description and a reply.");
+                }
+            }
+        }
+
+        foreach (ScaffoldStep step in scaffold.Steps)
+        {
+            if (!seenSteps.Contains(step.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Step '{step.Id.Value}' has no authored question shapes; ask the coach must work on every step.");
+            }
+        }
     }
 
     public static void EnsureCoversAuthoredCodes(

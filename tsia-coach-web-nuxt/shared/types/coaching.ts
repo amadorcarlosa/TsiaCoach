@@ -25,24 +25,32 @@ export type SuggestScaffoldResponse =
 export type ExplainWhyResponse =
     components['schemas']['CoachMoveResponseExplainWhyResponse']
 
+export type AnswerQuestionResponse =
+    components['schemas']['CoachMoveResponseAnswerQuestionResponse']
+
 export type CoachTurnEvent = CoachTurnRequest['event']
 
 export const CoachTurnEvents = {
     HelpRequested: 'helpRequested',
     ProbeAnswered: 'probeAnswered',
     DiagnosisRequested: 'diagnosisRequested',
-    ExplainCorrect: 'explainCorrect'
+    ExplainCorrect: 'explainCorrect',
+    StepQuestionAsked: 'stepQuestionAsked'
 } as const
 
 /** Upper bound the server enforces on a probe answer; mirrored for the input. */
 export const MaxProbeAnswerLength = 500
+
+/** Upper bound the server enforces on a step question; mirrored for the input. */
+export const MaxQuestionLength = 500
 
 export const CoachMoveKinds = {
     AskProbe: 'askProbe',
     RouteToStep: 'routeToStep',
     DiagnoseDifference: 'diagnoseDifference',
     SuggestScaffold: 'suggestScaffold',
-    ExplainWhy: 'explainWhy'
+    ExplainWhy: 'explainWhy',
+    AnswerQuestion: 'answerQuestion'
 } as const
 
 export type CoachMoveKind =
@@ -70,6 +78,12 @@ export function isSuggestScaffoldMove(
     move: CoachMoveResponse,
 ): move is SuggestScaffoldResponse {
     return move.type === CoachMoveKinds.SuggestScaffold
+}
+
+export function isAnswerQuestionMove(
+    move: CoachMoveResponse,
+): move is AnswerQuestionResponse {
+    return move.type === CoachMoveKinds.AnswerQuestion
 }
 
 export function isExplainWhyMove(

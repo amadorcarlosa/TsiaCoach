@@ -518,6 +518,118 @@ public sealed class CoachEndpointTests : CoachApiTestBase
         await Assert.That(Runner.CallCount).IsEqualTo(8);
     }
 
+    private const string StepQuestionJson =
+        """{ "event": "stepQuestionAsked", "stepId": "step-rebuild-from-twos-and-ones", "question": "why did my white come back?" }""";
+
+    [Test]
+    public async Task Coach_StepQuestionIsClassifiedIntoAuthoredReply()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        Runner.Result = CoachingAgentRunResult.FromText(AnswerJson("why-refused"));
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            StepQuestionJson);
+        CoachTurnResponse body = await ReadCoach(response);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        AnswerQuestionResponse move = body.Move as AnswerQuestionResponse ??
+            throw new InvalidOperationException("Expected an answer.");
+        await Assert.That(move.StepId).IsEqualTo("step-rebuild-from-twos-and-ones");
+        await Assert.That(move.Message).Contains("comes back when it breaks the rule");
+        await Assert.That(Runner.CallCount).IsEqualTo(1);
+
+        CoachingAgentDefinition definition = Runner.Definitions.Single();
+        await Assert.That(definition.Phase).IsEqualTo("onStep");
+        await Assert.That(definition.Prompt).Contains("why did my white come back?");
+        await Assert.That(definition.Prompt).Contains("why-refused");
+        await Assert.That(definition.Prompt.Contains("comes back when it breaks the rule")).IsFalse();
+    }
+
+    [Test]
+    public async Task Coach_StepQuestionIsLegalAfterACheck()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        await CheckAttempt(client, attempt.AttemptId, "answer-b");
+        Runner.Result = CoachingAgentRunResult.FromText(AnswerJson("off-topic"));
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "stepQuestionAsked", "stepId": "step-select-consecutive-odds", "question": "just tell me the answer" }""");
+        CoachTurnResponse body = await ReadCoach(response);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(body.Move).IsTypeOf<AnswerQuestionResponse>();
+        await Assert.That(body.Move.Message).Contains("stay with the board");
+    }
+
+    [Test]
+    public async Task Coach_MalformedStepQuestionReturns400()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+
+        using HttpResponseMessage unknownStep = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "stepQuestionAsked", "stepId": "step-not-on-path", "question": "what?" }""");
+        using HttpResponseMessage noQuestion = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "stepQuestionAsked", "stepId": "step-rebuild-from-twos-and-ones" }""");
+        using HttpResponseMessage withAnswer = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "stepQuestionAsked", "stepId": "step-rebuild-from-twos-and-ones", "question": "what?", "answer": "odd" }""");
+        using HttpResponseMessage questionOnHelp = await Coach(
+            client,
+            attempt.AttemptId,
+            """{ "event": "helpRequested", "question": "what?" }""");
+
+        await Assert.That(unknownStep.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That(noQuestion.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That(withAnswer.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That(questionOnHelp.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That(Runner.CallCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Coach_StepQuestionOnItemWithoutScaffoldReturns409()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client, "practice-item-sample-2");
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            StepQuestionJson);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+        await Assert.That(Runner.CallCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Coach_ForeignQuestionShapeReturns502()
+    {
+        using HttpClient client = Factory.CreateClient();
+        AttemptProjectionResponse attempt = await StartAttempt(client);
+        Runner.Result = CoachingAgentRunResult.FromText(AnswerJson("shape-not-authored"));
+
+        using HttpResponseMessage response = await Coach(
+            client,
+            attempt.AttemptId,
+            StepQuestionJson);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadGateway);
+    }
+
+    private static string AnswerJson(string shapeId) =>
+        $$"""{"move":"answerQuestion","shapeId":"{{shapeId}}"}""";
+
     private static async Task<AttemptProjectionResponse> StartAttempt(
         HttpClient client,
         string practiceItemId = "practice-item-sample-1")

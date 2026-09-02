@@ -100,6 +100,30 @@ describe('coaching proxy contract', () => {
       .toThrowError(expect.objectContaining({ statusCode: 400 }))
   })
 
+  it('coachAttemptProxy_AcceptsStepQuestionWithStepIdAndQuestionOnly', async () => {
+    const { parseCoachTurnRequest } = await import('#server/utils/coaching')
+
+    expect(parseCoachTurnRequest({
+      event: 'stepQuestionAsked',
+      stepId: 'step-rebuild-from-twos-and-ones',
+      question: ' why did my white come back? '
+    })).toEqual({
+      event: 'stepQuestionAsked',
+      stepId: 'step-rebuild-from-twos-and-ones',
+      question: 'why did my white come back?'
+    })
+    expect(() => parseCoachTurnRequest({ event: 'stepQuestionAsked', question: 'why?' }))
+      .toThrow()
+    expect(() => parseCoachTurnRequest({ event: 'stepQuestionAsked', stepId: 'step-1' }))
+      .toThrow()
+    expect(() => parseCoachTurnRequest({ event: 'stepQuestionAsked', stepId: 'step-1', question: 'x'.repeat(501) }))
+      .toThrow()
+    expect(() => parseCoachTurnRequest({ event: 'stepQuestionAsked', stepId: 'step-1', question: 'why?', answer: 'odd' }))
+      .toThrow()
+    expect(() => parseCoachTurnRequest({ event: 'helpRequested', stepId: 'step-1', question: 'why?' }))
+      .toThrow()
+  })
+
   it('coachAttemptProxy_RejectsUnexpectedRequestFields', async () => {
     const { parseCoachTurnRequest } = await import('#server/utils/coaching')
 

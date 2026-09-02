@@ -89,7 +89,7 @@ public sealed class CoachingPolicyTests
         };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -102,7 +102,7 @@ public sealed class CoachingPolicyTests
         };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -111,7 +111,42 @@ public sealed class CoachingPolicyTests
         ProbeQuestion probe = PracticeItemOneCoachingPolicy.Probe with { Shapes = [] };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe));
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, probe, PracticeItemOneCoachingPolicy.StepQuestions));
+    }
+
+    [Test]
+    public async Task StepQuestions_CoverEveryStepOnThePath()
+    {
+        foreach (ScaffoldStep step in ParityLadderScaffold.Definition.Steps)
+        {
+            StepQuestionSet? set = PracticeItemOneCoachingPolicy.Definition.StepQuestionsFor(step.Id);
+
+            await Assert.That(set is not null).IsTrue();
+            await Assert.That(set!.ContainsShape(PracticeItemOneCoachingPolicy.OffTopicShapeId)).IsTrue();
+        }
+
+        await Assert.That(PracticeItemOneCoachingPolicy.Definition.StepQuestionsFor(new ScaffoldStepId("step-not-on-path")))
+            .IsNull();
+    }
+
+    [Test]
+    public async Task Create_RejectsAStepWithoutQuestions()
+    {
+        IReadOnlyList<StepQuestionSet> missingFirst = PracticeItemOneCoachingPolicy.StepQuestions.Skip(1).ToList();
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, missingFirst));
+    }
+
+    [Test]
+    public async Task Create_RejectsQuestionShapeWithoutReply()
+    {
+        StepQuestionSet first = PracticeItemOneCoachingPolicy.StepQuestions[0];
+        StepQuestionSet broken = first with { Shapes = [first.Shapes[0] with { Reply = " " }] };
+        var sets = new List<StepQuestionSet>(PracticeItemOneCoachingPolicy.StepQuestions) { [0] = broken };
+
+        await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
+            PracticeItemOne.Item, ItemOneMap(), ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, sets));
     }
 
     [Test]
@@ -188,7 +223,7 @@ public sealed class CoachingPolicyTests
         map.Remove(new("ordinary-step-in-sum"));
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -198,7 +233,7 @@ public sealed class CoachingPolicyTests
         map[new("foreign-misconception")] = ParityLadderScaffold.JoinAndReadSumStepId;
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -210,7 +245,7 @@ public sealed class CoachingPolicyTests
         };
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, ItemOneMap(), foreignScaffold, PracticeItemOneCoachingPolicy.Probe));
+            PracticeItemOne.Item, ItemOneMap(), foreignScaffold, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -220,7 +255,7 @@ public sealed class CoachingPolicyTests
         map[new("stopped-at-second-integer")] = new ScaffoldStepId("step-not-on-path");
 
         await AssertInvalid(() => _ = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe));
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions));
     }
 
     [Test]
@@ -228,7 +263,7 @@ public sealed class CoachingPolicyTests
     {
         Dictionary<MisconceptionCode, ScaffoldStepId> map = ItemOneMap();
         CoachingPolicy policy = CoachingPolicy.CreateWithScaffold(
-            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe);
+            PracticeItemOne.Item, map, ParityLadderScaffold.Definition, PracticeItemOneCoachingPolicy.Probe, PracticeItemOneCoachingPolicy.StepQuestions);
 
         map[new("ordinary-step-and-missing-sum")] = ParityLadderScaffold.JoinAndReadSumStepId;
 

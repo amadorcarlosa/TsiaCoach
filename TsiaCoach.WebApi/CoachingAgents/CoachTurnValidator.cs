@@ -7,8 +7,9 @@ namespace TsiaCoach.WebApi.CoachingAgents;
 /// <summary>
 /// Treats model output as untrusted input. Exactly one JSON object, a move
 /// from the phase allow-list, ids from the authorized sets only. A
-/// <c>routeToStep</c> reply carries a bare shape id; the student-facing step
-/// and message come from the authored resolution, never from the model.
+/// <c>routeToStep</c> or <c>answerQuestion</c> reply carries a bare shape id;
+/// the student-facing step and message come from the authored resolution,
+/// never from the model.
 /// </summary>
 public static class CoachTurnValidator
 {
@@ -49,9 +50,36 @@ public static class CoachTurnValidator
             return CoachTurnValidationResult.Invalid("moveMissingOrNotAllowed");
         }
 
-        return move == CoachContractNames.RouteToStep
-            ? ValidateRouteToStep(root, definition)
-            : ValidateMessageMove(root, move, definition);
+        return move switch
+        {
+            CoachContractNames.RouteToStep => ValidateRouteToStep(root, definition),
+            CoachContractNames.AnswerQuestion => ValidateAnswerQuestion(root, definition),
+            _ => ValidateMessageMove(root, move, definition)
+        };
+    }
+
+    private static CoachTurnValidationResult ValidateAnswerQuestion(
+        JsonElement root,
+        CoachingAgentDefinition definition)
+    {
+        if (!HasOnlyProperties(root, RouteMoveProperties))
+        {
+            return CoachTurnValidationResult.Invalid("unexpectedProperty");
+        }
+
+        if (!TryReadString(root, "shapeId", out string? shapeId) ||
+            definition.AuthorizedQuestionShapes is null ||
+            !definition.AuthorizedQuestionShapes.TryGetValue(shapeId, out QuestionShapeResolution? resolution))
+        {
+            return CoachTurnValidationResult.Invalid("unauthorizedQuestionShapeId");
+        }
+
+        return CoachTurnValidationResult.Valid(
+            new CoachTurnResponse(
+                new AnswerQuestionResponse(
+                    resolution.Message,
+                    resolution.FocusPhraseIds,
+                    resolution.StepId)));
     }
 
     private static CoachTurnValidationResult ValidateRouteToStep(

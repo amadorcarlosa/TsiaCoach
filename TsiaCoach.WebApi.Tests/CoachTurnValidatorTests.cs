@@ -316,6 +316,71 @@ public sealed class CoachTurnValidatorTests
                 ["structural"] = new("step-gap", "Right, one left over.", ["phrase-a"])
             });
 
+    [Test]
+    public async Task Question_AllowsAuthorizedShapeAndResolvesAuthoredReply()
+    {
+        CoachTurnValidationResult result = Validate(
+            AnswerOutput("why-refused"),
+            QuestionDefinition());
+
+        await AssertValid<AnswerQuestionResponse>(result);
+        var move = (AnswerQuestionResponse)result.Response!.Move;
+        await Assert.That(move.StepId).IsEqualTo("step-floor");
+        await Assert.That(move.Message).IsEqualTo("It broke the rule.");
+        await Assert.That(move.FocusPhraseIds).IsEquivalentTo(new[] { "phrase-a" });
+        await Assert.That(result.ResolvedProbeShapeId).IsNull();
+    }
+
+    [Test]
+    public async Task Question_RejectsForeignShape()
+    {
+        CoachTurnValidationResult result = Validate(
+            AnswerOutput("shape-not-authored"),
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unauthorizedQuestionShapeId");
+    }
+
+    [Test]
+    public async Task Question_RejectsModelAuthoredReply()
+    {
+        CoachTurnValidationResult result = Validate(
+            """
+            {"move":"answerQuestion","shapeId":"why-refused","message":"Because I say so."}
+            """,
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("unexpectedProperty");
+    }
+
+    [Test]
+    public async Task Question_RejectsRouteMoves()
+    {
+        CoachTurnValidationResult result = Validate(
+            RouteOutput("why-refused"),
+            QuestionDefinition());
+
+        await AssertInvalid(result);
+        await Assert.That(result.FailureReason).IsEqualTo("moveMissingOrNotAllowed");
+    }
+
+    private static CoachingAgentDefinition QuestionDefinition() =>
+        Definition(
+            CoachContractNames.OnStep,
+            [CoachContractNames.AnswerQuestion]) with
+        {
+            AuthorizedQuestionShapes = new Dictionary<string, QuestionShapeResolution>(StringComparer.Ordinal)
+            {
+                ["why-refused"] = new("step-floor", "It broke the rule.", ["phrase-a"]),
+                ["off-topic"] = new("step-floor", "Stay with the board.", ["phrase-a"])
+            }
+        };
+
+    private static string AnswerOutput(string shapeId) =>
+        $$"""{"move":"answerQuestion","shapeId":{{JsonSerializer.Serialize(shapeId)}}}""";
+
     private static CoachingAgentDefinition Definition(
         string phase,
         IReadOnlyList<string> allowedMoves,

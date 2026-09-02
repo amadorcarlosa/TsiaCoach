@@ -29,7 +29,9 @@ public sealed record CoachingTurnResult(
 /// One coaching turn. Before a check, Help serves the authored probe with no
 /// model call, and a probe answer is classified by the model into one
 /// authored shape, whose route is recorded and returned. After a check the
-/// phase-scoped diagnosis and explanation turns run as before.
+/// phase-scoped diagnosis and explanation turns run as before. A question on
+/// a scaffold step is legal in any phase: the model picks an authored shape
+/// and the authored reply is served; the student is never moved.
 /// </summary>
 public sealed class CoachingTurnService(
     SamplePracticeCatalog catalog,
@@ -42,13 +44,14 @@ public sealed class CoachingTurnService(
     ILogger<CoachingTurnService> logger)
 {
     public const int MaxProbeAnswerLength = 500;
+    public const int MaxQuestionLength = 500;
 
     public async Task<CoachingTurnResult> RunAsync(
         AttemptId attemptId,
         CoachTurnRequest request,
         CancellationToken cancellationToken)
     {
-        if (request is null || !Enum.IsDefined(request.Event) || !HasWellFormedAnswer(request))
+        if (request is null || !Enum.IsDefined(request.Event) || !IsWellFormed(request))
         {
             return new(CoachingTurnResultKind.BadRequest);
         }
@@ -68,6 +71,12 @@ public sealed class CoachingTurnService(
             return new(CoachingTurnResultKind.Conflict);
         }
 
+        if (request.Event == CoachTurnEvent.StepQuestionAsked &&
+            entry.CoachingPolicy.StepQuestionsFor(new ScaffoldStepId(request.StepId!)) is null)
+        {
+            return new(CoachingTurnResultKind.BadRequest);
+        }
+
         if (request.Event == CoachTurnEvent.HelpRequested)
         {
             return ServeProbe(attempt, entry, request.Event);
@@ -77,7 +86,9 @@ public sealed class CoachingTurnService(
             attempt,
             entry,
             request.Event,
-            request.Answer);
+            request.Answer,
+            request.StepId,
+            request.Question);
 
         long startedAt = Stopwatch.GetTimestamp();
         string eventName = CoachContractNames.EventName(request.Event);
@@ -223,6 +234,8 @@ public sealed class CoachingTurnService(
                     (CoachContractNames.SuggestScaffold, suggest.SuggestedStepId, []),
                 ExplainWhyResponse explain =>
                     (CoachContractNames.ExplainWhy, null, explain.ProvenanceFactIds),
+                AnswerQuestionResponse answer =>
+                    (CoachContractNames.AnswerQuestion, answer.StepId, []),
                 _ => throw new InvalidOperationException(
                     $"Unsupported coach move '{response.Move.GetType().Name}'.")
             };
@@ -241,17 +254,32 @@ public sealed class CoachingTurnService(
             RecordedAt: timeProvider.GetUtcNow());
     }
 
-    private static bool HasWellFormedAnswer(CoachTurnRequest request) =>
-        request.Event == CoachTurnEvent.ProbeAnswered
-            ? !string.IsNullOrWhiteSpace(request.Answer) &&
-              request.Answer.Length <= MaxProbeAnswerLength
-            : request.Answer is null;
+    private static bool IsWellFormed(CoachTurnRequest request) =>
+        request.Event switch
+        {
+            CoachTurnEvent.ProbeAnswered =>
+                !string.IsNullOrWhiteSpace(request.Answer) &&
+                request.Answer.Length <= MaxProbeAnswerLength &&
+                request.StepId is null &&
+                request.Question is null,
+            CoachTurnEvent.StepQuestionAsked =>
+                request.Answer is null &&
+                !string.IsNullOrWhiteSpace(request.StepId) &&
+                !string.IsNullOrWhiteSpace(request.Question) &&
+                request.Question.Length <= MaxQuestionLength,
+            _ =>
+                request.Answer is null &&
+                request.StepId is null &&
+                request.Question is null
+        };
 
     private static bool IsLegalEvent(
         object phase,
         CoachTurnEvent requestedEvent,
         CoachingPolicy policy) =>
-        phase switch
+        requestedEvent == CoachTurnEvent.StepQuestionAsked
+            ? policy.HasScaffold
+            : phase switch
         {
             BeforeCheck =>
                 policy.Probe is not null &&
@@ -289,6 +317,7 @@ public sealed class CoachingTurnService(
             DiagnoseDifferenceResponse => CoachContractNames.DiagnoseDifference,
             SuggestScaffoldResponse => CoachContractNames.SuggestScaffold,
             ExplainWhyResponse => CoachContractNames.ExplainWhy,
+            AnswerQuestionResponse => CoachContractNames.AnswerQuestion,
             _ => move.GetType().Name
         };
 }

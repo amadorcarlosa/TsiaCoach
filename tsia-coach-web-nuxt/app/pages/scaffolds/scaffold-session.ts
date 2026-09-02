@@ -5,6 +5,8 @@ import type {
   ScaffoldSession,
   ScaffoldStepSubmission,
 } from '#shared/types/scaffolds'
+import type { CoachTurnResponse } from '#shared/types/coaching'
+import { CoachTurnEvents, isAnswerQuestionMove } from '#shared/types/coaching'
 
 export const ScaffoldSessionLoadStates = {
   Idle: 'idle',
@@ -42,6 +44,10 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
   const checking = ref(false)
   const checkError = ref<string | null>(null)
   const loadInFlight = shallowRef<Promise<void> | null>(null)
+  /** The coach's last reply on the current step. Cleared when the step changes. */
+  const coachReply = ref<string | null>(null)
+  const asking = ref(false)
+  const askError = ref<string | null>(null)
 
   const completedPercent = computed(() => {
     if (!session.value || Number(session.value.totalStepCount) === 0) {
@@ -125,13 +131,20 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
     checkError.value = null
 
     try {
-      session.value = await $fetch<ScaffoldSession>(
+      const next = await $fetch<ScaffoldSession>(
         `/api/scaffold-sessions/${encodeURIComponent(current.sessionId)}/checks`,
         {
           method: 'POST',
           body: submission,
         },
       )
+      const currentStepId = current.state.type === 'active' ? current.state.currentStep.id : null
+      const nextStepId = next.state.type === 'active' ? next.state.currentStep.id : null
+      if (nextStepId !== currentStepId) {
+        coachReply.value = null
+        askError.value = null
+      }
+      session.value = next
     }
     catch {
       session.value = current
@@ -139,6 +152,48 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
     }
     finally {
       checking.value = false
+    }
+  }
+
+  /**
+   * Ask the coach about the current step. The browser sends the step id and
+   * the question only; the server classifies it and returns an authored
+   * reply. The reply never moves the student.
+   */
+  async function askCoach(question: string) {
+    const current = session.value
+    const trimmed = question.trim()
+    if (!current || !attemptId.value || asking.value || current.state.type !== 'active' || !trimmed) {
+      return
+    }
+
+    asking.value = true
+    askError.value = null
+
+    try {
+      const turn = await $fetch<CoachTurnResponse>(
+        `/api/attempts/${encodeURIComponent(attemptId.value)}/coach`,
+        {
+          method: 'POST',
+          body: {
+            event: CoachTurnEvents.StepQuestionAsked,
+            stepId: current.state.currentStep.id,
+            question: trimmed,
+          },
+        },
+      )
+      coachReply.value = isAnswerQuestionMove(turn.move) ? turn.move.message : null
+      if (!coachReply.value) {
+        askError.value = 'The coach could not answer that. Try asking another way.'
+      }
+    }
+    catch (error) {
+      askError.value = statusCodeOf(error) === 429
+        ? 'The coach is busy. Try again in a moment.'
+        : 'The coach could not answer right now. Try again.'
+    }
+    finally {
+      asking.value = false
     }
   }
 
@@ -151,7 +206,11 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
     checking,
     checkError,
     completedPercent,
+    coachReply,
+    asking,
+    askError,
     load,
     submit,
+    askCoach,
   }
 })

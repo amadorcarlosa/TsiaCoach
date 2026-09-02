@@ -25,14 +25,20 @@ public sealed class CoachingPolicy
     /// <summary>The authored help probe. Null when the item has no scaffold.</summary>
     public ProbeQuestion? Probe { get; }
 
+    /// <summary>Authored question shapes per step. Empty when the item has no scaffold.</summary>
+    public IReadOnlyDictionary<ScaffoldStepId, StepQuestionSet> StepQuestions { get; }
+
     private CoachingPolicy(
         PracticeItemId practiceItemId,
         IReadOnlySet<MisconceptionCode> authoredCodes,
         IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
         Scaffold? scaffold,
-        ProbeQuestion? probe)
+        ProbeQuestion? probe,
+        IReadOnlyDictionary<ScaffoldStepId, StepQuestionSet> stepQuestions)
     {
         PracticeItemId = practiceItemId;
+        StepQuestions = new ReadOnlyDictionary<ScaffoldStepId, StepQuestionSet>(
+            new Dictionary<ScaffoldStepId, StepQuestionSet>(stepQuestions));
         AuthoredCodes = authoredCodes;
         EntryStepByCode = new ReadOnlyDictionary<MisconceptionCode, ScaffoldStepId>(
             new Dictionary<MisconceptionCode, ScaffoldStepId>(entryStepByCode));
@@ -44,7 +50,8 @@ public sealed class CoachingPolicy
         PracticeItem practiceItem,
         IReadOnlyDictionary<MisconceptionCode, ScaffoldStepId> entryStepByCode,
         Scaffold scaffold,
-        ProbeQuestion probe)
+        ProbeQuestion probe,
+        IReadOnlyList<StepQuestionSet> stepQuestions)
     {
         if (scaffold is null)
         {
@@ -52,14 +59,15 @@ public sealed class CoachingPolicy
                 "CreateWithScaffold requires an authored scaffold; use CreateWithoutScaffold when none exists.");
         }
 
-        CoachingPolicyValidator.Validate(practiceItem, entryStepByCode, scaffold, probe);
+        CoachingPolicyValidator.Validate(practiceItem, entryStepByCode, scaffold, probe, stepQuestions);
 
         return new CoachingPolicy(
             practiceItem.Id,
             entryStepByCode.Keys.ToHashSet(),
             entryStepByCode,
             scaffold,
-            probe);
+            probe,
+            stepQuestions.ToDictionary(set => set.StepId));
     }
 
     public static CoachingPolicy CreateWithoutScaffold(PracticeItem practiceItem) =>
@@ -68,7 +76,8 @@ public sealed class CoachingPolicy
             practiceItem.Distractors.Values.ToHashSet(),
             new Dictionary<MisconceptionCode, ScaffoldStepId>(),
             scaffold: null,
-            probe: null);
+            probe: null,
+            stepQuestions: new Dictionary<ScaffoldStepId, StepQuestionSet>());
 
     public bool HasScaffold => scaffold is not null;
 
@@ -97,6 +106,10 @@ public sealed class CoachingPolicy
 
         return new ScaffoldEntry(scaffold.Id, Probe.Shape(shapeId).EntryStepId);
     }
+
+    /// <summary>The authored question shapes for a step, or null when the step is not on the path.</summary>
+    public StepQuestionSet? StepQuestionsFor(ScaffoldStepId stepId) =>
+        StepQuestions.TryGetValue(stepId, out StepQuestionSet? set) ? set : null;
 
     /// <summary>
     /// The entry used when no incorrect check has been made yet: the floor of
