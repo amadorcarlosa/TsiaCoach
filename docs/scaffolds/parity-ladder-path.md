@@ -344,6 +344,8 @@ One new idea, two copies make a rectangle. It returns for any consecutive sum.
 
 ## Build status
 
+Rule detail settled while walking step 1: the count of twos and whites per row is not enough. A white at column 1 of the 3 has the right count and is still wrong, because a two fits there. The evaluator keeps whites out of the cells the twos will fill. Drops may still arrive in any order.
+
 Built on the flat path (`ParityLadderScaffold.cs`): steps 1, 1b, 1c, 2, 3, 3b, 4, 5, 6, 7. Steps 1b and 1c are entry-only: ordinary progress skips them, a routed student lands on them. Every grid step answers rejected, accepted, or complete per move, and the browser reverts a rejected move after half a second. The browser renderer is `GridScene.vue`: a supply of allowed pieces, pointer drag onto the target rows, and click-to-move or click-to-select on rows. The current step's accepted evidence comes back with the session, so a reload rebuilds the board. Verified end to end: a red two on the 4 is accepted, a white on the 4 is rejected and taken back, and the two survives a reload (`tests/e2e/scaffold-session.spec.ts`).
 
 Version-one simplifications, to be lifted later:
