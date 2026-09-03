@@ -75,7 +75,8 @@ public static class ScaffoldStepEvaluator
     /// <summary>
     /// The build is rejected if any piece is off a target row, past its span,
     /// overlapping, or breaks "as many step-length rods as fit" (which bounds
-    /// the multiset per row to floor(L / S) step rods and L mod S unit rods).
+    /// the multiset per row to floor(L / S) step rods and L mod S unit rods,
+    /// and keeps unit rods out of the cells the step rods will fill).
     /// It is complete when every target row is covered exactly.
     /// </summary>
     private static ScaffoldStepEvaluation EvaluateRowCompositions(
@@ -126,6 +127,15 @@ public static class ScaffoldStepEvaluator
             int stepRods = ordered.Count(piece => piece.Length == stepLength);
             int unitRods = ordered.Count(piece => piece.Length == 1);
             if (stepRods > target.Length / stepLength || unitRods > target.Length % stepLength)
+            {
+                return new ScaffoldStepNotSatisfied();
+            }
+
+            // Step rods fill the row from its start; a unit rod belongs only in
+            // the remainder cells after them. A white where a step rod still
+            // fits is rejected even when the row's white count allows it.
+            int stepRodSpan = target.Length / stepLength * stepLength;
+            if (ordered.Any(piece => piece.Length == 1 && piece.X < target.Start + stepRodSpan))
             {
                 return new ScaffoldStepNotSatisfied();
             }

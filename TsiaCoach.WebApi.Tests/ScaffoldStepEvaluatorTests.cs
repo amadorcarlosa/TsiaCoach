@@ -48,6 +48,29 @@ public sealed class ScaffoldStepEvaluatorTests
     }
 
     [Test]
+    public async Task Rebuild_WhiteBeforeTheTwosOnAnOddRowIsRejected()
+    {
+        // Row 3 takes one white, but only after the two: a white at column 1
+        // sits where a two still fits.
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 1, 3)])));
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 2, 5)])));
+    }
+
+    [Test]
+    public async Task Rebuild_WhiteInTheLastCellOfAnOddRowIsAcceptedBeforeTheTwos()
+    {
+        // The order of drops is free; the position is not. A white in the
+        // last cell of the 5 is where it belongs, even with no twos down yet.
+        await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([new PlacedPiece(1, 5, 5)])));
+    }
+
+    [Test]
     public async Task Rebuild_SecondWhiteOnAnOddRowIsRejected()
     {
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
