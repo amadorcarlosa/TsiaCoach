@@ -26,7 +26,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     apiUrl: '',
   },
-  modules: ['@nuxt/ui', '@nuxt/content', '@pinia/nuxt'],
+  modules: ['@nuxt/ui', '@nuxt/content', '@pinia/nuxt', '@nuxt/eslint'],
 
   content: {
     experimental: {
