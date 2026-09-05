@@ -27,7 +27,7 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(2, 1, 5), new PlacedPiece(2, 1, 8)])));
+            new PlacePiecesSubmission([RodPlacement.At(2, 1, 5), RodPlacement.At(2, 1, 8)])));
     }
 
     [Test]
@@ -44,7 +44,7 @@ public sealed class ScaffoldStepEvaluatorTests
         // Row 4 is even: no white belongs on it at all.
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 1, 4)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 1, 4)])));
     }
 
     [Test]
@@ -54,10 +54,10 @@ public sealed class ScaffoldStepEvaluatorTests
         // sits where a two still fits.
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 1, 3)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 1, 3)])));
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 2, 5)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 2, 5)])));
     }
 
     [Test]
@@ -67,7 +67,7 @@ public sealed class ScaffoldStepEvaluatorTests
         // last cell of the 5 is where it belongs, even with no twos down yet.
         await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 5, 5)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 5, 5)])));
     }
 
     [Test]
@@ -75,7 +75,7 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 1, 5), new PlacedPiece(1, 2, 5)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 1, 5), RodPlacement.At(1, 2, 5)])));
     }
 
     [Test]
@@ -84,7 +84,7 @@ public sealed class ScaffoldStepEvaluatorTests
         // Row 3 spans columns 1..3; a red at 3 would end at 5.
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(2, 3, 3)])));
+            new PlacePiecesSubmission([RodPlacement.At(2, 3, 3)])));
     }
 
     [Test]
@@ -92,7 +92,7 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(2, 1, 6), new PlacedPiece(2, 2, 6)])));
+            new PlacePiecesSubmission([RodPlacement.At(2, 1, 6), RodPlacement.At(2, 2, 6)])));
     }
 
     [Test]
@@ -100,17 +100,17 @@ public sealed class ScaffoldStepEvaluatorTests
     {
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-            new PlacePiecesSubmission([new PlacedPiece(2, 1, 11)])));
+            new PlacePiecesSubmission([RodPlacement.At(2, 1, 11)])));
     }
 
     [Test]
     public async Task Rebuild_CompositionWithAGapIsAcceptedNotComplete()
     {
         // Row 6 holds its three reds but the first sits at column 3, not 1.
-        PlacedPiece[] pieces = ScaffoldSessionTestData.CompleteRebuildSubmission().Pieces
+        RodPlacement[] pieces = ScaffoldSessionTestData.CompleteRebuildSubmission().Pieces
             .Where(piece => piece.Y != 6)
-            .Append(new PlacedPiece(2, 3, 6))
-            .Append(new PlacedPiece(2, 5, 6))
+            .Append(RodPlacement.At(2, 3, 6))
+            .Append(RodPlacement.At(2, 5, 6))
             .ToArray();
 
         await AssertOutcome<ScaffoldStepAccepted>(Evaluate(
@@ -125,7 +125,16 @@ public sealed class ScaffoldStepEvaluatorTests
             "not allowed",
             () => Evaluate(
                 ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
-                new PlacePiecesSubmission([new PlacedPiece(3, 1, 3)])));
+                new PlacePiecesSubmission([RodPlacement.At(3, 1, 3)])));
+    }
+
+    [Test]
+    public async Task Rebuild_RejectsAnUprightRodOnATargetRow()
+    {
+        // A red standing on its end covers cells in rows 5 and 6, not the row it was dropped on.
+        await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
+            ParityLadderScaffold.RebuildFromTwosAndOnesStepId,
+            new PlacePiecesSubmission([RodPlacement.At(2, 1, 5, RodOrientation.Vertical)])));
     }
 
     // ------------------------------------------------------------ step 1b and 1c landings
@@ -137,8 +146,8 @@ public sealed class ScaffoldStepEvaluatorTests
             ParityLadderScaffold.ContrastPairStepId,
             new PlacePiecesSubmission(
             [
-                .. ParityLadderScaffold.Composition(8, startX: 1, y: 2).Select(ToPlaced),
-                .. ParityLadderScaffold.Composition(9, startX: 1, y: 4).Select(ToPlaced)
+                .. ParityLadderScaffold.Composition(8, startX: 1, y: 2),
+                .. ParityLadderScaffold.Composition(9, startX: 1, y: 4)
             ])));
     }
 
@@ -240,7 +249,7 @@ public sealed class ScaffoldStepEvaluatorTests
             new PlacePiecesSubmission([])));
         await AssertOutcome<ScaffoldStepNotSatisfied>(Evaluate(
             ParityLadderScaffold.FillTheGapStepId,
-            new PlacePiecesSubmission([new PlacedPiece(1, 4, 3)])));
+            new PlacePiecesSubmission([RodPlacement.At(1, 4, 3)])));
     }
 
     [Test]
@@ -350,17 +359,17 @@ public sealed class ScaffoldStepEvaluatorTests
     [Test]
     public async Task PlacePiecesSubmission_CannotBeMutatedAfterConstruction()
     {
-        var original = new PlacedPiece(2, 1, 1);
-        var replacement = new PlacedPiece(1, 3, 1);
-        var pieces = new List<PlacedPiece> { original };
+        var original = RodPlacement.At(2, 1, 1);
+        var replacement = RodPlacement.At(1, 3, 1);
+        var pieces = new List<RodPlacement> { original };
         var submission = new PlacePiecesSubmission(pieces);
 
         pieces[0] = replacement;
         NotSupportedException? exception = CaptureMutationFailure(
-            () => ((IList<PlacedPiece>)submission.Pieces)[0] = replacement);
+            () => ((IList<RodPlacement>)submission.Pieces)[0] = replacement);
 
         await Assert.That(submission.Pieces[0]).IsEqualTo(original);
-        await Assert.That(submission.Pieces is PlacedPiece[]).IsFalse();
+        await Assert.That(submission.Pieces is RodPlacement[]).IsFalse();
         await Assert.That(exception is not null).IsTrue();
     }
 
@@ -466,9 +475,9 @@ public sealed class ScaffoldStepEvaluatorTests
                         Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
                         Prompt: new ScaffoldPrompt("Build.", []),
-                        Scene: new GridScene(8, 4, [new GridPiece(PieceKind.Rod, 3, 1, 1)], [new GridRow(1, 6, 3)]),
-                        Action: new PlacePieces([2, 1]),
-                        SuccessCheck: new MatchesRowCompositions(2))
+                        Scene: new GridScene(8, 4, [RodPlacement.At(3, 1, 1)], [new GridRow(1, 6, 3)]),
+                        Action: new PlacePieces([Rod.Red, Rod.White]),
+                        SuccessCheck: new MatchesRowCompositions(Rod.Red))
                 ]));
     }
 
@@ -487,9 +496,9 @@ public sealed class ScaffoldStepEvaluatorTests
                         Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
                         Prompt: new ScaffoldPrompt("Build.", []),
-                        Scene: new GridScene(8, 4, [new GridPiece(PieceKind.Rod, 3, 1, 1)], []),
-                        Action: new PlacePieces([2, 1]),
-                        SuccessCheck: new MatchesRowCompositions(2))
+                        Scene: new GridScene(8, 4, [RodPlacement.At(3, 1, 1)], []),
+                        Action: new PlacePieces([Rod.Red, Rod.White]),
+                        SuccessCheck: new MatchesRowCompositions(Rod.Red))
                 ]));
     }
 
@@ -508,7 +517,7 @@ public sealed class ScaffoldStepEvaluatorTests
                         Id: new ScaffoldStepId("step"),
                         Purpose: ScaffoldPhasePurpose.ConceptFormation,
                         Prompt: new ScaffoldPrompt("Sort.", []),
-                        Scene: new GridScene(20, 4, [new GridPiece(PieceKind.Rod, 2, 1, 1)], []),
+                        Scene: new GridScene(20, 4, [RodPlacement.At(2, 1, 1)], []),
                         Action: new MoveRows(10),
                         SuccessCheck: new MatchesRowPartition([1, 2]))
                 ]));
@@ -648,9 +657,6 @@ public sealed class ScaffoldStepEvaluatorTests
                     Action: new SelectAnswerChoice(),
                     SuccessCheck: new MatchesCorrectAnswer())
             ]);
-
-    private static PlacedPiece ToPlaced(GridPiece piece) =>
-        new(piece.Length, piece.X, piece.Y);
 
     private static ScaffoldStepEvaluation Evaluate(
         ScaffoldStepId stepId,

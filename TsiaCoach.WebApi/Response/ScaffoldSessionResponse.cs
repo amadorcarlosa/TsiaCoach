@@ -75,7 +75,8 @@ public abstract record ScaffoldStepEvidenceResponse;
 public sealed record PlacedPieceResponse(
     int Length,
     int X,
-    int Y);
+    int Y,
+    string Orientation);
 
 public sealed record PlacePiecesEvidenceResponse(
     IReadOnlyList<PlacedPieceResponse> Pieces)

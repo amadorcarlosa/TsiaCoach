@@ -73,10 +73,10 @@ public static class ScaffoldStepEvaluator
     }
 
     /// <summary>
-    /// The build is rejected if any piece is off a target row, past its span,
-    /// overlapping, or breaks "as many step-length rods as fit" (which bounds
-    /// the multiset per row to floor(L / S) step rods and L mod S unit rods,
-    /// and keeps unit rods out of the cells the step rods will fill).
+    /// The build is rejected if any rod is off a target row, standing upright,
+    /// past its span, overlapping, or breaks "as many step rods as fit" (which bounds the
+    /// multiset per row to floor(L / S) step rods and L mod S whites, and
+    /// keeps whites out of the cells the step rods will fill).
     /// It is complete when every target row is covered exactly.
     /// </summary>
     private static ScaffoldStepEvaluation EvaluateRowCompositions(
@@ -86,11 +86,12 @@ public static class ScaffoldStepEvaluator
         PlacePiecesSubmission submission)
     {
         GridScene grid = SceneFor<GridScene>(step);
-        int stepLength = compositions.StepLength;
+        Rod stepRod = compositions.StepRod;
+        int stepLength = stepRod.Units;
 
-        foreach (PlacedPiece piece in submission.Pieces)
+        foreach (RodPlacement piece in submission.Pieces)
         {
-            if (!place.AllowedLengths.Contains(piece.Length))
+            if (!place.AllowedRods.Contains(piece.Rod))
             {
                 throw new InvalidOperationException(
                     $"Piece length {piece.Length} is not allowed on scaffold step '{step.Id.Value}'.");
@@ -100,32 +101,32 @@ public static class ScaffoldStepEvaluator
         Dictionary<int, GridRow> targets = grid.TargetRows.ToDictionary(row => row.Y);
         bool allComplete = true;
 
-        foreach (IGrouping<int, PlacedPiece> rowPieces in submission.Pieces.GroupBy(piece => piece.Y))
+        foreach (IGrouping<int, RodPlacement> rowPieces in submission.Pieces.GroupBy(piece => piece.Y))
         {
             if (!targets.TryGetValue(rowPieces.Key, out GridRow? target))
             {
                 return new ScaffoldStepNotSatisfied();
             }
 
-            PlacedPiece[] ordered = rowPieces.OrderBy(piece => piece.X).ToArray();
+            RodPlacement[] ordered = rowPieces.OrderBy(piece => piece.X).ToArray();
             int end = target.Start + target.Length;
 
             for (int index = 0; index < ordered.Length; index++)
             {
-                PlacedPiece piece = ordered[index];
-                if (piece.X < target.Start || piece.X + piece.Length > end)
+                RodPlacement piece = ordered[index];
+                if (!piece.IsHorizontal || piece.X < target.Start || piece.Right > end)
                 {
                     return new ScaffoldStepNotSatisfied();
                 }
 
-                if (index > 0 && ordered[index - 1].X + ordered[index - 1].Length > piece.X)
+                if (index > 0 && ordered[index - 1].Overlaps(piece))
                 {
                     return new ScaffoldStepNotSatisfied();
                 }
             }
 
-            int stepRods = ordered.Count(piece => piece.Length == stepLength);
-            int unitRods = ordered.Count(piece => piece.Length == 1);
+            int stepRods = ordered.Count(piece => piece.Rod == stepRod);
+            int unitRods = ordered.Count(piece => piece.Rod == Rod.White);
             if (stepRods > target.Length / stepLength || unitRods > target.Length % stepLength)
             {
                 return new ScaffoldStepNotSatisfied();
@@ -135,7 +136,7 @@ public static class ScaffoldStepEvaluator
             // the remainder cells after them. A white where a step rod still
             // fits is rejected even when the row's white count allows it.
             int stepRodSpan = target.Length / stepLength * stepLength;
-            if (ordered.Any(piece => piece.Length == 1 && piece.X < target.Start + stepRodSpan))
+            if (ordered.Any(piece => piece.Rod == Rod.White && piece.X < target.Start + stepRodSpan))
             {
                 return new ScaffoldStepNotSatisfied();
             }
@@ -143,13 +144,13 @@ public static class ScaffoldStepEvaluator
 
         foreach (GridRow target in grid.TargetRows)
         {
-            PlacedPiece[] ordered = submission.Pieces
+            RodPlacement[] ordered = submission.Pieces
                 .Where(piece => piece.Y == target.Y)
                 .OrderBy(piece => piece.X)
                 .ToArray();
 
             int cursor = target.Start;
-            foreach (PlacedPiece piece in ordered)
+            foreach (RodPlacement piece in ordered)
             {
                 if (piece.X != cursor)
                 {

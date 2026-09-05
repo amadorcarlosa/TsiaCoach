@@ -87,7 +87,6 @@ internal static class ScaffoldSessionTestData
     public static PlacePiecesSubmission CompleteRebuildSubmission() =>
         new(Enumerable.Range(1, 10)
             .SelectMany(n => ParityLadderScaffold.Composition(n, startX: 1, y: n))
-            .Select(piece => new PlacedPiece(piece.Length, piece.X, piece.Y))
             .ToArray());
 
     public static ScaffoldStepSubmission SortEvensSubmission() =>
@@ -97,7 +96,7 @@ internal static class ScaffoldSessionTestData
         new SelectRowsSubmission([3, 5]);
 
     public static ScaffoldStepSubmission FillTheGapSubmission() =>
-        new PlacePiecesSubmission([new PlacedPiece(2, 4, 3)]);
+        new PlacePiecesSubmission([RodPlacement.At(2, 4, 3)]);
 
     public static ScaffoldStepSubmission NameTheSmallerSubmission() =>
         new SelectRowsSubmission([3]);

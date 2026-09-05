@@ -92,7 +92,8 @@ public sealed record GridPieceResponse(
     int Length,
     int X,
     int Y,
-    string? Symbol
+    string? Symbol,
+    string Orientation
 );
 
 public sealed record GridRowResponse(

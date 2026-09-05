@@ -63,21 +63,15 @@ public sealed record BuildExpressionSubmission(
 public sealed record SelectAnswerChoiceSubmission(
     AnswerChoiceId AnswerChoiceId);
 
-/// <summary>A rod the learner has placed on the grid: length, and the cell it starts in.</summary>
-public sealed record PlacedPiece(
-    int Length,
-    int X,
-    int Y);
-
-/// <summary>The learner's whole build so far, resubmitted on every drop.</summary>
+/// <summary>The learner's whole build so far, as <see cref="RodPlacement"/>s, resubmitted on every drop.</summary>
 public sealed record PlacePiecesSubmission
 {
-    public PlacePiecesSubmission(IReadOnlyList<PlacedPiece> pieces)
+    public PlacePiecesSubmission(IReadOnlyList<RodPlacement> pieces)
     {
-        Pieces = new ReadOnlyCollection<PlacedPiece>(pieces.ToArray());
+        Pieces = new ReadOnlyCollection<RodPlacement>(pieces.ToArray());
     }
 
-    public IReadOnlyList<PlacedPiece> Pieces { get; }
+    public IReadOnlyList<RodPlacement> Pieces { get; }
 }
 
 /// <summary>The rows whose trains the learner has moved to the compare column.</summary>

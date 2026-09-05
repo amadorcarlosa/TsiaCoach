@@ -219,20 +219,15 @@ public static class ScaffoldValidator
                 $"Grid scene in step '{stepId.Value}' must have positive dimensions.");
         }
 
+        // A rod's length is bounded by Rod itself; only tiles need a length check here.
         foreach (GridPiece piece in grid.Reference)
         {
             if (piece.Length <= 0 ||
                 piece.X < 0 || piece.Y < 0 ||
-                piece.X + piece.Length > grid.Cols || piece.Y >= grid.Rows)
+                piece.Right > grid.Cols || piece.Bottom > grid.Rows)
             {
                 throw new InvalidOperationException(
                     $"Grid scene in step '{stepId.Value}' has a reference piece outside the grid.");
-            }
-
-            if (piece.Kind == PieceKind.Rod && (piece.Length < 1 || piece.Length > 10))
-            {
-                throw new InvalidOperationException(
-                    $"Grid scene in step '{stepId.Value}' has a rod of length {piece.Length}.");
             }
         }
 
@@ -241,9 +236,7 @@ public static class ScaffoldValidator
         {
             for (int j = i + 1; j < pieces.Length; j++)
             {
-                if (pieces[i].Y == pieces[j].Y &&
-                    pieces[i].X < pieces[j].X + pieces[j].Length &&
-                    pieces[j].X < pieces[i].X + pieces[i].Length)
+                if (pieces[i].Overlaps(pieces[j]))
                 {
                     throw new InvalidOperationException(
                         $"Grid scene in step '{stepId.Value}' has overlapping reference pieces.");
@@ -292,10 +285,10 @@ public static class ScaffoldValidator
             (BuildExpression, MatchesLatentExpression) => true,
             (SelectAnswerChoice, MatchesCorrectAnswer) => true,
             (PlacePieces place, MatchesRowCompositions compositions) =>
-                place.AllowedLengths.Count > 0 &&
-                place.AllowedLengths.Contains(compositions.StepLength) &&
-                place.AllowedLengths.Contains(1) &&
-                compositions.StepLength > 1,
+                place.AllowedRods.Count > 0 &&
+                place.AllowedRods.Contains(compositions.StepRod) &&
+                place.AllowedRods.Contains(Rod.White) &&
+                compositions.StepRod.Units > 1,
             (MoveRows, MatchesRowPartition) => true,
             (SelectRows, MatchesRowSelection selection) =>
                 selection.RequiredCount > 0 &&

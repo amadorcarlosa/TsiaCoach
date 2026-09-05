@@ -381,7 +381,7 @@ public sealed class ScaffoldSessionDomainTests
 
         session = session.Append(
             ScaffoldSessionTestData.NewCheckId(),
-            new PlacePiecesSubmission([new PlacedPiece(2, 1, 4)]),
+            new PlacePiecesSubmission([RodPlacement.At(2, 1, 4)]),
             DateTimeOffset.UnixEpoch,
             PracticeItemOne.Item,
             ParityLadderScaffold.Definition);
@@ -390,7 +390,7 @@ public sealed class ScaffoldSessionDomainTests
 
         session = session.Append(
             ScaffoldSessionTestData.NewCheckId(),
-            new PlacePiecesSubmission([new PlacedPiece(1, 1, 4)]),
+            new PlacePiecesSubmission([RodPlacement.At(1, 1, 4)]),
             DateTimeOffset.UnixEpoch,
             PracticeItemOne.Item,
             ParityLadderScaffold.Definition);
