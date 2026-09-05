@@ -67,8 +67,8 @@ public static class ParityLadderScaffold
 
     /// <summary>Rod n on row n, left edge at column 1.</summary>
     private static readonly IReadOnlyList<GridPiece> Staircase =
-        Enumerable.Range(1, 10)
-            .Select(n => new GridPiece(PieceKind.Rod, n, 1, n))
+        Rod.All
+            .Select(rod => (GridPiece)new RodPlacement(rod, new GridCell(1, rod.Units)))
             .ToArray();
 
     private static readonly IReadOnlyList<GridRow> StaircaseRows =
@@ -80,6 +80,7 @@ public static class ParityLadderScaffold
     private static readonly IReadOnlyList<GridPiece> TwosAndOnes =
         Enumerable.Range(1, 10)
             .SelectMany(n => Composition(n, startX: 1, y: n))
+            .Select(piece => (GridPiece)piece)
             .ToArray();
 
     /// <summary>Only the odd rows of <see cref="TwosAndOnes"/>.</summary>
@@ -127,8 +128,8 @@ public static class ParityLadderScaffold
                     Text: "Build every rod out of twos and ones. Drag red twos and white ones on top of each rod, from 1 to 10, until it is covered exactly. Rule: put down as many twos as will fit. Only use a white one when a two won't fit.",
                     FocusPhraseIds: [new("phrase-set-declaration")]),
                 Scene: new GridScene(GridCols, GridRows, Staircase, StaircaseRows),
-                Action: new PlacePieces(AllowedLengths: [2, 1]),
-                SuccessCheck: new MatchesRowCompositions(StepLength: 2)),
+                Action: new PlacePieces(AllowedRods: [Rod.Red, Rod.White]),
+                SuccessCheck: new MatchesRowCompositions(StepRod: Rod.Red)),
 
             // 1b. Landing for a true-but-other pattern: 8 and 9 side by side.
             new ScaffoldStep(
@@ -142,16 +143,16 @@ public static class ParityLadderScaffold
                     Rows: 6,
                     Reference:
                     [
-                        new GridPiece(PieceKind.Rod, 8, 1, 1),
-                        new GridPiece(PieceKind.Rod, 9, 1, 3)
+                        RodPlacement.At(8, 1, 1),
+                        RodPlacement.At(9, 1, 3)
                     ],
                     TargetRows:
                     [
                         new GridRow(Y: 2, Start: 1, Length: 8),
                         new GridRow(Y: 4, Start: 1, Length: 9)
                     ]),
-                Action: new PlacePieces(AllowedLengths: [2, 1]),
-                SuccessCheck: new MatchesRowCompositions(StepLength: 2),
+                Action: new PlacePieces(AllowedRods: [Rod.Red, Rod.White]),
+                SuccessCheck: new MatchesRowCompositions(StepRod: Rod.Red),
                 EntryOnly: true),
 
             // 1c. Landing for no pattern seen: click every rod that ends with a white.
@@ -210,12 +211,12 @@ public static class ParityLadderScaffold
                     [
                         .. Composition(3, startX: 1, y: 1),
                         .. Composition(5, startX: 1, y: 2),
-                        new GridPiece(PieceKind.Rod, 3, 1, 3),
-                        new GridPiece(PieceKind.Rod, 5, 1, 4)
+                        RodPlacement.At(3, 1, 3),
+                        RodPlacement.At(5, 1, 4)
                     ],
                     TargetRows: [new GridRow(Y: 3, Start: 4, Length: 2)]),
-                Action: new PlacePieces(AllowedLengths: [2, 1]),
-                SuccessCheck: new MatchesRowCompositions(StepLength: 2)),
+                Action: new PlacePieces(AllowedRods: [Rod.Red, Rod.White]),
+                SuccessCheck: new MatchesRowCompositions(StepRod: Rod.Red)),
 
             // 4. The smaller one is n.
             new ScaffoldStep(
@@ -231,8 +232,8 @@ public static class ParityLadderScaffold
                     [
                         .. Composition(3, startX: 1, y: 1),
                         .. Composition(5, startX: 1, y: 2),
-                        new GridPiece(PieceKind.Rod, 3, 1, 3),
-                        new GridPiece(PieceKind.Rod, 5, 1, 4)
+                        RodPlacement.At(3, 1, 3),
+                        RodPlacement.At(5, 1, 4)
                     ],
                     TargetRows: []),
                 Action: new SelectRows(),
@@ -285,21 +286,6 @@ public static class ParityLadderScaffold
         ]);
 
     /// <summary>floor(n / 2) reds then n mod 2 whites, laid end to end from <paramref name="startX"/> on row <paramref name="y"/>.</summary>
-    public static IReadOnlyList<GridPiece> Composition(int n, int startX, int y)
-    {
-        var pieces = new List<GridPiece>();
-        int x = startX;
-        for (int k = 0; k < n / 2; k++)
-        {
-            pieces.Add(new GridPiece(PieceKind.Rod, 2, x, y));
-            x += 2;
-        }
-
-        if (n % 2 == 1)
-        {
-            pieces.Add(new GridPiece(PieceKind.Rod, 1, x, y));
-        }
-
-        return pieces;
-    }
+    public static IReadOnlyList<RodPlacement> Composition(int n, int startX, int y) =>
+        RodTrain.Compose(new UnitLength(n), Rod.Red).LayOut(new GridCell(startX, y));
 }

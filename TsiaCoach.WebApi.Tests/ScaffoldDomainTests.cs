@@ -57,8 +57,8 @@ public sealed class ScaffoldDomainTests
             .IsEquivalentTo(Enumerable.Range(1, 10));
         await Assert.That(scene.Reference.All(piece => piece.Y == piece.Length && piece.X == 1)).IsTrue();
         await Assert.That(scene.TargetRows.Count).IsEqualTo(10);
-        await Assert.That(action.AllowedLengths).IsEquivalentTo(new[] { 2, 1 });
-        await Assert.That(check.StepLength).IsEqualTo(2);
+        await Assert.That(action.AllowedRods).IsEquivalentTo(new[] { Rod.Red, Rod.White });
+        await Assert.That(check.StepRod).IsEqualTo(Rod.Red);
     }
 
     [Test]

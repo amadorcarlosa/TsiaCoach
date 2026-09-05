@@ -13,11 +13,11 @@ public sealed record BuildExpression;
 public sealed record SelectAnswerChoice;
 
 /// <summary>
-/// Drop rods of the allowed lengths onto the scene's target rows. Every drop
-/// is checked; the whole build is submitted each time.
+/// Drop any of the allowed rods onto the scene's target rows. Every drop is
+/// checked; the whole build is submitted each time.
 /// </summary>
 public sealed record PlacePieces(
-    IReadOnlyList<int> AllowedLengths
+    IReadOnlyList<Rod> AllowedRods
 );
 
 /// <summary>
@@ -65,12 +65,13 @@ public sealed record MatchesLatentExpression(
 public sealed record MatchesCorrectAnswer;
 
 /// <summary>
-/// Every target row must be covered exactly by rods of <see cref="StepLength"/>
-/// plus at most one rod of length 1, using as many step-length rods as fit.
-/// A build is accepted while it is a legal partial of that composition.
+/// Every target row must be covered exactly by the train
+/// <see cref="RodTrain.Compose"/> builds from <see cref="StepRod"/>: as many
+/// step rods as fit, then whites for the remainder. A build is accepted while
+/// it is a legal partial of that composition.
 /// </summary>
 public sealed record MatchesRowCompositions(
-    int StepLength
+    Rod StepRod
 );
 
 /// <summary>

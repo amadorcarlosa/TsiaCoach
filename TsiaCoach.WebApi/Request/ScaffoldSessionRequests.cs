@@ -85,7 +85,8 @@ public sealed record SelectAnswerChoiceSubmissionRequest(
 public sealed record PlacedPieceRequest(
     int Length,
     int X,
-    int Y);
+    int Y,
+    RodOrientation? Orientation = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PlacePiecesSubmissionRequest(
@@ -159,7 +160,16 @@ internal static class ScaffoldStepSubmissionRequestMapper
                         .Select(entry =>
                         {
                             PlacedPieceRequest item = RequireEntry(entry, "pieces");
-                            return new PlacedPiece(item.Length, item.X, item.Y);
+                            if (!Rod.TryOfLength(item.Length, out Rod rod))
+                            {
+                                throw new InvalidOperationException(
+                                    $"'pieces' contains length {item.Length}; a rod is {Rod.MinUnits} to {Rod.MaxUnits} units long.");
+                            }
+
+                            return new RodPlacement(
+                                rod,
+                                new GridCell(item.X, item.Y),
+                                item.Orientation ?? RodOrientation.Horizontal);
                         })
                         .ToArray()),
             MoveRowsSubmissionRequest value =>

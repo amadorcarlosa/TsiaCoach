@@ -68,7 +68,11 @@ internal static class ScaffoldResponseMapper
             null => null,
             PlacePiecesSubmission value => new PlacePiecesEvidenceResponse(
                 value.Pieces
-                    .Select(piece => new PlacedPieceResponse(piece.Length, piece.X, piece.Y))
+                    .Select(piece => new PlacedPieceResponse(
+                        piece.Length,
+                        piece.X,
+                        piece.Y,
+                        ContractName(piece.Orientation)))
                     .ToArray()),
             MoveRowsSubmission value => new MoveRowsEvidenceResponse(value.MovedRows),
             SelectRowsSubmission value => new SelectRowsEvidenceResponse(value.Rows),
@@ -130,7 +134,8 @@ internal static class ScaffoldResponseMapper
                         Length: piece.Length,
                         X: piece.X,
                         Y: piece.Y,
-                        Symbol: piece.Symbol))
+                        Symbol: piece.Symbol,
+                        Orientation: ContractName(piece.Orientation)))
                     .ToArray(),
                 TargetRows: value.TargetRows
                     .Select(row => new GridRowResponse(row.Y, row.Start, row.Length))
@@ -162,7 +167,8 @@ internal static class ScaffoldResponseMapper
                 ContractName(value.Reading)),
             BuildExpression => new BuildExpressionActionResponse(),
             SelectAnswerChoice => new SelectAnswerChoiceActionResponse(),
-            PlacePieces value => new PlacePiecesActionResponse(value.AllowedLengths),
+            PlacePieces value => new PlacePiecesActionResponse(
+                value.AllowedRods.Select(rod => rod.Units).ToArray()),
             MoveRows value => new MoveRowsActionResponse(value.CompareColumn),
             SelectRows => new SelectRowsActionResponse(),
             _ => throw Unsupported("learner action", action.Value)
@@ -185,7 +191,7 @@ internal static class ScaffoldResponseMapper
             MatchesLatentExpression value => new MatchesLatentExpressionCheckResponse(
                 value.ExpectedExpressionId.Value),
             MatchesCorrectAnswer => new MatchesCorrectAnswerCheckResponse(),
-            MatchesRowCompositions value => new MatchesRowCompositionsCheckResponse(value.StepLength),
+            MatchesRowCompositions value => new MatchesRowCompositionsCheckResponse(value.StepRod.Units),
             MatchesRowPartition value => new MatchesRowPartitionCheckResponse(value.ExpectedMovedRows),
             MatchesRowSelection value => new MatchesRowSelectionCheckResponse(
                 SelectableRows: value.SelectableRows,
