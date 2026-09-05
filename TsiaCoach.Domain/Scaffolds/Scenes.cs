@@ -112,7 +112,7 @@ public static class GridPieceExtensions
 
         /// <summary>Cells covered top to bottom.</summary>
         public int Height =>
-            piece.Orientation == RodOrientation.Horizontal ? 1 : piece.Length;
+            piece.Orientation == RodOrientation.Vertical ? piece.Length : 1;
 
         /// <summary>The first column after the piece.</summary>
         public int Right => piece.X + piece.Width;

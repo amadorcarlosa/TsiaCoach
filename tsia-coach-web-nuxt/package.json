@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:grid": "playwright test --config playwright.grid.config.ts",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

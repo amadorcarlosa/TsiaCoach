@@ -88,6 +88,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRodCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent": {
         parameters: {
             query?: never;
@@ -481,6 +497,7 @@ export interface components {
             /** Format: int32 */
             y: number | string;
             symbol: null | string;
+            orientation: string;
         };
         GridRowResponse: {
             /** Format: int32 */
@@ -619,6 +636,7 @@ export interface components {
             x: number | string;
             /** Format: int32 */
             y: number | string;
+            orientation: string;
         };
         PracticeItemPromptResponse: {
             id: string;
@@ -668,6 +686,28 @@ export interface components {
             answers: components["schemas"]["AnswerChoiceResponse"][];
             answerMathBindings: components["schemas"]["AnswerMathBindingResponse"][];
             correctAnswerId: string;
+        };
+        /** @enum {unknown} */
+        RodColor: "white" | "red" | "lightGreen" | "purple" | "yellow" | "darkGreen" | "black" | "brown" | "blue" | "orange";
+        RodDefinitionResponse: {
+            /** Format: int32 */
+            length: number | string;
+            color: components["schemas"]["RodColor"];
+            poses: components["schemas"]["RodPoseResponse"][];
+        };
+        RodDimensionsResponse: {
+            /** Format: int32 */
+            width: number | string;
+            /** Format: int32 */
+            depth: number | string;
+            /** Format: int32 */
+            height: number | string;
+        };
+        /** @enum {unknown} */
+        RodOrientation: "horizontal" | "vertical" | "tower";
+        RodPoseResponse: {
+            orientation: components["schemas"]["RodOrientation"];
+            dimensions: components["schemas"]["RodDimensionsResponse"];
         };
         ScaffoldLastCheckResponse: {
             stepId: string;
@@ -998,6 +1038,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FoundryDeploymentResponse"][];
+                };
+            };
+        };
+    };
+    GetRodCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RodDefinitionResponse"][];
                 };
             };
         };

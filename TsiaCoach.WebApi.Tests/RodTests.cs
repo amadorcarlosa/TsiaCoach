@@ -6,6 +6,25 @@ namespace TsiaCoach.WebApi.Tests;
 public sealed class RodTests
 {
     [Test]
+    public async Task Tower_UsesOneCellAndPreservesUnitVolume()
+    {
+        foreach (Rod rod in Rod.All)
+        foreach (RodOrientation orientation in Enum.GetValues<RodOrientation>())
+        {
+            var placement = new RodPlacement(rod, new GridCell(0, 0), orientation);
+            RodDimensions size = placement.Dimensions;
+            await Assert.That(size.Width * size.Depth * size.Height).IsEqualTo(rod.Units);
+        }
+        RodPlacement tower = RodPlacement.At(10, 11, 11, RodOrientation.Tower);
+        await Assert.That(tower.Dimensions).IsEqualTo(new RodDimensions(1, 1, 10));
+        await Assert.That(tower.FitsWithin(12, 12)).IsTrue();
+        await Assert.That(tower.Overlaps(RodPlacement.At(1, 11, 11))).IsTrue();
+        GridPiece piece = tower;
+        await Assert.That((piece.Width, piece.Height, piece.Bottom)).IsEqualTo((1, 1, 12));
+        await Assert.That(() => new RodTrain([Rod.Red]).LayOut(new GridCell(0, 0), RodOrientation.Tower))
+            .Throws<ArgumentException>();
+    }
+    [Test]
     public async Task Rod_IsOneToTenUnitsAndCarriesItsColour()
     {
         await Assert.That(Rod.All.Select(rod => rod.Units)).IsEquivalentTo(Enumerable.Range(1, 10));

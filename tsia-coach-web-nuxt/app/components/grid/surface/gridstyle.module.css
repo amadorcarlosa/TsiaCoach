@@ -1,0 +1,20 @@
+﻿.viewport {
+    display: grid;
+    place-items: center;
+    padding: 48px;
+}
+
+.surface {
+    position: relative;
+    transform-style: preserve-3d;
+    --cell-size: 28px;
+}
+
+.grid-lines {
+    position: absolute;
+    inset: 0;
+    background-color: var(--mt-grid-background-color);
+    background-image: var(--mt-background-image);
+    background-size: var(--cell-size) var(--cell-size);
+}
+.axis { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }

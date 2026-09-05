@@ -88,12 +88,16 @@ public readonly record struct Rod
 /// <summary>A cell on the grid: column <see cref="X"/>, row <see cref="Y"/>. y grows downward.</summary>
 public readonly record struct GridCell(int X, int Y);
 
-/// <summary>Which way a rod lies on the grid. A vertical rod stands on its origin cell and grows downward.</summary>
+/// <summary>Horizontal and Vertical lie on the board; Tower rises above a single cell.</summary>
 public enum RodOrientation
 {
     Horizontal,
-    Vertical
+    Vertical,
+    Tower
 }
+
+/// <summary>Physical dimensions in grid units. Depth runs along rows; Height rises above the board.</summary>
+public readonly record struct RodDimensions(int Width, int Depth, int Height);
 
 /// <summary>
 /// A rod lying on the grid: its origin is the top-left cell it covers, and it
@@ -122,11 +126,19 @@ public sealed record RodPlacement(
 
     public bool IsHorizontal => Orientation == RodOrientation.Horizontal;
 
+    public RodDimensions Dimensions => Orientation switch
+    {
+        RodOrientation.Horizontal => new(Length, 1, 1),
+        RodOrientation.Vertical => new(1, Length, 1),
+        RodOrientation.Tower => new(1, 1, Length),
+        _ => throw new ArgumentOutOfRangeException(nameof(Orientation))
+    };
+
     /// <summary>Cells covered left to right.</summary>
-    public int Width => IsHorizontal ? Length : 1;
+    public int Width => Dimensions.Width;
 
     /// <summary>Cells covered top to bottom.</summary>
-    public int Height => IsHorizontal ? 1 : Length;
+    public int Height => Dimensions.Depth;
 
     /// <summary>The first column after the rod.</summary>
     public int Right => X + Width;
@@ -186,6 +198,8 @@ public sealed record RodTrain
         GridCell start,
         RodOrientation orientation = RodOrientation.Horizontal)
     {
+        if (orientation == RodOrientation.Tower)
+            throw new ArgumentException("A train lies end to end on the board; tower stacking requires elevation coordinates.", nameof(orientation));
         var placements = new List<RodPlacement>(Rods.Count);
         GridCell cursor = start;
 
