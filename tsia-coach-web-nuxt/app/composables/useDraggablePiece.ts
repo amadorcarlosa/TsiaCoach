@@ -98,7 +98,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     }
   }
 
-  function snapCoordinate(axis: 'x' | 'y', value: number): number {
+  function snapCoordinate(axis: 'x' | 'y', _value: number): number {
     return snapTarget()?.[axis] ?? origin[axis]
   }
 

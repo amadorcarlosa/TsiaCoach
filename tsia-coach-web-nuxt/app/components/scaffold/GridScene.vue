@@ -157,11 +157,13 @@ function undoPending() {
     if (move.previous) placed.value.push(move.previous)
   } else if (actionType.value === 'moveRows') {
     const next = new Set(movedRows.value)
-    move.previouslyOn ? next.add(move.row) : next.delete(move.row)
+    if (move.previouslyOn) next.add(move.row)
+    else next.delete(move.row)
     movedRows.value = next
   } else {
     const next = new Set(selectedRows.value)
-    move.previouslyOn ? next.add(move.row) : next.delete(move.row)
+    if (move.previouslyOn) next.add(move.row)
+    else next.delete(move.row)
     selectedRows.value = next
   }
   rejectedPieceId.value = null
@@ -190,14 +192,16 @@ function toggleRow(y: number) {
   if (actionType.value === 'moveRows') {
     const previouslyOn = movedRows.value.has(y)
     const next = new Set(movedRows.value)
-    previouslyOn ? next.delete(y) : next.add(y)
+    if (previouslyOn) next.delete(y)
+    else next.add(y)
     movedRows.value = next
     pending.value = { kind: 'row', row: y, previouslyOn }
     emit('submit', { type: 'moveRows', movedRows: [...next].sort((a, b) => a - b) })
   } else {
     const previouslyOn = selectedRows.value.has(y)
     const next = new Set(selectedRows.value)
-    previouslyOn ? next.delete(y) : next.add(y)
+    if (previouslyOn) next.delete(y)
+    else next.add(y)
     selectedRows.value = next
     pending.value = { kind: 'row', row: y, previouslyOn }
     emit('submit', { type: 'selectRows', rows: [...next].sort((a, b) => a - b) })

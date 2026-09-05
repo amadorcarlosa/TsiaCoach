@@ -5,10 +5,10 @@ import {
   isAfterCorrectCheckPhase,
   isAfterIncorrectCheckPhase,
   isBeforeCheckPhase,
-  isVisibleCoachingButton
+  isVisibleCoachingButton, AttemptPhaseKinds 
 } from '#shared/types/sample-items'
 import type { CoachMoveResponse, CoachTurnEvent } from '#shared/types/coaching'
-import { AttemptPhaseKinds } from '#shared/types/sample-items'
+
 import { CoachTurnEvents, MaxProbeAnswerLength, isAskProbeMove } from '#shared/types/coaching'
 import {
   FocusTargetKinds,

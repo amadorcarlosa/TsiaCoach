@@ -3,7 +3,7 @@ import {
   coachingCardView,
   coachingErrorView,
   feedbackFor,
-  visibleCoachingButtonLabel
+  visibleCoachingButtonLabel, SubmissionStates 
 } from './sample-items-ui'
 import {
   AttemptPhaseKinds,
@@ -11,7 +11,7 @@ import {
   type CoachingButton,
 } from '#shared/types/sample-items'
 import type { CoachMoveResponse } from '#shared/types/coaching'
-import { SubmissionStates } from './sample-items-ui'
+
 
 describe('feedback helper', () => {
   it('incorrectProjection_DrivesWarningWithoutClientAnswerKey', () => {

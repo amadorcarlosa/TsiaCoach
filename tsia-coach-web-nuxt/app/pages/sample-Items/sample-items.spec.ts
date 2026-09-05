@@ -282,7 +282,7 @@ describe('sample item attempt store', () => {
 
   it('selectItem_ReusesExistingAttemptAndHistory', async () => {
     const store = useSampleItemsStore()
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -381,7 +381,7 @@ describe('sample item attempt store', () => {
   it('selectingAfterIncorrect_PreservesProjectionAndHidesOldFeedback', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -416,7 +416,7 @@ describe('sample item attempt store', () => {
   it('correctProjection_LocksSelectionAndResubmission', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -451,7 +451,7 @@ describe('sample item attempt store', () => {
   it('failedCheck_PreservesLastServerProjectionAndAllowsRetry', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }

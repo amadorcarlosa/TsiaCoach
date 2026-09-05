@@ -50,7 +50,7 @@ describe('coaching proxy contract', () => {
 
     await coachAttempt({} as any, 'attempt-1', {
       event: 'helpRequested',
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+       
       model: 'blocked',
       instructions: 'blocked',
       history: [],

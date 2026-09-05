@@ -70,7 +70,7 @@ describe('attempt and practice-item proxy contracts', () => {
 
     await startAttempt(event, {
       practiceItemId: 'item-1',
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+       
       selectedAnswerId: 'blocked'
     } as any)
 
@@ -102,7 +102,7 @@ describe('attempt and practice-item proxy contracts', () => {
 
     await checkAttempt({}, 'attempt-1', {
       selectedAnswerId: 'selected-answer',
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+       
       extraKey: 'blocked'
     } as any)
 

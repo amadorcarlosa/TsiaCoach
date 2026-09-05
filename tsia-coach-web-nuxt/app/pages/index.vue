@@ -32,8 +32,8 @@ useSeoMeta({
 
     <UPageSection
         v-for="(section, index) in page.sections"
-        :key="index"
         :id="section.id"
+        :key="index"
         :title="section.title"
         :description="section.description"
         :orientation="section.orientation"

@@ -186,7 +186,8 @@ const checkLabel = computed(() => {
 
 function toggleNumber(length: number) {
   const next = new Set(leftoverSelections.value)
-  next.has(length) ? next.delete(length) : next.add(length)
+  if (next.has(length)) next.delete(length)
+  else next.add(length)
   leftoverSelections.value = next
 }
 
