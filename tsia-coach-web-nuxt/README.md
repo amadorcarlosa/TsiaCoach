@@ -4,6 +4,14 @@ Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduct
 
 ## Setup
 
+Use Node 22 and the pnpm version declared in `package.json`. The tested runtime is
+pinned to Node 22.13.1 in `.nvmrc` and `pnpm-workspace.yaml`. Run scripts through
+pnpm so it selects that runtime automatically, even from a Node 24 shell. Aspire's
+`WithPnpm()` launcher uses the same project configuration.
+
+Check the selected runtime with `pnpm exec node --version`. When updating the
+runtime pin, update both files together and rerun the tests.
+
 Make sure to install dependencies:
 
 ```bash

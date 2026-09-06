@@ -1,0 +1,2 @@
+# Use the same runtime for Nuxt, tests, and Aspire's WithPnpm() launcher.
+useNodeVersion: 22.13.1
