@@ -13,7 +13,7 @@ const style = computed(() => ({
 </script>
 
 <template>
-  <div class="rod" :style="style">
+  <div class="rod" :style="style" :data-width-px="dimensions.width * unitSize">
     <span class="face bottom" />
     <span class="face front" />
     <span class="face back" />

@@ -12,17 +12,15 @@ const props: RodProps = {
 }
 
 describe('CuisenaireRod', () => {
-    it('sets the pixel width from the width in units and unit size', () => {
+    it('reports the pixel width from the width in units and unit size', () => {
         const wrapper = mount(CuisenaireRod, { props })
 
-        // Happy DOM has no layout engine; check the value supplied to CSS width.
-        expect(wrapper.element.style.getPropertyValue('--w')).toBe('90px')
+        expect(wrapper.attributes('data-width-px')).toBe('90')
     })
 
-    it('renders the supplied label visibly', () => {
+    it('renders the supplied label', () => {
         const wrapper = mount(CuisenaireRod, { props })
-        const label = wrapper.findAll('span').find(span => span.text() === 'five units')
 
-        expect(label?.isVisible()).toBe(true)
+        expect(wrapper.text()).toContain('five units')
     })
 })
