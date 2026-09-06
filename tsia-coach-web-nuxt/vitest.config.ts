@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  plugins: [vue()],
   resolve: {
     alias: {
       '~': fileURLToPath(new URL('./app', import.meta.url)),
@@ -11,6 +13,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    exclude: ['tests/e2e/**', 'node_modules/**']
+    exclude: ['tests/e2e/**', 'node_modules/**', '**/*.integration.test.ts']
   }
 })

@@ -1,0 +1,46 @@
+.tray {
+    display: inline-flex;
+    flex-direction: column;
+    width: max-content;
+    padding: 16px;
+    gap: 0;
+    background: var(--mt-bg-elevated);
+    color: var(--mt-text);
+    border: 1px solid var(--mt-border);
+    border-radius: 8px;
+}
+
+.choice {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 12px;
+    padding: 4px 1px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.choice:hover {
+    background: #dfe8f2;
+}
+
+.choice:focus-visible {
+    outline: 2px solid #22557d;
+    outline-offset: 1px;
+}
+
+.preview {
+    display: block;
+    pointer-events: none;
+    transform-style: preserve-3d;
+
+    /* Reveal depth without making the rods slope. */
+    transform: matrix3d(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0.35, -0.35, 1, 0,
+            0, 0, 0, 1
+    );
+}

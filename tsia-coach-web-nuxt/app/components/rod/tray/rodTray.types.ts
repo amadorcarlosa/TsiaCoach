@@ -1,0 +1,12 @@
+﻿import type {CuisenaireRodType, CuisenaireRodValue, RodProps} from "~/components/rod/rod.types.ts";
+
+
+
+
+export type RodTrayProps = {
+    items: CuisenaireRodType[]
+    unitSize: number
+}
+export const ariaTray="Rod choices";
+
+export const ariaRod= (itemNumber:string ): string =>`Choose ${itemNumber} rod`
