@@ -33,5 +33,10 @@ export default defineNuxtConfig({
       sqliteConnector: 'better-sqlite3',
     },
   },
+  typescript: {
+    nodeTsConfig: {
+      include: ['../vitest.config.*'],
+    },
+  },
 
 })
