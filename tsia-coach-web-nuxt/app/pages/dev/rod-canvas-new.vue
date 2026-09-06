@@ -5,7 +5,7 @@ import type {
   GridConfig,
   GridView,
 } from '~/components/grid/surface/grid.types'
-import {CuisenaireRodValues, getRodDefinition, type RodProps} from '~/components/rod/rod.types'
+import {CuisenaireRodValues, getRodDefinition, type CuisenaireRodValue} from '~/components/rod/rod.types'
 import { cusisenaireRodPalette } from '~/components/rod/rod.types'
 
 const config: GridConfig = {
@@ -17,7 +17,12 @@ const config: GridConfig = {
 const view: GridView = {
   tiltDegrees: 35,
 }
-
+const workspaceStyle = {
+  '--grid-top-inset': `${
+      config.rows * config.cellSize *
+      (1 - Math.cos(view.tiltDegrees * Math.PI / 180)) / 2
+  }px`,
+}
 
 const rods = Object.values(CuisenaireRodValues)
     .map(getRodDefinition)
@@ -64,8 +69,9 @@ function addRod(value: CuisenaireRodValue) {
 </script>
 
 <template>
-  <div class="workspace">
+  <div class="workspace" :style="workspaceStyle">
   <RodTray
+      class="workspace-tray"
       :items="rods"
       :unit-size="16"
       @choose="addRod"
@@ -94,38 +100,47 @@ function addRod(value: CuisenaireRodValue) {
 
 <style scoped>
 .workspace {
+  --grid-top-inset: 0px;
+
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px;
+  align-items: stretch;
+  gap: 0;
+
+  width: max-content;
+  max-width: calc(100% - 32px);
+  margin: 16px;
+  padding: 0;
+  overflow: auto;
+
+  background: var(--mt-bg-elevated);
+  color: var(--mt-text);
+  border: 1px solid var(--mt-border);
+  border-radius: var(--mt-radius-xl);
+  box-shadow: var(--mt-shadow-sm);
 }
+
+.workspace > .workspace-tray {
+  flex: 0 0 auto;
+  width: max-content;
+  padding: calc(24px + var(--grid-top-inset)) 16px 24px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--mt-border);
+  border-radius: 0;
+}
+
+/* Remove GridSurface's surrounding 48px padding. */
+.workspace :deep([data-role="viewport"]) {
+  display: block;
+  flex: 0 0 auto;
+  padding: 24px 16px;
+}
+
 .placement {
   position: absolute;
   transform-style: preserve-3d;
 }
-
-.board {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.board-surface {
-  padding: 24px 12px;
-}
-
-.status {
-  min-height: 1.5em;
-  margin: 8px 12px;
-}
-
-@media (max-width: 640px) {
-  .workspace {
-    flex-direction: column;
-  }
-
-  .board {
-    width: 100%;
-  }
-
+.workspace-tray :deep(button:first-child) {
+  padding-top: 0;
 }
 </style>
