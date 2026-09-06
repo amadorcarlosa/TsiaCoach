@@ -1,10 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
-import type {
-  GridConfig,
-  GridView,
-} from '~/components/grid/surface/grid.types'
+import { getTablaGeometry } from './tabla.geometry'
 
 type TablaRow = {
   id: string
@@ -13,8 +10,12 @@ type TablaRow = {
 
 const props = withDefaults(defineProps<{
   targetCount?: number
+  embedded?: boolean
+  viewportPadding?: string
 }>(), {
   targetCount: 3,
+  embedded: false,
+  viewportPadding: '16px',
 })
 
 const rows = computed<TablaRow[]>(() => {
@@ -35,20 +36,19 @@ const rows = computed<TablaRow[]>(() => {
   return result
 })
 
-const config = computed<GridConfig>(() => ({
-  columns: 24,
-  rows: rows.value.length,
-  cellSize: 36,
-}))
-
-const view: GridView = {
-  tiltDegrees: 35,
-}
+const geometry = computed(() => getTablaGeometry(props.targetCount))
+const config = computed(() => geometry.value.config)
 </script>
 
 <template>
-  <div class="tabla">
-    <GridSurface :config="config" :view="view">
+  <div class="tabla" :class="{ 'tabla--embedded': embedded }">
+    <GridSurface
+      :config="config"
+      :view="geometry.view"
+      :show-grid="false"
+      :viewport-padding="viewportPadding"
+      viewport-alignment="start"
+    >
       <div
           v-for="(row, index) in rows"
           :key="row.id"
@@ -117,17 +117,16 @@ const view: GridView = {
   color: var(--mt-text);
   background: var(--mt-bg-elevated);
   border: 1px solid var(--mt-border);
-  border-radius: var(--mt-radius-xl);
+  border-radius: var(--radius-xl);
 }
 
-.tabla :deep([data-role="viewport"]) {
-  display: block;
-  padding: 16px;
-}
-
-/* Suppress GridSurface's full grid only inside this tabla. */
-.tabla :deep([data-grid-world] > div[aria-hidden="true"]) {
-  display: none;
+.tabla--embedded {
+  flex: 0 0 auto;
+  max-width: none;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .tabla-row {
@@ -194,7 +193,7 @@ const view: GridView = {
   position: absolute;
   top: 0;
   height: 100%;
-  border-left: 2px solid var(--mt-border-strong);
+  border-left: 2px solid var(--mt-border-accent);
   padding-left: 4px;
   display: flex;
   align-items: center;

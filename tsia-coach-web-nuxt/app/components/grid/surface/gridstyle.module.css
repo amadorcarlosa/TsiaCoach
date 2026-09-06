@@ -1,7 +1,7 @@
 ﻿.viewport {
     display: grid;
-    place-items: center;
-    padding: 48px;
+    place-items: var(--grid-viewport-alignment);
+    padding: var(--grid-viewport-padding);
 }
 
 .surface {

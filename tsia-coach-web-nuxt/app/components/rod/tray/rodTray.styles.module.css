@@ -10,6 +10,17 @@
     border-radius: 8px;
 }
 
+.embedded {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+.embedded .choice:first-child {
+    padding-top: 0;
+}
+
 .choice {
     display: flex;
     align-items: center;
@@ -23,11 +34,11 @@
 }
 
 .choice:hover {
-    background: #dfe8f2;
+    background: var(--mt-surface-2);
 }
 
 .choice:focus-visible {
-    outline: 2px solid #22557d;
+    outline: 2px solid var(--mt-text-highlighted);
     outline-offset: 1px;
 }
 
