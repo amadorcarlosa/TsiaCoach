@@ -55,3 +55,22 @@
             0, 0, 0, 1
     );
 }
+.wrap {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+}
+
+.wrap .choice {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+}
+
+.wrap.embedded .choice:first-child {
+    padding-top: 8px;
+}

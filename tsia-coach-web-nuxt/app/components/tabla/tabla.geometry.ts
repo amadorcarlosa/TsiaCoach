@@ -8,14 +8,18 @@ export function getTablaGeometry(targetCount: number) {
     throw new RangeError('targetCount must be a positive integer')
   }
 
+  const referenceHeight = 2
+  const targetHeight = 1
+  const stride = referenceHeight + targetHeight
+
   const config: GridConfig = {
     columns: 24,
-    rows: targetCount * 2 + 1,
+    rows: targetCount * stride + referenceHeight,
     cellSize: 36,
   }
 
   const view: GridView = {
-    tiltDegrees: 35,
+    tiltDegrees: 15,
   }
 
   const topInset =
@@ -26,9 +30,26 @@ export function getTablaGeometry(targetCount: number) {
       { length: targetCount },
       (_, index) => ({
         id: `target-${index}`,
-        row: index * 2 + 1,
+        row: referenceHeight + index * stride,
       }),
+      
   )
+  const tiltRadians = Math.abs(view.tiltDegrees) * Math.PI / 180
+  const rodHeight = config.cellSize // Current rods are one unit high.
+  const labelGap = 6 // Intentional visual gap, in screen pixels.
 
-  return { config, view, topInset, targets }
+// CSS bottom is measured before the board's rotation.
+  const unitLabelBottom =
+      (rodHeight * Math.sin(tiltRadians) + labelGap) /
+      Math.cos(tiltRadians)
+
+  return {
+    config,
+    view,
+    topInset,
+    targets,
+    referenceHeight,
+    targetHeight,
+    unitLabelBottom
+  }
 }

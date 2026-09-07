@@ -19,7 +19,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside :class="[styles.tray, embedded && styles.embedded]" :aria-label="ariaTray" >
+  <aside 
+      :class="[
+          styles.tray, 
+          embedded && styles.embedded,
+          layout=== 'wrap' && styles.wrap
+          ]" 
+      :aria-label="ariaTray" >
     <button
         v-for="item in items"
         :key="item.value"

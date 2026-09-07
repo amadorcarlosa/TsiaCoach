@@ -7,6 +7,7 @@ export type RodTrayProps = {
     items: CuisenaireRodType[]
     unitSize: number
     embedded?: boolean
+    layout?: 'vertical' | 'wrap'
 }
 export const ariaTray="Rod choices";
 

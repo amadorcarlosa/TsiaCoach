@@ -2,11 +2,12 @@
 import { computed } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
 import { getTablaGeometry } from './tabla.geometry'
+import {
+  RowKinds,
+  type TablaRow,
+} from './rod.tabla.types'
 
-type TablaRow = {
-  id: string
-  kind: 'unit-grid' | 'ten-grid' | 'target'
-}
+
 
 const props = withDefaults(defineProps<{
   targetCount?: number
@@ -18,30 +19,45 @@ const props = withDefaults(defineProps<{
   viewportPadding: '16px',
 })
 
+const geometry = computed(() => getTablaGeometry(props.targetCount))
+const config = computed(() => geometry.value.config)
+
 const rows = computed<TablaRow[]>(() => {
   const result: TablaRow[] = [
-    { id: 'reference-0', kind: 'unit-grid' },
+    {
+      id: 'reference-0',
+      kind: RowKinds.Unit,
+      row: 0,
+    },
   ]
 
-  for (let index = 0; index < props.targetCount; index++) {
+  geometry.value.targets.forEach((target, index) => {
     result.push(
-        { id: `target-${index}`, kind: 'target' },
+        {
+          id: target.id,
+          kind: RowKinds.Target,
+          row: target.row,
+        },
         {
           id: `reference-${index + 1}`,
-          kind: index % 2 === 0 ? 'ten-grid' : 'unit-grid',
+          kind: index % 2 === 0 ? RowKinds.Ten : RowKinds.Unit,
+          row: target.row + 1,
         },
     )
-  }
+  })
 
   return result
 })
-
-const geometry = computed(() => getTablaGeometry(props.targetCount))
-const config = computed(() => geometry.value.config)
 </script>
 
 <template>
-  <div class="tabla" :class="{ 'tabla--embedded': embedded }">
+  <div 
+      class="tabla" 
+      :class="{ 'tabla--embedded': embedded }"
+      :style="{
+    '--tabla-unit-label-bottom': `${geometry.unitLabelBottom}px`,
+  }"
+  >
     <GridSurface
       :config="config"
       :view="geometry.view"
@@ -55,11 +71,15 @@ const config = computed(() => geometry.value.config)
           class="tabla-row"
           :class="`tabla-row--${row.kind}`"
           :style="{
-          top: `${index * config.cellSize}px`,
-          height: `${config.cellSize}px`,
+          top: `${row.row * config.cellSize}px`,
+          height: `${
+            (row.kind === RowKinds.Target
+              ? geometry.targetHeight
+              : geometry.referenceHeight) * config.cellSize
+          }px`,
         }"
         >
-        <template v-if="row.kind === 'unit-grid'">
+        <template v-if="row.kind === RowKinds.Unit">
           <span
             v-for="n in config.columns + 1"
             :key="n"
@@ -77,7 +97,7 @@ const config = computed(() => geometry.value.config)
           </span>
         </template>
 
-        <template v-else-if="row.kind === 'ten-grid'">
+        <template v-else-if="row.kind === RowKinds.Ten">
           <span
               v-for="boundary in [10, 20]"
               :key="boundary"
@@ -105,12 +125,16 @@ const config = computed(() => geometry.value.config)
           />
         </div>
       </div>
+      <slot name="pieces" :cell-size="config.cellSize" />
     </GridSurface>
   </div>
 </template>
 
 <style scoped>
 .tabla {
+  /* The inline geometry binding supplies the calculated offset. */
+  --tabla-unit-label-bottom: 0px;
+
   width: max-content;
   max-width: 100%;
   overflow: auto;
@@ -167,12 +191,15 @@ const config = computed(() => geometry.value.config)
 
 .unit-number {
   position: absolute;
-  bottom: 3px;
-  transform: translateX(-50%);
-  font-size: 0.75rem;
+  top:auto;
+  bottom: var(--tabla-unit-label-bottom);
+  transform: translateX(-10%);
+  font-size: .9rem;
   font-variant-numeric: tabular-nums;
   color: var(--mt-text-muted);
   pointer-events: none;
+
+
 }
 
 .unit-number--ten {
@@ -196,7 +223,9 @@ const config = computed(() => geometry.value.config)
   border-left: 2px solid var(--mt-border-accent);
   padding-left: 4px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  padding-top: 2px;
+  box-sizing: border-box;
   font-size: 0.75rem;
   white-space: nowrap;
   pointer-events: none;
