@@ -16,6 +16,15 @@ export type RodProps = {
     label: string
 }
 
+export type DragProps={  id: string
+    value: CuisenaireRodValue
+    x: number
+    y: number
+    cellSize: number
+    snapToGrid?: boolean
+    disabled?: boolean
+}
+
 
 export const CuisenaireRodNumbers = {
     One: 'one',

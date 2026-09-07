@@ -3,20 +3,14 @@ import { ref } from 'vue'
 import CuisenaireRod from './CuisenaireRod.vue'
 import {
   type CuisenaireRodValue,
-  cusisenaireRodPalette,
+  cusisenaireRodPalette, type DragProps,
 } from './rod.types'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
 import type { Point } from '~/components/grid/gridPointer'
 
-const props = withDefaults(defineProps<{
-  id: string
-  value: CuisenaireRodValue
-  x: number
-  y: number
-  cellSize: number
-  snapToGrid?: boolean
-}>(), {
+const props = withDefaults(defineProps<DragProps>(), {
   snapToGrid: true,
+  disabled:false
 })
 
 const emit = defineEmits<{
@@ -31,6 +25,7 @@ useInertialBoardDrag({
   cellSize: () => props.cellSize,
   snapToGrid: () => props.snapToGrid,
   onSettled: position => emit('settled', position),
+  enabled:()=>!props.disabled,
 })
 </script>
 
@@ -38,11 +33,14 @@ useInertialBoardDrag({
   <div
       ref="element"
       class="draggable-rod"
+      :aria-label="disabled
+  ? `${value}-rod. Portrait preview; movement unavailable.`
+  : `${value}-rod at column ${x}, row ${y}. Use arrow keys to move.`"
       :data-piece-id="id"
       tabindex="0"
       role="button"
       aria-roledescription="movable rod"
-      :aria-label="`${value}-rod at column ${x}, row ${y}. Use arrow keys to move.`"
+  
       :style="{
       left: `${x * cellSize}px`,
       top: `${y * cellSize}px`,
@@ -71,6 +69,11 @@ useInertialBoardDrag({
 .draggable-rod:focus-visible {
   outline: 2px solid var(--ui-primary);
   outline-offset: 3px;
+}
+
+.draggable-rod[aria-disabled="true"] {
+  cursor: default;
+  touch-action: auto;
 }
 .rod-visual {
   transform-style: preserve-3d;

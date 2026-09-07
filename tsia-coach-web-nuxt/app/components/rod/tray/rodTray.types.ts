@@ -8,6 +8,7 @@ export type RodTrayProps = {
     unitSize: number
     embedded?: boolean
     layout?: 'vertical' | 'wrap'
+    disabled?: boolean
 }
 export const ariaTray="Rod choices";
 

@@ -32,6 +32,7 @@ const emit = defineEmits<{
         :class="styles.choice"
         type="button"
         :aria-label=ariaRod(item.number)
+        :disabled="disabled"
         @click="emit('choose', item.value)"
     >
       <span :class="styles.preview" aria-hidden="true">

@@ -13,14 +13,30 @@ const props = withDefaults(defineProps<{
   targetCount?: number
   embedded?: boolean
   viewportPadding?: string
-}>(), {
+  cellSize?: number
+  visibleColumns?: number
+}>(), 
+    {
   targetCount: 3,
   embedded: false,
   viewportPadding: '16px',
+  cellSize: 36,
+  visibleColumns: 24,
 })
 
-const geometry = computed(() => getTablaGeometry(props.targetCount))
+const geometry = computed(() =>
+    getTablaGeometry(
+        props.targetCount,
+        props.cellSize,
+        props.visibleColumns,
+    ),
+)
+
 const config = computed(() => geometry.value.config)
+
+const tenBoundaries = computed(() =>
+    [10, 20].filter(value => value <= props.visibleColumns),
+)
 
 const rows = computed<TablaRow[]>(() => {
   const result: TablaRow[] = [
@@ -99,7 +115,7 @@ const rows = computed<TablaRow[]>(() => {
 
         <template v-else-if="row.kind === RowKinds.Ten">
           <span
-              v-for="boundary in [10, 20]"
+              v-for="boundary in tenBoundaries"
               :key="boundary"
               class="ten-marker"
               :style="{

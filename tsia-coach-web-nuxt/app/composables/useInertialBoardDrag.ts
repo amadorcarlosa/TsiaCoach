@@ -16,6 +16,7 @@ type BoardDragOptions = {
     position: () => Point
     cellSize: () => number
     snapToGrid: () => boolean
+    enabled?: () => boolean
     onSettled: (position: Point) => void
 }
 
@@ -36,6 +37,20 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
     let axisX: Point = { x: 1, y: 0 }
     let axisY: Point = { x: 0, y: 1 }
+
+    function isEnabled() {
+        return options.enabled?.() ?? true
+    }
+
+    function syncInteraction() {
+        cancel()
+
+        if (isEnabled()) {
+            draggable?.enable()
+        } else {
+            draggable?.disable()
+        }
+    }
 
     function measureAxes(): boolean {
         const world = options.el.value?.closest('[data-grid-world]')
@@ -174,6 +189,8 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     }
 
     function onKeydown(event: KeyboardEvent) {
+        if (!isEnabled()) return
+
         if (event.key === 'Escape') {
             event.preventDefault()
             cancel()
@@ -251,7 +268,7 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
             },
 
             onPress: function (this: Draggable) {
-                if (!measureAxes()) {
+                if (!isEnabled() || !measureAxes()) {
                     cancel()
                     return
                 }
@@ -275,6 +292,10 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
             onClick: finish,
         })[0] ?? null
 
+        if (!isEnabled()) {
+            draggable?.disable()
+        }
+
         element.addEventListener('keydown', onKeydown)
         window.addEventListener('blur', cancel)
         window.addEventListener('pointercancel', cancel)
@@ -282,14 +303,16 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     })
 
     watch(
-        () => [
-            options.position().x,
-            options.position().y,
-            options.cellSize(),
-        ],
+        () => [options.position().x, options.position().y],
         () => {
             if (!active) render(options.position())
         },
+    )
+
+    watch(
+        () => [isEnabled(), options.cellSize()],
+        syncInteraction,
+        { flush: 'post' },
     )
 
     onBeforeUnmount(() => {

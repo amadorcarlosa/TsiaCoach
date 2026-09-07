@@ -3,19 +3,30 @@ import type {
   GridView,
 } from '~/components/grid/surface/grid.types'
 
-export function getTablaGeometry(targetCount: number) {
+export function getTablaGeometry(
+    targetCount: number,
+    cellSize = 36,
+    columns = 24,
+)  {
   if (!Number.isInteger(targetCount) || targetCount < 1) {
     throw new RangeError('targetCount must be a positive integer')
   }
 
+  if (!Number.isFinite(cellSize) || cellSize <= 0) {
+    throw new RangeError('cellSize must be positive')
+  }
+
+  if (!Number.isInteger(columns) || columns < 1) {
+    throw new RangeError('columns must be a positive integer')
+  }
   const referenceHeight = 2
   const targetHeight = 1
   const stride = referenceHeight + targetHeight
 
   const config: GridConfig = {
-    columns: 24,
+    columns,
     rows: targetCount * stride + referenceHeight,
-    cellSize: 36,
+    cellSize,
   }
 
   const view: GridView = {

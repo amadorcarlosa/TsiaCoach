@@ -1,159 +1,241 @@
 <script setup lang="ts">
+
 import RodTabla from '~/components/tabla/RodTabla.vue'
+import DraggableRod from '~/components/rod/DraggableRod.vue'
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
 import {
   type CuisenaireRodValue,
   CuisenaireRodValues,
-
-  getRodDefinition
+  getRodDefinition,
 } from '~/components/rod/rod.types'
-import DraggableRod from '~/components/rod/DraggableRod.vue'
+import type { PlacedRod } from '~/components/rod/rod-board.types'
 import type { Point } from '~/components/grid/gridPointer'
 
-const compactLayout = ref(false)
-const trayOpen = ref(false)
 
-let layoutQueries: MediaQueryList[] = []
 
-function updateLayout() {
-  const [compact, phone, short] = layoutQueries
-  if (!compact || !phone || !short) return
-
-  compactLayout.value = compact.matches || short.matches
-
-  // Open initially on small laptops.
-  // Collapse initially on phones and short landscape viewports.
-  trayOpen.value = !phone.matches && !short.matches
-}
-
-onMounted(() => {
-  layoutQueries = [
-    window.matchMedia('(max-width: 1119px)'),
-    window.matchMedia('(max-width: 600px)'),
-    window.matchMedia('(max-height: 500px)'),
-  ]
-
-  updateLayout()
-
-  layoutQueries.forEach(query => {
-    query.addEventListener('change', updateLayout)
-  })
-})
-
-onBeforeUnmount(() => {
-  layoutQueries.forEach(query => {
-    query.removeEventListener('change', updateLayout)
-  })
-})
+// This playground's board configuration.
 const targetCount = 3
-const geometry = getTablaGeometry(targetCount)
-const workspaceStyle = {
-  '--grid-top-inset': `${geometry.topInset}px`,
-}
-const rods = Object.values(CuisenaireRodValues).map(getRodDefinition)
-const rod = ref({
-  id: 'rod-1',
-  value: 6 as CuisenaireRodValue,
-  x: 0,
-  y: geometry.targets[0]!.row,
+const fullColumns = 24
+const horizontalPadding = 32
+const totalGridRows = getTablaGeometry(targetCount).config.rows
+
+// These refs connect the template's elements to layout measurement.
+const boardViewport = ref<HTMLElement | null>(null)
+const workspaceTools = ref<HTMLElement | null>(null)
+
+const {
+  compactLayout,
+  phonePortrait,
+  shortLandscape,
+  trayOpen,
+  visibleColumns,
+  cellSize,
+  boardPaddingY,
+} = useBoardLayout({
+  boardViewport,
+  workspaceTools,
+  fullColumns,
+  portraitColumns: 12,
+  totalRows: totalGridRows,
+  horizontalPadding,
+  maximumCellSize: 36,
+  minimumLandscapeCellSize: 24,
+  bottomGap: 8,
 })
-function settleRod(position: Point) {
-  rod.value = {
-    ...rod.value,
-    ...position,
-  }
+
+// The page connects responsive sizing to tabla geometry.
+const geometry = computed(() =>
+    getTablaGeometry(
+        targetCount,
+        cellSize.value,
+        visibleColumns.value,
+    ),
+)
+
+const workspaceStyle = computed(() => ({
+  '--grid-top-inset': `${geometry.value.topInset}px`,
+  '--workspace-padding-y': `${boardPaddingY.value}px`,
+}))
+
+const rods = Object.values(CuisenaireRodValues)
+    .map(getRodDefinition)
+
+const { placedRods, addRod, moveRod } = useRodBoard()
+
+// The page applies the portrait interaction policy.
+function onChooseRod(value: CuisenaireRodValue): void {
+  if (phonePortrait.value) return
+
+  const firstTarget = geometry.value.targets[0]
+  if (!firstTarget) return
+
+  addRod(value, {
+    x: 0,
+    y: firstTarget.row,
+  })
+}
+
+function onRodSettled(id: string, position: Point): void {
+  if (phonePortrait.value) return
+
+  moveRod(id, position)
+}
+
+function intersectsPreview(
+    piece: Readonly<PlacedRod>,
+    columns: number,
+): boolean {
+  return piece.x < columns && piece.x + piece.value > 0
 }
 </script>
 
 <template>
   <div class="tabla-playground">
+    <p
+        v-if="phonePortrait"
+        class="preview-notice"
+        role="status"
+    >
+      <strong>Portrait preview: 0–12.</strong>
+      Movement is disabled. Rotate to landscape to view all
+      24 columns and move rods. Rods beyond 12 are preserved.
+    </p>
+
     <div class="workspace" :style="workspaceStyle">
-      <div class="workspace-tools">
-        <button
+      <div ref="workspaceTools" class="workspace-tools">
+        <div class="workspace-toolbar">
+          <button
             type="button"
             class="tray-toggle"
             :aria-expanded="trayOpen"
             aria-controls="tabla-rod-tray"
             @click="trayOpen = !trayOpen"
-        >
-          {{ trayOpen ? 'Hide rods' : 'Show rods' }}
-        </button>
+          >
+            {{ trayOpen ? 'Hide rods' : 'Show rods' }}
+          </button>
+
+          <span
+            v-if="shortLandscape"
+            class="toolbar-status"
+            role="status"
+          >
+            {{ placedRods.length }}
+            {{ placedRods.length === 1 ? 'rod' : 'rods' }}
+            on the board
+          </span>
+        </div>
 
         <div
-            id="tabla-rod-tray"
             v-show="!compactLayout || trayOpen"
+            id="tabla-rod-tray"
             class="workspace-tray"
         >
           <RodTray
               :items="rods"
               :unit-size="16"
               :layout="compactLayout ? 'wrap' : 'vertical'"
+              :disabled="phonePortrait"
               embedded
+              @choose="onChooseRod"
           />
         </div>
       </div>
-
       <div
-          class="board-scroll"
+          ref="boardViewport"
+          class="board-viewport"
           role="region"
-          aria-label="Rod board, horizontally scrollable"
-          tabindex="0"
+          :aria-label="phonePortrait
+          ? 'Rod board preview, columns zero to twelve'
+          : 'Rod board, columns zero to twenty-four'"
       >
-        <RodTabla
-            :target-count="targetCount"
-            viewport-padding="var(--workspace-padding-y) 16px"
-            embedded
+        <div
+            class="board-frame"
+            :style="{
+            width: `${visibleColumns * cellSize + horizontalPadding}px`,
+          }"
         >
-          <template #pieces="{ cellSize }">
-            <DraggableRod
-                :id="rod.id"
-                :value="rod.value"
-                :x="rod.x"
-                :y="rod.y"
-                :cell-size="cellSize"
-                :snap-to-grid="true"
-                @settled="settleRod"
-            />
-          </template>
-        </RodTabla>
-      </div> <p class="position-status" role="status">
-      Rod position:
-      {{ rod.x.toFixed(2) }}, {{ rod.y.toFixed(2) }}
-    </p>
+          <RodTabla
+              :target-count="targetCount"
+              :cell-size="cellSize"
+              :visible-columns="visibleColumns"
+              viewport-padding="var(--workspace-padding-y) 16px"
+              embedded
+          >
+            <template #pieces="{ cellSize: pieceCellSize }">
+              <DraggableRod
+                  v-for="piece in placedRods"
+                  :key="piece.id"
+                  v-show="!phonePortrait || intersectsPreview(piece, visibleColumns)"
+                  :id="piece.id"
+                  :value="piece.value"
+                  :x="piece.x"
+                  :y="piece.y"
+                  :cell-size="pieceCellSize"
+                  :snap-to-grid="true"
+                  :disabled="phonePortrait"
+                  @settled="onRodSettled(piece.id, $event)"
+              />
+            </template>
+          </RodTabla>
+        </div>
+        <!-- End board-frame -->
+      </div>
+      <!-- End board-viewport -->
     </div>
+    <!-- End workspace -->
 
-   
+    <p
+        v-if="!shortLandscape"
+        class="position-status"
+        role="status"
+    >
+      {{ placedRods.length }}
+      {{ placedRods.length === 1 ? 'rod' : 'rods' }}
+      on the board
+    </p>
   </div>
+  <!-- End tabla-playground -->
 </template>
+  
+   
 
 <style scoped>
 .tabla-playground {
-  min-width:0;
+  display: block;
+  min-width: 0;
   padding: 8px;
-  display: flex;
-  justify-content: center;
 }
-
-
 .workspace {
   --grid-top-inset: 0px;
   --workspace-padding-y: 24px;
 
   display: flex;
   align-items: stretch;
-  gap: 0;
-  width: fit-content;
-  max-width: 100%;
+  width: 100%;
+  max-width: 1100px;
+  min-width: 0;
+  box-sizing: border-box;
   margin-inline: auto;
-  padding: 0;
-  
+
   background: var(--mt-bg-elevated);
   color: var(--mt-text);
   border: 1px solid var(--mt-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
 }
+.workspace-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
+.toolbar-status {
+  padding-right: 16px;
+  font-size: 0.875rem;
+  color: var(--mt-text-muted);
+  white-space: nowrap;
+}
 .workspace-tools {
   flex: 0 0 auto;
   border-right: 1px solid var(--mt-border);
@@ -170,33 +252,49 @@ function settleRod(position: Point) {
   display: none;
 }
 
-.board-scroll {
-  flex: 1 1 auto;
+.board-viewport {
+  flex: 1 1 0;
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  overflow: clip;
 }
 
-.board-scroll:focus-visible,
+/*
+ * Clip at the actual grid's horizontal edges.
+ * The outer viewport contains its padded frame.
+ * This wrapper sits outside the tilted 3D surface.
+ */
+.board-frame {
+  max-width: 100%;
+  margin-inline: auto;
+  clip-path: inset(0 16px);
+}
+
+.preview-notice,
+.position-status {
+  max-width: 1100px;
+  margin: 8px auto;
+  color: var(--mt-text-muted);
+}
+
+.preview-notice {
+  padding: 12px;
+  background: var(--mt-surface-2);
+  border: 1px solid var(--mt-border);
+  border-radius: var(--radius-md);
+}
+
 .tray-toggle:focus-visible {
   outline: 2px solid var(--ui-primary);
   outline-offset: -3px;
 }
 
-.position-status {
-  margin-top: 8px;
-  color: var(--mt-text-muted);
-}
-
-/* Compact layout: tray above the board. */
-@media (max-width: 1119px), (max-height: 500px) {
+@media (max-width: 1119px), (max-height: 500px) and (orientation: landscape) {
   .workspace {
     flex-direction: column;
-    width: 100%;
   }
 
   .workspace-tools {
+    width: 100%;
     min-width: 0;
     border-right: 0;
     border-bottom: 1px solid var(--mt-border);
@@ -217,27 +315,29 @@ function settleRod(position: Point) {
     padding: 8px 16px 16px;
   }
 
-  .board-scroll {
+  .board-viewport {
     flex: none;
     width: 100%;
-    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   }
 }
 
-@media (max-width: 600px) {
+@media (max-height: 500px) and (orientation: landscape) {
   .tabla-playground {
-    padding: 8px;
-  }
-}
-
-/* Landscape phone: spend less height on surrounding padding. */
-@media (max-height: 500px) {
-  .tabla-playground {
-    padding: 8px;
+    padding: 4px;
   }
 
-  .workspace {
-    --workspace-padding-y: 8px;
+  .board-viewport {
+    overflow-x: auto;
+  }
+
+  .board-frame {
+    /* Preserve usable cells even when an unusually narrow screen needs scrolling. */
+    max-width: none;
+  }
+
+  /* Leave room beside the inward-aligned end label at the minimum cell size. */
+  .board-frame :deep(.unit-number:not(.unit-number--start):not(.unit-number--end)) {
+    transform: translateX(-50%);
   }
 }
 </style>
