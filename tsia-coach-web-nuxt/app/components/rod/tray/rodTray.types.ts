@@ -1,4 +1,4 @@
-﻿import type {CuisenaireRodType, CuisenaireRodValue, RodProps} from "~/components/rod/rod.types.ts";
+﻿import type {CuisenaireRodType} from "~/components/rod/rod.types.ts";
 
 
 

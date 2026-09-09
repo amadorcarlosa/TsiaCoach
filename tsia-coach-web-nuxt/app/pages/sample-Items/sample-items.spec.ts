@@ -20,12 +20,18 @@ import {
   coachingCardView
 } from './sample-items-ui'
 
+type FetchOptions = {
+  method?: string
+  body?: Record<string, unknown>
+  [key: string]: unknown
+}
+
 function makeToken(
   id: string,
   index: number,
   surface: string,
   start: number,
-): any {
+) {
   return {
     id,
     index,
@@ -253,7 +259,7 @@ describe('sample item attempt store', () => {
 
   it('selectItem_StartsAtMostOneAttemptPerItem', async () => {
     const store = useSampleItemsStore()
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1']), makePrompt('item-2', ['b-1'])]
       }
@@ -282,7 +288,7 @@ describe('sample item attempt store', () => {
 
   it('selectItem_ReusesExistingAttemptAndHistory', async () => {
     const store = useSampleItemsStore()
-    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -312,7 +318,7 @@ describe('sample item attempt store', () => {
 
     const deferred = createDeferred<AttemptProjection>()
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1']), makePrompt('item-2', ['b-1'])]
       }
@@ -352,7 +358,7 @@ describe('sample item attempt store', () => {
     const store = useSampleItemsStore()
     let capturedBody: Record<string, unknown> | null = null
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -381,7 +387,7 @@ describe('sample item attempt store', () => {
   it('selectingAfterIncorrect_PreservesProjectionAndHidesOldFeedback', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -416,7 +422,7 @@ describe('sample item attempt store', () => {
   it('correctProjection_LocksSelectionAndResubmission', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -451,7 +457,7 @@ describe('sample item attempt store', () => {
   it('failedCheck_PreservesLastServerProjectionAndAllowsRetry', async () => {
     const store = useSampleItemsStore()
 
-    const fetchMock = vi.fn(async (url: string, _options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
       }
@@ -497,7 +503,7 @@ describe('sample item attempt store', () => {
     const store = useSampleItemsStore()
     const deferred = createDeferred<AttemptProjection>()
 
-    const fetchMock = vi.fn(async (url: string, options?: Record<string, any>) => {
+    const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1']), makePrompt('item-2', ['b-1'])]
       }
@@ -572,7 +578,7 @@ function coachableCorrect(itemId: string, attemptId: string): AttemptProjection 
 
 interface CoachingHarnessOptions {
   startProjection?: (itemId: string, attemptId: string) => AttemptProjection
-  onCoach?: (options: Record<string, any>) => unknown | Promise<unknown>
+  onCoach?: (options: FetchOptions) => unknown | Promise<unknown>
   onCheck?: () => unknown
   onRead?: (attemptId: string) => unknown
 }
@@ -589,15 +595,18 @@ function probeMove(focusPhraseIds: string[] = []) {
 
 async function createCoachingHarness(options: CoachingHarnessOptions = {}) {
   const startProjection = options.startProjection ?? coachableBeforeCheck
-  const coachCalls: Array<Record<string, any>> = []
+  const coachCalls: FetchOptions[] = []
 
-  const fetchMock = vi.fn(async (url: string, requestOptions?: Record<string, any>) => {
+  const fetchMock = vi.fn(async (url: string, requestOptions?: FetchOptions) => {
     if (url === '/api/practice-items') {
       return [makePrompt('item-1', ['a-1', 'a-2']), makePrompt('item-2', ['b-1', 'b-2'])]
     }
 
     if (url === '/api/attempts') {
       const itemId = requestOptions?.body?.practiceItemId
+      if (typeof itemId !== 'string') {
+        throw new Error('Missing practice item id')
+      }
       return startProjection(itemId, `attempt-${itemId}`)
     }
 

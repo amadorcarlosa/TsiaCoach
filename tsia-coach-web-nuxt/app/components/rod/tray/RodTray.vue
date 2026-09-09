@@ -7,8 +7,10 @@ import  {
 import {
   type CuisenaireRodValue,
   cusisenaireRodPalette} from "~/components/rod/rod.types.ts";
-import CuisenaireRod from "~/components/rod/CuisenaireRod.vue";
+
 import styles from './rodTray.styles.module.css'
+import CuisenaireRod from "~/components/rod/cuisenaire/CuisenaireRod.vue";
+
 
 
 defineProps<RodTrayProps>()
@@ -45,7 +47,7 @@ const emit = defineEmits<{
  />
       </span>
 
-      <span :class="styles.value"></span>
+     
     </button>
   </aside>
 </template>

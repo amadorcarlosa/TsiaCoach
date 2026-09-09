@@ -150,14 +150,16 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
     async function commit(position: Point) {
         render(position)
+        // The parent synchronously accepts or rejects this position.
         options.onSettled({ ...position })
 
-        // Let Vue update left/top, then reconcile the temporary transform.
+        // Wait for accepted props to reach this component.
         await nextTick()
 
-        if (!disposed) {
-            render(current)
-        }
+        if (disposed || active) return
+        // Read the accepted model position, not the attempted destination.
+        render(options.position())
+        
     }
 
     function finish() {
@@ -255,6 +257,8 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
         draggable = $Draggable.create(proxy, {
             trigger: element,
+            // Let the shared rod menu handle native and keyboard context menus.
+            allowContextMenu: true,
             type: 'x,y',
             inertia: !motionPreference.matches,
             minimumMovement: 3,

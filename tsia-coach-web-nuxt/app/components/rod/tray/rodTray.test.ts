@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import RodTray from './RodTray.vue'
-import CuisenaireRod from '../CuisenaireRod.vue'
+import CuisenaireRod from "~/components/rod/cuisenaire/CuisenaireRod.vue";
 import { cusisenaireRodPalette, getRodDefinition } from '../rod.types'
 import { ariaRod, ariaTray, type RodTrayProps } from './rodTray.types'
 

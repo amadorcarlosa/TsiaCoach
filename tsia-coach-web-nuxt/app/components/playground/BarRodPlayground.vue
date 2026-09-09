@@ -1,19 +1,29 @@
 <script setup lang="ts">
 
 import RodTabla from '~/components/tabla/RodTabla.vue'
-import DraggableRod from '~/components/rod/DraggableRod.vue'
+
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
 import {
   type CuisenaireRodValue,
   CuisenaireRodValues,
   getRodDefinition,
 } from '~/components/rod/rod.types'
-import type { PlacedRod } from '~/components/rod/rod-board.types'
+
 import type { Point } from '~/components/grid/gridPointer'
-import { useRodBoard } from '~/composables/useRodBoard'
+import { useRodScene } from '~/composables/useRodScene'
+import type {PlacedRod} from "~/components/rod/movement/rod-board.types.ts";
+import SceneRod from '~/components/rod/scene/SceneRod.vue'
+import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
+import type {
+  SceneMenuChoice,
+} from '~/components/rod/scene/scene-menu.types'
+import { useSceneMenu } from '~/composables/useSceneMenu'
 
-
-
+const props = withDefaults(defineProps<{
+  active?: boolean
+}>(), {
+  active: true,
+})
 // This playground's board configuration.
 const targetCount = 3
 const fullColumns = 24
@@ -66,49 +76,62 @@ const workspaceStyle = computed(() => ({
 const rods = Object.values(CuisenaireRodValues)
     .map(getRodDefinition)
 
-const {
-  placedRods,
-  selectedRodId,
-  placementMessage,  
-  addRod,
-  moveRod,
-  selectRod,
-  removeRod,
-} = useRodBoard({
+const scene = useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
   spawnRows: boardDefinition.targets.map(target => target.row),
+  editable: () => props.active && !phonePortrait.value,
+  allowOrientation: false,
+})
+const menu = useSceneMenu({
+  scene,
+  viewport: boardViewport,
+  disabled: () => !props.active || phonePortrait.value,
 })
 
-const canRemoveSelectedRod = computed(() =>
-    !phonePortrait.value && selectedRodId.value !== null,
+const menuChoices: SceneMenuChoice[] = [
+  { label: 'Clone', action: { type: 'clone' } },
+  { label: 'Delete', action: { type: 'delete' } },
+]
+
+const placedRods = computed(() =>
+    scene.trains.value.map(train => {
+      const part = train.parts[0]!
+
+      return {
+        id: train.id,
+        value: part.value,
+        x: train.anchor.x + part.offset.x,
+        y: train.anchor.y + part.offset.y,
+      }
+    }),
 )
 
-function onSelectRod(id: string): void {
-  if (phonePortrait.value) return
+const placementMessage = scene.message
 
-  selectRod(id)
-}
+const canRemoveSelectedRod = computed(() =>
+    !phonePortrait.value && scene.selection.value.size > 0,
+)
 
 function onRemoveSelectedRod(): void {
-  if (phonePortrait.value) return
-
-  const id = selectedRodId.value
-  if (id === null) return
-
-  removeRod(id)
+  scene.apply([...scene.selection.value], { type: 'delete' })
 }
 
-// The page applies the portrait interaction policy.
-function onChooseRod(value: CuisenaireRodValue): void {
-  if (phonePortrait.value) return
 
-  addRod(value)
+function onChooseRod(value: CuisenaireRodValue): void {
+  scene.apply([], { type: 'create', value })
 }
 function onRodSettled(id: string, position: Point): void {
-  if (phonePortrait.value) return
+  const train = scene.trains.value.find(train => train.id === id)
+  if (!train) return
 
-  moveRod(id, position)
+  scene.apply([id], {
+    type: 'move',
+    delta: {
+      x: position.x - train.anchor.x,
+      y: position.y - train.anchor.y,
+    },
+  })
 }
 
 function intersectsPreview(
@@ -117,6 +140,8 @@ function intersectsPreview(
 ): boolean {
   return piece.x < columns && piece.x + piece.value > 0
 }
+
+
 </script>
 
 <template>
@@ -135,11 +160,11 @@ function intersectsPreview(
       <div ref="workspaceTools" class="workspace-tools">
         <div class="workspace-toolbar">
           <button
-            type="button"
-            class="tray-toggle"
-            :aria-expanded="trayOpen"
-            aria-controls="tabla-rod-tray"
-            @click="trayOpen = !trayOpen"
+              type="button"
+              class="tray-toggle"
+              :aria-expanded="trayOpen"
+              aria-controls="tabla-rod-tray"
+              @click="trayOpen = !trayOpen"
           >
             {{ trayOpen ? 'Hide rods' : 'Show rods' }}
           </button>
@@ -152,9 +177,9 @@ function intersectsPreview(
             Remove selected rod
           </button>
           <span
-            v-if="shortLandscape"
-            class="toolbar-status"
-            role="status"
+              v-if="shortLandscape"
+              class="toolbar-status"
+              role="status"
           >
             {{ placedRods.length }}
             {{ placedRods.length === 1 ? 'rod' : 'rods' }}
@@ -179,6 +204,7 @@ function intersectsPreview(
       </div>
       <div
           ref="boardViewport"
+          tabindex="-1"
           class="board-viewport"
           role="region"
           :aria-label="phonePortrait
@@ -199,23 +225,24 @@ function intersectsPreview(
               embedded
           >
             <template #pieces="{ cellSize: pieceCellSize }">
-              <DraggableRod
+              <SceneRod
                   v-for="piece in placedRods"
                   v-show="
-      !phonePortrait ||
-      intersectsPreview(piece, visibleColumns)
-    "
+    !phonePortrait ||
+    intersectsPreview(piece, visibleColumns)
+  "
                   :id="piece.id"
                   :key="piece.id"
                   :value="piece.value"
                   :x="piece.x"
                   :y="piece.y"
                   :cell-size="pieceCellSize"
+                  :selected="scene.selection.value.has(piece.id)"
+                  :disabled="!props.active || phonePortrait || menu.request.value !== null"
                   :snap-to-grid="true"
-                  :disabled="phonePortrait"
-                  :selected="selectedRodId === piece.id"
-                  @select="onSelectRod(piece.id)"
+                  @select="menu.selectTrain(piece.id)"
                   @settled="onRodSettled(piece.id, $event)"
+                  @menu-request="menu.open"
               />
             </template>
           </RodTabla>
@@ -223,6 +250,16 @@ function intersectsPreview(
         <!-- End board-frame -->
       </div>
       <!-- End board-viewport -->
+      <SceneMenu
+          :request="menu.request.value"
+          :selection="menu.selectedIds.value"
+          :check="scene.check"
+          :choices="menuChoices"
+          @action="menu.applyAction"
+          @close="menu.close"
+          @restore-focus="menu.restoreFocus"
+      />
+      
     </div>
     <!-- End workspace -->
     <p
@@ -245,8 +282,8 @@ function intersectsPreview(
   </div>
 
 </template>
-  
-   
+
+
 
 <style scoped>
 .placement-message {

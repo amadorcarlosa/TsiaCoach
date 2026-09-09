@@ -1,5 +1,5 @@
 ﻿import type {UnitDimensions} from "#shared/types/rods.ts";
-import type {RodLength} from "~/components/grid/rodPalette.ts";
+
 
 
 
@@ -16,13 +16,16 @@ export type RodProps = {
     label: string
 }
 
-export type DragProps={  id: string
+export type DragProps = {
+    id: string
     value: CuisenaireRodValue
     x: number
     y: number
     cellSize: number
     snapToGrid?: boolean
     disabled?: boolean
+    selected?: boolean
+    dimensions?: UnitDimensions
 }
 
 

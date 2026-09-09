@@ -9,6 +9,9 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:3000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    contextOptions: {
+      reducedMotion: 'reduce',
+    },
   },
   webServer: [
     {
@@ -30,6 +33,12 @@ export default defineConfig({
       env: {
         NUXT_API_URL: 'http://127.0.0.1:5145',
       },
+    },
+    {
+      command: 'pnpm dev --host 127.0.0.1 --port 3000',
+      url: 'http://127.0.0.1:3117/dev/rod-tabla-playground',
+      reuseExistingServer: true,
+      timeout: 120_000,
     },
   ],
   projects: [
