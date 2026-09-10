@@ -1,4 +1,4 @@
-﻿import { computed, shallowRef } from 'vue'
+import { computed, shallowRef } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type { SelectionIntent } from '~/components/rod/scene/scene-interaction.types'
 import type { useRodScene } from './useRodScene'
@@ -59,14 +59,11 @@ export function useSceneInteraction(options: {
         // Capture the target set now, not when the drop finishes.
         source = scene.trains.value
 
-        const part = train.parts[0]!
-
         session.value = {
             leaderId: id,
             ids: [...scene.selection.value],
             origin: {
-                x: train.anchor.x + part.offset.x,
-                y: train.anchor.y + part.offset.y,
+                ...train.anchor,
             },
         }
 
@@ -81,6 +78,19 @@ export function useSceneInteraction(options: {
         delta.value = {
             x: position.x - current.origin.x,
             y: position.y - current.origin.y,
+        }
+    }
+
+    function constrainPosition(id: string, position: Point, direction?: Point): Point {
+        const current = session.value
+        if (!current || current.leaderId !== id) return position
+        const movement = scene.constrainMove(current.ids, {
+            x: position.x - current.origin.x,
+            y: position.y - current.origin.y,
+        }, direction)
+        return {
+            x: current.origin.x + movement.x,
+            y: current.origin.y + movement.y,
         }
     }
 
@@ -127,6 +137,7 @@ export function useSceneInteraction(options: {
         leaderId,
         select,
         beginMove,
+        constrainPosition,
         previewMove,
         settleMove,
         endMove,

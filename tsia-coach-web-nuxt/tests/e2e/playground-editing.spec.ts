@@ -7,11 +7,72 @@ test('bar menu offers removal only and targets the clicked instance', async ({ p
   const menu = await p.menu(second)
   await expect(second).toHaveClass(/--selected/)
   await expect(menu.getByRole('menuitemcheckbox')).toHaveCount(0)
-  await expect(menu.getByRole('menuitem')).toHaveCount(2)
+  await expect(menu.getByRole('menuitem')).toHaveCount(3)
   await menu.getByRole('menuitem', { name: 'Delete' }).click()
   await expect(second).toHaveCount(0)
   await expect(first).toBeVisible()
   await expect(p.panel('Bar').getByRole('button', { name: /remove selected rod/i })).toBeDisabled()
+})
+
+test('bar train renders each part and both parts remain interactive', async ({ playground: p }) => {
+  await p.show('Bar')
+  const first = await p.add('Bar', 'three')
+  const second = await p.add('Bar', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  const menu = await p.menu(first)
+  await menu.getByRole('menuitem', { name: 'Make a train' }).click()
+
+  const train = p.panel('Bar').locator('[data-piece-id]')
+  await expect(train).toHaveCount(1)
+  const piece = train.first()
+
+  const parts = train.locator('.train-part')
+  await expect(parts).toHaveCount(2)
+
+  const firstPart = parts.nth(0).locator('.face.top')
+  const secondPart = parts.nth(1).locator('.face.top')
+
+  await firstPart.click()
+  await expect(piece).toHaveClass(/draggable-rod--selected/)
+
+  await secondPart.click()
+  await expect(piece).toHaveClass(/draggable-rod--selected/)
+
+  const before = await p.geometry(piece)
+  await p.drag(parts.nth(1), 1, 0)
+  await expect.poll(() => p.geometry(piece)).toMatchObject({
+    x: before.x + 1,
+    y: before.y,
+  })
+})
+
+test('bar clone copies train parts', async ({ playground: p }) => {
+  await p.show('Bar')
+  const first = await p.add('Bar', 'three')
+  const second = await p.add('Bar', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+  let menu = await p.menu(first)
+  await menu.getByRole('menuitem', { name: 'Make a train' }).click()
+
+  const pieces = p.panel('Bar').locator('[data-piece-id]')
+  await expect(pieces).toHaveCount(1)
+  const built = pieces.first()
+  await expect(built.locator('.train-part')).toHaveCount(2)
+
+  menu = await p.menu(built.locator('.train-part').nth(1))
+  await menu.getByRole('menuitem', { name: 'Clone' }).click()
+
+  await expect(pieces).toHaveCount(2)
+  await expect(pieces.first().locator('.train-part')).toHaveCount(2)
+  await expect(pieces.last().locator('.train-part')).toHaveCount(2)
+  expect((await p.geometry(pieces.first())).width).toEqual(
+    (await p.geometry(pieces.last())).width,
+  )
 })
 
 test('array menu changes only its rod and persists across tabs', async ({ playground: p }) => {
@@ -144,17 +205,84 @@ test('switching tabs during a held group drag cancels movement', async ({ page, 
   })
 })
 
-test.describe('inertia enabled', () => {
-  test.use({ contextOptions: { reducedMotion: 'no-preference' } })
+  test.describe('inertia enabled', () => {
+    test.use({
+      contextOptions: {
+        reducedMotion: 'no-preference',
+      },
+      reducedMotion: 'no-preference',
+    })
 
-  test('an out-of-bounds throw returns to its committed position', async ({ playground: p }) => {
+  test('a throw clamps to the board edge during drag and after release', async ({ page, playground: p }) => {
+    const columns = 24
+
     const rod = await p.add('Bar', 'six')
-    await p.drag(rod, -2, 0)
-    await expect(p.panel('Bar').getByRole('status').filter({ hasText: /inside the board/ })).toBeVisible()
-    await expect.poll(() => p.geometry(rod)).toMatchObject({ x: 0, y: 2, offset: 0 })
-    const menu = await p.menu(rod, true)
-    await menu.getByRole('menuitem', { name: 'Delete' }).click()
+    await p.drag(rod, 18, 0)
+    const anchored = await p.geometry(rod)
+    const clampX = columns - anchored.width
+
+    const face = await rod.locator('.face.top').boundingBox()
+    if (!face) throw new Error('Missing rod face')
+
+    await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(
+      face.x + face.width / 2 + 180,
+      face.y + face.height / 2 + 10,
+      { steps: 8 },
+    )
+
+    await expect
+      .poll(async () => {
+        const geometry = await p.geometry(rod)
+        return geometry.x + geometry.width <= columns
+      })
+      .toBe(true)
+
+    await page.mouse.up()
+
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: clampX,
+      y: anchored.y,
+      offset: 0,
+    })
+
+    const firstMenu = await p.menu(rod)
+    await firstMenu.getByRole('menuitem', { name: 'Delete' }).click()
     await expect(rod).toHaveCount(0)
+
+  })
+
+  test('a two-train throw clamps by the furthest-right part', async ({ page, playground: p }) => {
+    const columns = 24
+
+    const leader = await p.add('Bar', 'six')
+    const follower = await p.add('Bar', 'three')
+
+    const leaderOrigin = await p.geometry(leader)
+    const followerOrigin = await p.geometry(follower)
+    const rightmostEdge = Math.max(
+      leaderOrigin.x + leaderOrigin.width,
+      followerOrigin.x + followerOrigin.width,
+    )
+    const constrainedDelta = columns - rightmostEdge
+    const leaderFinal = leaderOrigin.x + constrainedDelta
+    const followerFinal = followerOrigin.x + constrainedDelta
+
+    await leader.click()
+    await follower.click({ modifiers: ['Shift'] })
+    await p.drag(leader, 20, 0)
+
+    await expect.poll(() => p.geometry(leader)).toMatchObject({
+      x: leaderFinal,
+      y: leaderOrigin.y,
+      offset: 0,
+    })
+    await expect.poll(() => p.geometry(follower)).toMatchObject({
+      x: followerFinal,
+      y: followerOrigin.y,
+      offset: 0,
+    })
   })
 
   test('switching tabs during group inertia cancels movement', async ({ page, playground: p }) => {
@@ -174,10 +302,22 @@ test.describe('inertia enabled', () => {
 
     const face = await leader.locator('.face.top').boundingBox()
     if (!face) throw new Error('Missing leader face')
+    const throwAxes = await leader.evaluate(el => {
+      const world = el.closest('[data-grid-world]')!
+      const rect = (name: string) =>
+        world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
+      const origin = rect('origin')
+      const x = rect('x')
+      return { xx: x.left - origin.left, xy: x.top - origin.top }
+    })
 
     await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
     await page.mouse.down()
-    await page.mouse.move(face.x + face.width / 2 + 90, face.y + face.height / 2 + 15, { steps: 8 })
+    await page.mouse.move(
+      face.x + face.width / 2 + throwAxes.xx * 10,
+      face.y + face.height / 2 + throwAxes.xy * 10,
+      { steps: 8 },
+    )
     await page.mouse.up()
 
     await expect.poll(async () => (await p.geometry(leader)).offset).toBeGreaterThan(0.05)
@@ -216,10 +356,22 @@ test.describe('inertia enabled', () => {
 
     const face = await leader.locator('.face.top').boundingBox()
     if (!face) throw new Error('Missing leader face')
+    const throwAxes = await leader.evaluate(el => {
+      const world = el.closest('[data-grid-world]')!
+      const rect = (name: string) =>
+        world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
+      const origin = rect('origin')
+      const x = rect('x')
+      return { xx: x.left - origin.left, xy: x.top - origin.top }
+    })
 
     await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
     await page.mouse.down()
-    await page.mouse.move(face.x + face.width / 2 + 75, face.y + face.height / 2 + 15, { steps: 8 })
+    await page.mouse.move(
+      face.x + face.width / 2 + throwAxes.xx * 10,
+      face.y + face.height / 2 + throwAxes.xy * 10,
+      { steps: 8 },
+    )
     await page.mouse.up()
 
     await expect.poll(async () => (await p.geometry(leader)).offset).toBeGreaterThan(0.05)

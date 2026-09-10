@@ -18,15 +18,18 @@ export type SceneAction =
     | { type: 'move'; delta: Point }
     | { type: 'clone' }
     | { type: 'delete' }
+    |{ type: 'make-train' }
     | {
   type: 'set-orientation'
   orientation: TrainPart['orientation']
+  
 }
 
 export type ScenePolicy = {
   columns: number
   rows: number
   spawnRows: readonly number[]
+  trackRows?: readonly number[]
   editable: () => boolean
   allowOrientation: boolean
 }

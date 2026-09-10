@@ -10,10 +10,10 @@ import {
   type CuisenaireRodValue,
 } from '~/components/rod/rod.types'
 import {
-  arrayRodDimensions,
   arrayRodOrientations,
   type ArrayRodOrientation,
 } from '~/components/rod/array/array-rod.types'
+import { trainView } from '~/components/rod/scene/train-view'
 
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
@@ -75,23 +75,8 @@ const message = scene.message
 const trayItems = Object.values(CuisenaireRodValues)
     .map(getRodDefinition)
 
-// Adapter for the current one-part-train milestone.
 const renderedPieces = computed(() =>
-  scene.trains.value.map(train => {
-    const part = train.parts[0]!
-
-    return {
-      id: train.id,
-      value: part.value,
-      orientation: part.orientation,
-      x: train.anchor.x + part.offset.x,
-      y: train.anchor.y + part.offset.y,
-      dimensions: arrayRodDimensions(
-        part.value,
-        part.orientation,
-      ),
-    }
-  }),
+  scene.trains.value.map(trainView),
 )
 
 const selectedRod = computed(() => {
@@ -108,6 +93,7 @@ const canEditSelection = computed(() =>
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { label: 'Clone', action: { type: 'clone' } },
+  { label: 'Make a train', action: { type: 'make-train' } },
   ...arrayRodOrientations.map(orientation => ({
     label: orientation[0]!.toUpperCase() + orientation.slice(1),
     action: {
@@ -217,17 +203,19 @@ function onRemove(): void {
         piece.x + piece.dimensions.width > 0
       )
     "
-              :id="piece.id"
-              :key="piece.id"
-              :value="piece.value"
-              :x="piece.x"
-              :y="piece.y"
+               :id="piece.id"
+               :key="piece.id"
+               :value="piece.value"
+               :parts="piece.parts"
+               :x="piece.x"
+               :y="piece.y"
               :dimensions="piece.dimensions"
               :cell-size="pieceCellSize"
               :selected="scene.selection.value.has(piece.id)"
               :disabled="!props.active || phonePortrait || menu.request.value !== null"
               :snap-to-grid="true"
               :begin-move="() => interaction.beginMove(piece.id)"
+              :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
               :preview-delta="interaction.previewFor(piece.id)"
               @select="interaction.select(piece.id, $event)"
               @move-preview="interaction.previewMove(piece.id, $event)"
@@ -250,7 +238,7 @@ function onRemove(): void {
     />
 
     <p role="status" aria-live="polite">{{ message }}</p>
-    <p>{{ renderedPieces.length }} rods on the board</p>
+    <p>{{ renderedPieces.length }} objects on the board</p>
   </div>
 </template>
 
@@ -300,3 +288,5 @@ function onRemove(): void {
   min-width: 0;
 }
 </style>
+
+

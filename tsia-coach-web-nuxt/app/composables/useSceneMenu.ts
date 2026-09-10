@@ -61,8 +61,11 @@ export function useSceneMenu(options: {
             return
         }
 
-        // The scene rechecks against current state.
-        scene.apply([...scene.selection.value], action)
+        const result = scene.apply([...scene.selection.value], action)
+
+        if (result.allowed && action.type === 'make-train') {
+            returnFocusId = [...scene.selection.value][0] ?? null
+        }
         close()
     }
 

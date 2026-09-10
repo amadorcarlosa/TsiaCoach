@@ -11,13 +11,13 @@ import {
 
 
 import { useRodScene } from '~/composables/useRodScene'
-import type {PlacedRod} from "~/components/rod/movement/rod-board.types.ts";
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
 import type {
   SceneMenuChoice,
 } from '~/components/rod/scene/scene-menu.types'
 import { useSceneMenu } from '~/composables/useSceneMenu'
+import { trainView } from '~/components/rod/scene/train-view'
 
 const props = withDefaults(defineProps<{
   active?: boolean
@@ -80,6 +80,7 @@ const scene = useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
   spawnRows: boardDefinition.targets.map(target => target.row),
+  trackRows: boardDefinition.targets.map(target => target.row),
   editable: () => props.active && !phonePortrait.value,
   allowOrientation: false,
 })
@@ -99,19 +100,11 @@ const interaction = useSceneInteraction({
 const menuChoices: SceneMenuChoice[] = [
   { label: 'Clone', action: { type: 'clone' } },
   { label: 'Delete', action: { type: 'delete' } },
+  { label: 'Make a train', action: { type: 'make-train' } },
 ]
 
 const placedRods = computed(() =>
-    scene.trains.value.map(train => {
-      const part = train.parts[0]!
-
-      return {
-        id: train.id,
-        value: part.value,
-        x: train.anchor.x + part.offset.x,
-        y: train.anchor.y + part.offset.y,
-      }
-    }),
+    scene.trains.value.map(trainView),
 )
 
 const placementMessage = scene.message
@@ -131,10 +124,10 @@ function onChooseRod(value: CuisenaireRodValue): void {
 
 
 function intersectsPreview(
-    piece: Readonly<PlacedRod>,
+    piece: ReturnType<typeof trainView>,
     columns: number,
 ): boolean {
-  return piece.x < columns && piece.x + piece.value > 0
+  return piece.x < columns && piece.x + piece.dimensions.width > 0
 }
 
 
@@ -178,7 +171,7 @@ function intersectsPreview(
               role="status"
           >
             {{ placedRods.length }}
-            {{ placedRods.length === 1 ? 'rod' : 'rods' }}
+            {{ placedRods.length === 1 ? 'object' : 'objects' }}
             on the board
           </span>
         </div>
@@ -230,6 +223,8 @@ function intersectsPreview(
                   :id="piece.id"
                   :key="piece.id"
                   :value="piece.value"
+                  :parts="piece.parts"
+                  :dimensions="piece.dimensions"
                   :x="piece.x"
                   :y="piece.y"
                   :cell-size="pieceCellSize"
@@ -237,6 +232,7 @@ function intersectsPreview(
                   :disabled="!props.active || phonePortrait || menu.request.value !== null"
                   :snap-to-grid="true"
                   :begin-move="() => interaction.beginMove(piece.id)"
+                  :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
                   :preview-delta="interaction.previewFor(piece.id)"
                   @select="interaction.select(piece.id, $event)"
                   @move-preview="interaction.previewMove(piece.id, $event)"
@@ -276,7 +272,7 @@ function intersectsPreview(
         role="status"
     >
       {{ placedRods.length }}
-      {{ placedRods.length === 1 ? 'rod' : 'rods' }}
+      {{ placedRods.length === 1 ? 'object' : 'objects' }}
       on the board
     </p>
   </div>
@@ -460,3 +456,4 @@ function intersectsPreview(
   }
 }
 </style>
+

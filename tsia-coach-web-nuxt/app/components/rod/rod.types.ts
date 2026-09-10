@@ -1,8 +1,7 @@
-﻿import type {UnitDimensions} from "#shared/types/rods.ts";
-
-
-
-
+import type { UnitDimensions } from "#shared/types/rods.ts"
+import type { DeepReadonly } from 'vue'
+import type { Point } from '~/components/grid/gridPointer'
+import type { TrainPart } from './scene/rod.scene.types'
 
 export type RodAppearance = {
     fill: string
@@ -25,11 +24,12 @@ export type DragProps = {
     snapToGrid?: boolean
     disabled?: boolean
     selected?: boolean
+    parts?: readonly DeepReadonly<TrainPart>[]
     dimensions?: UnitDimensions
     beginMove?: () => boolean
+    constrainPosition?: (position: Point, direction?: Point) => Point
     previewDelta?: Point
 }
-
 
 export const CuisenaireRodNumbers = {
     One: 'one',
@@ -42,9 +42,9 @@ export const CuisenaireRodNumbers = {
     Eight: 'eight',
     Nine: 'nine',
     Ten: 'ten',
-} as const;
+} as const
 
-export type CuisenaireRodNumber = typeof CuisenaireRodNumbers[keyof typeof CuisenaireRodNumbers];
+export type CuisenaireRodNumber = typeof CuisenaireRodNumbers[keyof typeof CuisenaireRodNumbers]
 
 export const CuisenaireRodValues = {
     One: 1,
@@ -57,9 +57,9 @@ export const CuisenaireRodValues = {
     Eight: 8,
     Nine: 9,
     Ten: 10,
-} as const;
+} as const
 
-export type CuisenaireRodValue = typeof CuisenaireRodValues[keyof typeof CuisenaireRodValues];
+export type CuisenaireRodValue = typeof CuisenaireRodValues[keyof typeof CuisenaireRodValues]
 
 export const CuisenaireRodColors = {
     white: 'white' as const,
@@ -72,11 +72,10 @@ export const CuisenaireRodColors = {
     brown: 'brown' as const,
     blue: 'blue' as const,
     orange: 'orange' as const,
-} as const;
+} as const
 
-export type CuisenaireRodColor = typeof CuisenaireRodColors[keyof typeof CuisenaireRodColors];
+export type CuisenaireRodColor = typeof CuisenaireRodColors[keyof typeof CuisenaireRodColors]
 
-// Map number names to their numeric values
 export const RodNumberToValue = {
     one: 1,
     two: 2,
@@ -88,9 +87,8 @@ export const RodNumberToValue = {
     eight: 8,
     nine: 9,
     ten: 10,
-} as const;
+} as const
 
-// Map numeric values to colors
 export const RodValueToColor = {
     1: 'white',
     2: 'red',
@@ -102,28 +100,30 @@ export const RodValueToColor = {
     8: 'brown',
     9: 'blue',
     10: 'orange',
-} as const satisfies Record<string, CuisenaireRodColor>;
+} as const satisfies Record<string, CuisenaireRodColor>
 
 export type CuisenaireRodType = {
-    number: CuisenaireRodNumber;
-    value: CuisenaireRodValue;
-    color: CuisenaireRodColor;
-};
+    number: CuisenaireRodNumber
+    value: CuisenaireRodValue
+    color: CuisenaireRodColor
+}
 
-// Helper to get a rod's full definition
 export const getRodDefinition = (value: CuisenaireRodValue): CuisenaireRodType => {
-    const numberKey = Object.entries(CuisenaireRodValues).find(([, v]) => v === value)?.[0];
-    const number = CuisenaireRodNumbers[numberKey as keyof typeof CuisenaireRodNumbers];
-    const color = RodValueToColor[value as keyof typeof RodValueToColor];
+    const numberKey = Object.entries(CuisenaireRodValues).find(([, v]) => v === value)?.[0]
+    const number = CuisenaireRodNumbers[numberKey as keyof typeof CuisenaireRodNumbers]
+    const color = RodValueToColor[value as keyof typeof RodValueToColor]
 
-    return { number, value, color };
-};
-
-
+    return { number, value, color }
+}
 
 export function rodStyle(size: UnitDimensions, cellSize: number) {
-    return { '--w': `${size.width * cellSize}px`, '--d': `${size.depth * cellSize}px`, '--h': `${size.height * cellSize}px` }
+    return {
+        '--w': `${size.width * cellSize}px`,
+        '--d': `${size.depth * cellSize}px`,
+        '--h': `${size.height * cellSize}px`,
+    }
 }
+
 export const cusisenaireRodPalette = {
     1: { name: 'White', fill: '#f4f4ef', ink: '#1c1c1c' },
     2: { name: 'Red', fill: '#d63c3c', ink: '#ffffff' },

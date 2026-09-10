@@ -1,11 +1,14 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
 import CuisenaireRod from '~/components/rod/cuisenaire/CuisenaireRod.vue'
 import type { Point } from '~/components/grid/gridPointer'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
-import {cusisenaireRodPalette, type DragProps} from "~/components/rod/rod.types.ts";
+import type { DragProps } from '~/components/rod/rod.types.ts'
+import { arrayRodDimensions } from '../array/array-rod.types'
+import { cusisenaireRodPalette } from '~/components/rod/rod.types.ts'
 import type { SelectionIntent } from '../scene/scene-interaction.types'
+
 const props = withDefaults(defineProps<DragProps>(), {
   snapToGrid: true,
   disabled: false,
@@ -20,11 +23,47 @@ const emit = defineEmits<{
 }>()
 
 const dimensions = computed(() =>
-        props.dimensions ?? {
-          width: props.value,
-          depth: 1,
-          height: 1,
-        },
+  props.dimensions ?? {
+    width: props.value,
+    depth: 1,
+    height: 1,
+  },
+)
+
+const visualParts = computed(() => {
+  if (props.parts) {
+    return props.parts.map(part => ({
+      value: part.value,
+      offset: part.offset,
+      dimensions: arrayRodDimensions(
+        part.value,
+        part.orientation,
+      ),
+    }))
+  }
+
+  return [{
+    value: props.value,
+    offset: { x: 0, y: 0 },
+    dimensions: dimensions.value,
+  }]
+})
+
+const totalValue = computed(() =>
+  visualParts.value.reduce((sum, part) => sum + part.value, 0),
+)
+
+const objectName = computed(() =>
+  visualParts.value.length === 1
+    ? `${totalValue.value}-rod`
+    : `Train, value ${totalValue.value}, ${visualParts.value.length} parts`,
+)
+
+const accessibleLabel = computed(() =>
+  `${objectName.value} at column ${props.x}, row ${props.y}. ` +
+  (props.disabled
+    ? 'Editing unavailable.'
+    : `${props.selected ? 'Selected. ' : ''}Use arrow keys to move.`),
 )
 
 const element = ref<HTMLElement | null>(null)
@@ -34,6 +73,7 @@ const drag = useInertialBoardDrag({
   position: () => ({ x: props.x, y: props.y }),
   cellSize: () => props.cellSize,
   snapToGrid: () => props.snapToGrid,
+  constrainPosition: props.constrainPosition,
   enabled: () => !props.disabled,
   onSettled: position => emit('settled', position),
   onStart: () => props.beginMove?.() ?? true,
@@ -42,13 +82,13 @@ const drag = useInertialBoardDrag({
 })
 
 watch(
-    () => [
-      dimensions.value.width,
-      dimensions.value.depth,
-      dimensions.value.height,
-    ],
-    () => drag.cancel(),
-    { flush: 'sync' },
+  () => [
+    dimensions.value.width,
+    dimensions.value.depth,
+    dimensions.value.height,
+  ],
+  () => drag.cancel(),
+  { flush: 'sync' },
 )
 
 function onSelectionPointerDown(event: PointerEvent): void {
@@ -93,34 +133,41 @@ defineExpose({
       :data-piece-id="id"
       :tabindex="disabled ? -1 : 0"
       role="button"
-      aria-roledescription="movable rod"
+      :aria-roledescription="visualParts.length > 1 ? 'movable train' : 'movable rod'"
       :aria-disabled="disabled"
-      :aria-label="disabled
-    ? `${value}-rod. Portrait preview; editing unavailable.`
-    : `${value}-rod at column ${x}, row ${y}. ${
-        selected ? 'Selected. ' : ''
-      }Use arrow keys to move.`"
+      :aria-label="accessibleLabel"
       :style="{
-    left: `${x * cellSize}px`,
-    top: `${y * cellSize}px`,
-    width: `${dimensions.width * cellSize}px`,
-    height: `${dimensions.depth * cellSize}px`,
-    translate:props.previewDelta
-  ? `${props.previewDelta.x * cellSize}px ${props.previewDelta.y * cellSize}px`
-  : '0px 0px',
-  }"
+        left: `${x * cellSize}px`,
+        top: `${y * cellSize}px`,
+        width: `${dimensions.width * cellSize}px`,
+        height: `${dimensions.depth * cellSize}px`,
+        translate: props.previewDelta
+          ? `${props.previewDelta.x * cellSize}px ${props.previewDelta.y * cellSize}px`
+          : '0px 0px',
+      }"
       @pointerdown.capture="onSelectionPointerDown"
       @keydown.capture="onSelectionKeydown"
-      
-      
   >
     <div class="rod-visual">
-      <CuisenaireRod
-          :dimensions="dimensions"
-          :unit-size="cellSize"
-          :appearance="cusisenaireRodPalette[value]"
-          :label="String(value)"
-      />
+      <div
+          v-for="(part, index) in visualParts"
+          :key="index"
+          class="train-part"
+          :data-train-part="index"
+          :data-part-value="part.value"
+          :style="{
+            left: `${part.offset.x * cellSize}px`,
+            top: `${part.offset.y * cellSize}px`,
+          }"
+          aria-hidden="true"
+      >
+        <CuisenaireRod
+            :dimensions="part.dimensions"
+            :unit-size="cellSize"
+            :appearance="cusisenaireRodPalette[part.value]"
+            :label="String(part.value)"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -148,7 +195,10 @@ defineExpose({
   cursor: default;
   touch-action: auto;
 }
+
 .rod-visual {
+  position: absolute;
+  inset: 0;
   transform-style: preserve-3d;
 
   /* Raised faces shift slightly right; the base stays on the grid. */
@@ -158,5 +208,10 @@ defineExpose({
       0.1,-0.1, 1, 0,
       0, 0, 0, 1
   );
+}
+
+.train-part {
+  position: absolute;
+  transform-style: preserve-3d;
 }
 </style>

@@ -2,7 +2,12 @@
 
 export type SceneMenuAction = Extract<
     SceneAction,
-    { type: 'clone' | 'delete' | 'set-orientation' }
+    { type: 
+            'clone' | 
+            'delete' |
+            'set-orientation'|
+            'make-train'
+    }
 >
 
 export type SceneMenuChoice = {

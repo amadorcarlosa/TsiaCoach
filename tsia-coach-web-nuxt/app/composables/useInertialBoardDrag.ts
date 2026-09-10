@@ -18,6 +18,7 @@ type BoardDragOptions = {
     position: () => Point
     cellSize: () => number
     snapToGrid: () => boolean
+    constrainPosition?: (position: Point, direction?: Point) => Point
     enabled?: () => boolean
     onSettled: (position: Point) => void
     onStart?: () => boolean
@@ -140,6 +141,7 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     }
 
     function snapPosition(position: Point): Point {
+        if (options.constrainPosition) return options.constrainPosition(position)
         return options.snapToGrid()
             ? {
                 x: Math.round(position.x),
@@ -170,11 +172,12 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     function renderProxy() {
         if (!active || !draggable) return
 
-        const position = boardPosition({
+        const rawPosition = boardPosition({
             x: draggable.x,
             y: draggable.y,
         })
 
+        const position = options.constrainPosition?.(rawPosition) ?? rawPosition
         render(position)
         options.onPreview?.(position)
     }
@@ -267,10 +270,11 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
         const position = options.position()
 
-        void commit({
+        const destination = {
             x: position.x + delta.x,
             y: position.y + delta.y,
-        })
+        }
+        void commit(options.constrainPosition?.(destination, delta) ?? destination)
     }
 
     function updateMotionPreference() {

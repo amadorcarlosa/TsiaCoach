@@ -1,4 +1,4 @@
-﻿import type {RodTrain, ScenePolicy, SceneResult} from "~/components/rod/scene/rod.scene.types.ts";
+import type {RodTrain, ScenePolicy, SceneResult} from "~/components/rod/scene/rod.scene.types.ts";
 
 
 export function validateScene(
@@ -23,7 +23,9 @@ export function validateScene(
             x < 0 ||
             y < 0 ||
             x + width > policy.columns ||
-            y + depth > policy.rows
+            y + depth > policy.rows ||
+            (policy.trackRows !== undefined &&
+                (depth !== 1 || !policy.trackRows.includes(y)))
         ) {
             return {
                 allowed: false,
