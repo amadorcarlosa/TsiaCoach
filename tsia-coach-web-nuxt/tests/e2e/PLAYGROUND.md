@@ -33,6 +33,10 @@ Remove-Item Env:PLAYGROUND_URL
 4. Portrait closes a menu, disables editing, preserves rods, and restores keyboard menu access after returning to desktop.
 5. Portrait hides rods beyond the preview without removing them from the board.
 6. An out-of-bounds throw with inertia enabled returns to its accepted position; keyboard removal remains usable afterward.
+7. Array selects each newly created rod; Bar leaves creation unselected and keeps the existing selection.
+8. Scene contents and selection stay independent across tabs, including after a deletion in one tab.
+9. Returning to a tab shows unchanged committed positions with no leftover preview transforms.
+10. Switching tabs cancels movement: keyboard activation during a held group drag, keyboard activation during inertia, and pointer-down on a tab during inertia (before the pointer is released).
 
 Failures produce screenshots and traces under `output/playwright/playground`.
 These Chromium tests verify responsive viewport behavior, not physical-device touch/long-press behavior or tower clearance above the grid.

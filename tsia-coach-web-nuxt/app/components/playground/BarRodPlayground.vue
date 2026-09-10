@@ -3,24 +3,23 @@
 import RodTabla from '~/components/tabla/RodTabla.vue'
 
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
-import {
-  type CuisenaireRodValue,
-  CuisenaireRodValues,
-  getRodDefinition,
-} from '~/components/rod/rod.types'
-
+import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 
 import { useRodScene } from '~/composables/useRodScene'
+import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
+import { useBoardLayout } from '~/composables/useBoardLayout'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
+import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
+import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
 import type {
   SceneMenuChoice,
 } from '~/components/rod/scene/scene-menu.types'
-import { useSceneMenu } from '~/composables/useSceneMenu'
 import { trainView } from '~/components/rod/scene/train-view'
 
 const props = withDefaults(defineProps<{
   active?: boolean
+  cancelVersion?: () => number
 }>(), {
   active: true,
 })
@@ -73,36 +72,43 @@ const workspaceStyle = computed(() => ({
   '--workspace-padding-y': `${boardPaddingY.value}px`,
 }))
 
-const rods = Object.values(CuisenaireRodValues)
-    .map(getRodDefinition)
+const editingDisabled = computed(
+  () => !props.active || phonePortrait.value,
+)
 
 const scene = useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
   spawnRows: boardDefinition.targets.map(target => target.row),
   trackRows: boardDefinition.targets.map(target => target.row),
-  editable: () => props.active && !phonePortrait.value,
+  editable: () => !editingDisabled.value,
   allowOrientation: false,
 })
-const menu = useSceneMenu({
+
+const {
+  menu,
+  interaction,
+  blocked,
+  checkSelected,
+  applySelected,
+  addendMenuChoice,
+} = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
-  disabled: () => !props.active || phonePortrait.value,
-})
-const interaction = useSceneInteraction({
-  scene,
-  blocked: () =>
-      !props.active ||
-      phonePortrait.value ||
-      menu.request.value !== null,
+  disabled: () => editingDisabled.value,
+  cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
 
-const menuChoices: SceneMenuChoice[] = [
-  { label: 'Clone', action: { type: 'clone' } },
-  { label: 'Delete', action: { type: 'delete' } },
-  { label: 'Make a train', action: { type: 'make-train' } },
-  { label: 'Undo train', action: { type: 'ungroup' } },
-]
+const menuChoices = computed<SceneMenuChoice[]>(() => [
+  { kind: 'action', label: 'Clone', action: { type: 'clone' } },
+  { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
+  { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
+  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
+
+  addendMenuChoice.value,
+
+  { kind: 'action', label: 'Delete', action: { type: 'delete' } },
+])
 
 const placedRods = computed(() =>
     scene.trains.value.map(trainView),
@@ -110,14 +116,9 @@ const placedRods = computed(() =>
 
 const placementMessage = scene.message
 
-const canRemoveSelectedRod = computed(() =>
-    !phonePortrait.value && scene.selection.value.size > 0,
-)
-
 function onRemoveSelectedRod(): void {
-  scene.apply([...scene.selection.value], { type: 'delete' })
+  applySelected({ type: 'delete' })
 }
-
 
 function onChooseRod(value: CuisenaireRodValue): void {
   scene.apply([], { type: 'create', value })
@@ -158,14 +159,12 @@ function intersectsPreview(
           >
             {{ trayOpen ? 'Hide rods' : 'Show rods' }}
           </button>
-          <button
-              type="button"
-              class="remove-rod-button"
-              :disabled="!canRemoveSelectedRod"
+          <PlaygroundActionButton
+              :disabled="!checkSelected({ type: 'delete' }).allowed"
               @click="onRemoveSelectedRod"
           >
             Remove selected rod
-          </button>
+          </PlaygroundActionButton>
           <span
               v-if="shortLandscape"
               class="toolbar-status"
@@ -182,12 +181,9 @@ function intersectsPreview(
             id="tabla-rod-tray"
             class="workspace-tray"
         >
-          <RodTray
-              :items="rods"
-              :unit-size="16"
+          <PlaygroundRodTray
               :layout="compactLayout ? 'wrap' : 'vertical'"
-              :disabled="phonePortrait"
-              embedded
+              :disabled="editingDisabled"
               @choose="onChooseRod"
           />
         </div>
@@ -230,7 +226,7 @@ function intersectsPreview(
                   :y="piece.y"
                   :cell-size="pieceCellSize"
                   :selected="scene.selection.value.has(piece.id)"
-                  :disabled="!props.active || phonePortrait || menu.request.value !== null"
+                  :disabled="blocked"
                   :snap-to-grid="true"
                   :begin-move="() => interaction.beginMove(piece.id)"
                   :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
@@ -256,7 +252,7 @@ function intersectsPreview(
           @close="menu.close"
           @restore-focus="menu.restoreFocus"
       />
-      
+
     </div>
     <!-- End workspace -->
     <p
@@ -322,29 +318,6 @@ function intersectsPreview(
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-}
-.remove-rod-button {
-  min-height: 44px;
-  max-width: 100%;
-  margin: 4px;
-  padding: 8px 12px;
-  white-space: normal;
-  font: inherit;
-  color: var(--mt-text);
-  background: var(--mt-surface-2);
-  border: 1px solid var(--mt-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.remove-rod-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.remove-rod-button:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
 }
 .toolbar-status {
   padding-right: 16px;
@@ -457,4 +430,3 @@ function intersectsPreview(
   }
 }
 </style>
-

@@ -113,12 +113,15 @@ export function useSceneInteraction(options: {
         delta.value = { x: 0, y: 0 }
     }
 
-    function endMove(id: string): void {
-        if (session.value?.leaderId !== id) return
-
+    function cancelMove(): void {
         session.value = null
         source = null
         delta.value = { x: 0, y: 0 }
+    }
+
+    function endMove(id: string): void {
+        if (session.value?.leaderId !== id) return
+        cancelMove()
     }
 
     function previewFor(id: string): Point | undefined {
@@ -141,6 +144,7 @@ export function useSceneInteraction(options: {
         previewMove,
         settleMove,
         endMove,
+        cancelMove,
         previewFor,
     }
 }

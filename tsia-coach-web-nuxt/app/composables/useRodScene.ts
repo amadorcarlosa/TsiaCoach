@@ -4,10 +4,13 @@ import type {
     RodTrain,
     SceneAction,
     ScenePolicy,
+    SceneApplyResult,
     SceneResult,
     TrainPart
 } from "~/components/rod/scene/rod.scene.types.ts";
+import type { AddendChoice } from '~/components/rod/scene/rod.scene.types'
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
+import { addendPairs } from '~/components/rod/scene/addend-groupings'
 
 
 type Candidate =
@@ -272,6 +275,153 @@ export function useRodScene(policy: ScenePolicy) {
                     combined,
                 ])
             }
+            case 'regroup-ones': {
+                for (const train of selected) {
+                    const orientation = train.parts[0]!.orientation
+
+                    if (train.parts.some(part => part.orientation === 'tower')) {
+                        return reject(
+                            'Lay the tower horizontally or vertically before decomposing.',
+                        )
+                    }
+
+                    if (train.parts.some(part => part.orientation !== orientation)) {
+                        return reject(
+                            'Arrange each selected train horizontally or vertically first.',
+                        )
+                    }
+
+                    const vertical = orientation === 'vertical'
+
+                    const ordered = [...train.parts].sort((a, b) =>
+                        vertical
+                            ? a.offset.y - b.offset.y
+                            : a.offset.x - b.offset.x,
+                    )
+
+                    const firstOffset = { ...ordered[0]!.offset }
+                    let cursor = 0
+
+                    // Require a continuous line and preserve its occupied footprint.
+                    for (const part of ordered) {
+                        const expectedX = firstOffset.x + (vertical ? 0 : cursor)
+                        const expectedY = firstOffset.y + (vertical ? cursor : 0)
+
+                        if (
+                            part.offset.x !== expectedX ||
+                            part.offset.y !== expectedY
+                        ) {
+                            return reject(
+                                'Arrange each selected train in one continuous line first.',
+                            )
+                        }
+
+                        cursor += part.value
+                    }
+
+                    train.parts = Array.from(
+                        { length: cursor },
+                        (_, index): TrainPart => ({
+                            value: 1,
+                            orientation,
+                            offset: {
+                                x: firstOffset.x + (vertical ? 0 : index),
+                                y: firstOffset.y + (vertical ? index : 0),
+                            },
+                        }),
+                    )
+                }
+
+                return validate(current)
+            }
+
+            case 'regroup-addends': {
+                for (const train of selected) {
+                    const first = train.parts[0]
+
+                    if (!first) {
+                        return reject('This train has no parts.')
+                    }
+
+                    const orientation = first.orientation
+
+                    if (
+                        orientation === 'tower' ||
+                        train.parts.some(part => part.orientation === 'tower')
+                    ) {
+                        return reject(
+                            'Lay the tower horizontally or vertically before decomposing.',
+                        )
+                    }
+
+                    if (train.parts.some(part => part.orientation !== orientation)) {
+                        return reject(
+                            'Arrange each selected train horizontally or vertically first.',
+                        )
+                    }
+
+                    const vertical = orientation === 'vertical'
+
+                    const ordered = [...train.parts].sort((a, b) =>
+                        vertical
+                            ? a.offset.y - b.offset.y
+                            : a.offset.x - b.offset.x,
+                    )
+
+                    const start = { ...ordered[0]!.offset }
+                    let total = 0
+
+                    for (const part of ordered) {
+                        if (
+                            part.offset.x !== start.x + (vertical ? 0 : total) ||
+                            part.offset.y !== start.y + (vertical ? total : 0)
+                        ) {
+                            return reject(
+                                'Arrange each selected train in one continuous line first.',
+                            )
+                        }
+
+                        total += part.value
+                    }
+
+                    const candidates = addendPairs(total)
+                    const requested = action.pair
+
+                    const pair = requested
+                        ? candidates.find(candidate =>
+                            candidate[0] === requested[0] &&
+                            candidate[1] === requested[1],
+                        )
+                        : candidates[0]
+
+                    if (!pair) {
+                        return reject(
+                            requested
+                                ? 'Choose two rods valued 1–10 that add to this object’s value.'
+                                : `Value ${total} has no two-addend arrangement using rods valued 1–10.`,
+                        )
+                    }
+
+                    let cursor = 0
+
+                    // Preserve the chosen pair's order. Do not sort it.
+                    train.parts = pair.map((value): TrainPart => {
+                        const part: TrainPart = {
+                            value,
+                            orientation,
+                            offset: {
+                                x: start.x + (vertical ? 0 : cursor),
+                                y: start.y + (vertical ? cursor : 0),
+                            },
+                        }
+
+                        cursor += value
+                        return part
+                    })
+                }
+
+                return validate(current)
+            }
 
             case 'ungroup': {
                 if (selected.some(train => train.parts.length < 2)) {
@@ -318,7 +468,7 @@ export function useRodScene(policy: ScenePolicy) {
     function apply(
         ids: readonly string[],
         action: SceneAction,
-    ): SceneResult {
+    ): SceneApplyResult {
         // Rebuild and recheck against the scene as it exists now.
         const result = build(ids, action)
 
@@ -354,7 +504,25 @@ export function useRodScene(policy: ScenePolicy) {
         selection.value = nextSelection
 
         message.value = ''
-        return { allowed: true }
+        return { allowed: true, createdIds }
+    }
+
+    function getAddendChoices(id: string): AddendChoice[] {
+        const train = trains.value.find(train => train.id === id)
+        if (!train) return []
+
+        const total = train.parts.reduce(
+            (sum, part) => sum + part.value,
+            0,
+        )
+
+        return addendPairs(total).map(pair => ({
+            pair,
+            result: check([id], {
+                type: 'regroup-addends',
+                pair,
+            }),
+        }))
     }
 
     function select(ids: readonly string[]): void {
@@ -400,5 +568,6 @@ export function useRodScene(policy: ScenePolicy) {
         apply,
         select,
         constrainMove,
+        getAddendChoices,
     }
 }

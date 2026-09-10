@@ -1,4 +1,4 @@
-﻿import type { SceneAction } from './rod.scene.types'
+import type { SceneAction } from './rod.scene.types'
 
 export type SceneMenuAction = Extract<
     SceneAction,
@@ -7,22 +7,22 @@ export type SceneMenuAction = Extract<
             'delete' |
             'set-orientation'|
             'make-train' |
-            'ungroup'
+            'ungroup' |
+            'regroup-ones' |
+            'regroup-addends'
     }
 >
 
-export type SceneMenuChoice = {
-    label: string
-    action: SceneMenuAction
-    checked?: boolean
-}
-
-export type SceneMenuRequest = {
-    trainId: string
-    anchor: {
-        x: number
-        y: number
-        width: number
-        height: number
+export type SceneMenuChoice =
+  | {
+      kind: 'action'
+      label: string
+      action: SceneMenuAction
+      checked?: boolean
     }
-}
+  | {
+      kind: 'submenu'
+      label: string
+      children: readonly SceneMenuChoice[]
+      disabledReason?: string
+    }

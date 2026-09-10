@@ -13,17 +13,28 @@ export type RodTrain = {
   parts: TrainPart[]
 }
 
+export type AddendPair = readonly [
+  CuisenaireRodValue,
+  CuisenaireRodValue,
+]
+
+export type AddendChoice = {
+  pair: AddendPair
+  result: SceneResult
+}
+
 export type SceneAction =
     | { type: 'create'; value: CuisenaireRodValue }
     | { type: 'move'; delta: Point }
     | { type: 'clone' }
     | { type: 'delete' }
-    |{ type: 'make-train' }
+    | { type: 'make-train' }
+    | { type: 'regroup-ones' }
+    | { type: 'regroup-addends'; pair?: AddendPair }
     | { type: 'ungroup' }
     | {
   type: 'set-orientation'
   orientation: TrainPart['orientation']
-
 }
 
 export type ScenePolicy = {
@@ -37,4 +48,8 @@ export type ScenePolicy = {
 
 export type SceneResult =
     | { allowed: true }
+    | { allowed: false; reason: string }
+
+export type SceneApplyResult =
+    | { allowed: true; createdIds: readonly string[] }
     | { allowed: false; reason: string }

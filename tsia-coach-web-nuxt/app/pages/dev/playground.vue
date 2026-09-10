@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { provide, readonly, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
-import { PlayGroundItems } from '~/components/playground/playground.types'
-import { sceneCancellationKey } from '~/components/rod/scene/scene-cancellation'
+import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
 import ArrayRodPlayground from '~/components/playground/ArrayRodPlayground.vue'
 import BarRodPlayground from '~/components/playground/BarRodPlayground.vue'
 
-const tabs = PlayGroundItems.map(item => ({
-  ...item,
-  value: item.slot,
+const tabs = playgroundTabs.map(({ id, label }) => ({
+  label,
+  value: id,
+  slot: id,
 }))
 
-const activeTab = ref('barModelPlayground')
+const activeTab = ref<PlaygroundId>('barModelPlayground')
 const cancellationVersion = ref(0)
-
-provide(sceneCancellationKey, readonly(cancellationVersion))
+const readCancelVersion = () => cancellationVersion.value
 
 function cancelSceneMovement(): void {
   cancellationVersion.value++
@@ -35,7 +34,6 @@ function onTabPointerDown(event: PointerEvent): void {
 }
 
 // Also covers keyboard and programmatic tab changes.
-// Keep your existing activeTab declaration.
 watch(activeTab, cancelSceneMovement, { flush: 'sync' })
 </script>
 
@@ -49,12 +47,14 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
       <template #arrayModelPlayground>
         <ArrayRodPlayground
           :active="activeTab === 'arrayModelPlayground'"
+          :cancel-version="readCancelVersion"
         />
       </template>
 
       <template #barModelPlayground>
         <BarRodPlayground
           :active="activeTab === 'barModelPlayground'"
+          :cancel-version="readCancelVersion"
         />
       </template>
     </UTabs>

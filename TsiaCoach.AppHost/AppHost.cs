@@ -12,6 +12,7 @@ var api =
 var web = builder.AddViteApp("web-nuxt", "../tsia-coach-web-nuxt")
     .WithPnpm()
     .WithEnvironment("NUXT_API_URL", api.GetEndpoint("http"))
+    .WithHttpEndpoint(port: 3000, env: "PORT")
     .WaitFor(api);
 
 builder.Build().Run();

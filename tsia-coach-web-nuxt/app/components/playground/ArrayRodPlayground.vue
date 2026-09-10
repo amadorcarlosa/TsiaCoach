@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
-import RodTray from '~/components/rod/tray/RodTray.vue'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
-import {
-  CuisenaireRodValues,
-  getRodDefinition,
-  type CuisenaireRodValue,
-} from '~/components/rod/rod.types'
+import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
+import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
+import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import {
   arrayRodOrientations,
   type ArrayRodOrientation,
@@ -17,11 +14,12 @@ import { trainView } from '~/components/rod/scene/train-view'
 
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
-import { useSceneMenu } from '~/composables/useSceneMenu'
+import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 
 const props = withDefaults(defineProps<{
   active?: boolean
+  cancelVersion?: () => number
 }>(), {
   active: true,
 })
@@ -50,30 +48,33 @@ const {
   bottomGap: 8,
 })
 
+const editingDisabled = computed(
+  () => !props.active || phonePortrait.value,
+)
+
 const scene = useRodScene({
   columns: fullColumns,
   rows: boardRows,
   spawnRows: Array.from({ length: boardRows }, (_, row) => row),
-  editable: () => props.active && !phonePortrait.value,
+  editable: () => !editingDisabled.value,
   allowOrientation: true,
 })
 
-const menu = useSceneMenu({
+const {
+  menu,
+  interaction,
+  blocked,
+  checkSelected,
+  applySelected,
+  addendMenuChoice,
+} = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
-  disabled: () => !props.active || phonePortrait.value,
+  disabled: () => editingDisabled.value,
+  cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
-const interaction = useSceneInteraction({
-  scene,
-  blocked: () =>
-      !props.active ||
-      phonePortrait.value ||
-      menu.request.value !== null,
-})
-const message = scene.message
 
-const trayItems = Object.values(CuisenaireRodValues)
-    .map(getRodDefinition)
+const message = scene.message
 
 const renderedPieces = computed(() =>
   scene.trains.value.map(trainView),
@@ -87,15 +88,16 @@ const selectedRod = computed(() => {
   )
 })
 
-const canEditSelection = computed(() =>
-  scene.check(menu.selectedIds.value, { type: 'delete' }).allowed,
-)
-
 const menuChoices = computed<SceneMenuChoice[]>(() => [
-  { label: 'Clone', action: { type: 'clone' } },
-  { label: 'Make a train', action: { type: 'make-train' } },
-  { label: 'Undo train', action: { type: 'ungroup' } },
+  { kind: 'action', label: 'Clone', action: { type: 'clone' } },
+  { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
+  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
+  { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
+
+  addendMenuChoice.value,
+
   ...arrayRodOrientations.map(orientation => ({
+    kind: 'action' as const,
     label: orientation[0]!.toUpperCase() + orientation.slice(1),
     action: {
       type: 'set-orientation' as const,
@@ -103,35 +105,23 @@ const menuChoices = computed<SceneMenuChoice[]>(() => [
     },
     checked: selectedRod.value?.orientation === orientation,
   })),
-  { label: 'Delete', action: { type: 'delete' } },
+  { kind: 'action', label: 'Delete', action: { type: 'delete' } },
 ])
 
 function onChoose(value: CuisenaireRodValue): void {
-  const previousIds = new Set(
-    scene.trains.value.map(train => train.id),
-  )
-
   const result = scene.apply([], { type: 'create', value })
-  if (!result.allowed) return
 
-  // Preserve the array playground's select-on-create behavior.
-  const created = scene.trains.value.find(
-    train => !previousIds.has(train.id),
-  )
-  if (created) scene.select([created.id])
+  if (result.allowed) {
+    scene.select(result.createdIds)
+  }
 }
 
-
-
 function onOrient(orientation: ArrayRodOrientation): void {
-  scene.apply(menu.selectedIds.value, {
-    type: 'set-orientation',
-    orientation,
-  })
+  applySelected({ type: 'set-orientation', orientation })
 }
 
 function onRemove(): void {
-  scene.apply(menu.selectedIds.value, { type: 'delete' })
+  applySelected({ type: 'delete' })
 }
 </script>
 
@@ -152,36 +142,32 @@ function onRemove(): void {
           {{ trayOpen ? 'Hide rods' : 'Show rods' }}
         </button>
 
-        <button
+        <PlaygroundActionButton
             v-for="orientation in arrayRodOrientations"
             :key="orientation"
-            type="button"
-            :disabled="!scene.check(menu.selectedIds.value, {
+            class="orientation-button"
+            :disabled="!checkSelected({
               type: 'set-orientation',
               orientation,
             }).allowed"
-            :aria-pressed="selectedRod?.orientation === orientation"
+            :pressed="selectedRod?.orientation === orientation"
             @click="onOrient(orientation)"
         >
           {{ orientation }}
-        </button>
+        </PlaygroundActionButton>
 
-        <button
-            type="button"
-            :disabled="!canEditSelection"
+        <PlaygroundActionButton
+            :disabled="!checkSelected({ type: 'delete' }).allowed"
             @click="onRemove"
         >
           Remove selected rod
-        </button>
+        </PlaygroundActionButton>
       </div>
 
       <div v-show="trayOpen" id="array-rod-tray">
-        <RodTray
-            :items="trayItems"
-            :unit-size="16"
-            :disabled="phonePortrait"
+        <PlaygroundRodTray
             layout="wrap"
-            embedded
+            :disabled="phonePortrait"
             @choose="onChoose"
         />
       </div>
@@ -213,7 +199,7 @@ function onRemove(): void {
               :dimensions="piece.dimensions"
               :cell-size="pieceCellSize"
               :selected="scene.selection.value.has(piece.id)"
-              :disabled="!props.active || phonePortrait || menu.request.value !== null"
+              :disabled="blocked"
               :snap-to-grid="true"
               :begin-move="() => interaction.beginMove(piece.id)"
               :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
@@ -258,7 +244,7 @@ function onRemove(): void {
   padding-block: 8px;
 }
 
-.array-toolbar button {
+.array-toolbar > button {
   min-height: 44px;
   padding: 8px 12px;
   border: 1px solid var(--mt-border);
@@ -266,22 +252,16 @@ function onRemove(): void {
   color: var(--mt-text);
   background: var(--mt-bg-elevated);
   font: inherit;
-  text-transform: capitalize;
   cursor: pointer;
 }
 
-.array-toolbar button[aria-pressed="true"] {
-  border-color: var(--ui-primary);
-}
-
-.array-toolbar button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.array-toolbar button:focus-visible {
+.array-toolbar > button:focus-visible {
   outline: 2px solid var(--ui-primary);
   outline-offset: 2px;
+}
+
+.orientation-button {
+  text-transform: capitalize;
 }
 
 .array-viewport {
@@ -289,5 +269,3 @@ function onRemove(): void {
   min-width: 0;
 }
 </style>
-
-

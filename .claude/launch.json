@@ -6,6 +6,13 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--dir", "tsia-coach-web-nuxt", "dev"],
       "port": 3000
+    },
+    {
+      "name": "playground-3117",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "tsia-coach-web-nuxt", "dev", "--host", "127.0.0.1", "--port", "3117"],
+      "port": 3117,
+      "autoPort": false
     }
   ]
 }

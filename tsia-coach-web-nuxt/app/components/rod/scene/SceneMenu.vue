@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { SceneAction, SceneResult } from './rod.scene.types'
@@ -35,22 +35,35 @@ function choose(action: SceneMenuAction): void {
   emit('close')
 }
 
-const items = computed<DropdownMenuItem[]>(() => {
-  if (!props.request) return []
-
-  return props.choices.map(choice => {
-    const result = props.check(props.selection, choice.action)
+function toMenuItem(choice: SceneMenuChoice): DropdownMenuItem {
+  if (choice.kind === 'submenu') {
+    const empty = choice.children.length === 0
 
     return {
       label: choice.label,
-      type: choice.checked === undefined ? 'link' : 'checkbox',
-      checked: choice.checked,
-      disabled: !result.allowed,
-      description: result.allowed ? undefined : result.reason,
-      onSelect: () => choose(choice.action),
+      disabled: empty || Boolean(choice.disabledReason),
+      description: choice.disabledReason ??
+        (empty ? 'No choices available.' : undefined),
+      children: choice.children.map(toMenuItem),
+      // No onSelect: opening this entry cannot mutate the scene.
     }
-  })
-})
+  }
+
+  const result = props.check(props.selection, choice.action)
+
+  return {
+    label: choice.label,
+    type: choice.checked === undefined ? 'link' : 'checkbox',
+    checked: choice.checked,
+    disabled: !result.allowed,
+    description: result.allowed ? undefined : result.reason,
+    onSelect: () => choose(choice.action),
+  }
+}
+
+const items = computed<DropdownMenuItem[]>(() =>
+  props.request ? props.choices.map(toMenuItem) : [],
+)
 
 const content = computed(() => ({
   reference: {

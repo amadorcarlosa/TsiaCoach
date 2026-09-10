@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { useRodScene } from '~/composables/useRodScene'
+import type { AddendPair } from '~/components/rod/scene/rod.scene.types'
 
 function createScene() {
   return useRodScene({
@@ -47,13 +48,15 @@ describe('make-train', () => {
 
     // Reverse selection order must not affect board ordering.
     scene.select([b, a])
-    expect(scene.apply([b, a], {
+    const result = scene.apply([b, a], {
       type: 'make-train',
-    })).toEqual({ allowed: true })
+    })
 
     expect(scene.trains.value).toHaveLength(1)
 
     const train = scene.trains.value[0]!
+
+    expect(result).toEqual({ allowed: true, createdIds: [train.id] })
 
     expect(train.anchor).toEqual({ x: 2, y: 4 })
     expect(train.parts.map(part => ({
@@ -140,7 +143,7 @@ describe('make-train', () => {
         type: 'move',
         delta: { x: 1, y: 0 },
       }),
-    ).toEqual({ allowed: true })
+    ).toEqual({ allowed: true, createdIds: [] })
 
     scene.apply([], { type: 'create', value: 1 })
 
@@ -177,20 +180,18 @@ describe('make-train', () => {
         type: 'move',
         delta: { x: 0, y: 1 },
       }),
-    ).toEqual({ allowed: true })
+    ).toEqual({ allowed: true, createdIds: [] })
 
-    expect(scene.apply([], { type: 'create', value: 10 })).toEqual({
-      allowed: true,
-    })
+    const created = scene.apply([], { type: 'create', value: 10 })
     const obstacle = scene.trains.value[2]!.id
+    expect(created).toEqual({ allowed: true, createdIds: [obstacle] })
 
-    expect(scene.apply([first, obstacle], { type: 'make-train' })).toEqual({
-      allowed: true,
-    })
+    const packed = scene.apply([first, obstacle], { type: 'make-train' })
 
     const combined = scene.trains.value.find(
       train => ![first, second, obstacle].includes(train.id),
     )!.id
+    expect(packed).toEqual({ allowed: true, createdIds: [combined] })
 
     const before = scene.trains.value.map(train => ({
       ...train,
@@ -214,16 +215,18 @@ describe('make-train', () => {
     scene.apply([], { type: 'create', value: 5 })
 
     const [first, second] = scene.trains.value.map(train => train.id)
-    expect(scene.apply([first, second], { type: 'make-train' })).toEqual({ allowed: true })
+    const firstJoin = scene.apply([first, second], { type: 'make-train' })
 
     const combined = scene.trains.value.find(train => ![first, second].includes(train.id))!
+    expect(firstJoin).toEqual({ allowed: true, createdIds: [combined.id] })
     scene.apply([], { type: 'create', value: 2 })
     const third = scene.trains.value.find(train => train.id !== combined.id)!.id
 
-    expect(scene.apply([combined.id, third], { type: 'make-train' })).toEqual({ allowed: true })
+    const secondJoin = scene.apply([combined.id, third], { type: 'make-train' })
 
     expect(scene.trains.value).toHaveLength(1)
     const final = scene.trains.value[0]!
+    expect(secondJoin).toEqual({ allowed: true, createdIds: [final.id] })
 
     expect(final.parts.map(part => ({
       value: part.value,
@@ -252,6 +255,656 @@ describe('make-train', () => {
 
     expect(scene.trains.value.map(train => train.id)).toEqual(beforeTrains)
     expect([...scene.selection.value]).toEqual(beforeSelection)
+  })
+})
+
+describe('regroup-ones', () => {
+  it.each(['horizontal', 'vertical'] as const)(
+    'decomposes a single %s rod into ones',
+    (orientation) => {
+      const scene = createScene()
+
+      expect(scene.apply([], {
+        type: 'create',
+        value: 5,
+      }).allowed).toBe(true)
+
+      const id = scene.trains.value[0]!.id
+      scene.select([id])
+
+      expect(scene.apply([id], {
+        type: 'set-orientation',
+        orientation,
+      }).allowed).toBe(true)
+
+      const anchor = { ...scene.trains.value[0]!.anchor }
+
+      expect(scene.check([id], {
+        type: 'regroup-ones',
+      })).toEqual({ allowed: true })
+
+      expect(scene.apply([id], {
+        type: 'regroup-ones',
+      })).toEqual({ allowed: true, createdIds: [] })
+
+      expect(scene.trains.value).toHaveLength(1)
+
+      const train = scene.trains.value[0]!
+
+      expect(train.id).toBe(id)
+      expect(train.anchor).toEqual(anchor)
+      expect([...scene.selection.value]).toEqual([id])
+
+      expect(train.parts).toEqual(
+        Array.from({ length: 5 }, (_, index) => ({
+          value: 1,
+          orientation,
+          offset: orientation === 'horizontal'
+            ? { x: index, y: 0 }
+            : { x: 0, y: index },
+        })),
+      )
+    },
+  )
+
+  it('accepts decomposing a one-rod without changing its arrangement', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 1 })
+
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id], {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('regroups a vertical train into ones without changing identity or anchor', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+
+    const ids = scene.trains.value.map(train => train.id)
+
+    expect(scene.apply(ids, {
+      type: 'make-train',
+    }).allowed).toBe(true)
+
+    const id = scene.trains.value[0]!.id
+
+    expect(scene.apply([id], {
+      type: 'set-orientation',
+      orientation: 'vertical',
+    }).allowed).toBe(true)
+
+    const anchor = { ...scene.trains.value[0]!.anchor }
+
+    expect(scene.apply([id], {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    expect(scene.trains.value).toHaveLength(1)
+
+    const train = scene.trains.value[0]!
+
+    expect(train.id).toBe(id)
+    expect(train.anchor).toEqual(anchor)
+    expect([...scene.selection.value]).toEqual([id])
+
+    expect(train.parts).toEqual(
+      Array.from({ length: 8 }, (_, index) => ({
+        value: 1,
+        orientation: 'vertical',
+        offset: { x: 0, y: index },
+      })),
+    )
+  })
+
+  it('regroups a horizontal train into horizontal ones at (0,0) through (7,0)', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+
+    const ids = scene.trains.value.map(train => train.id)
+    scene.apply(ids, { type: 'make-train' })
+    const id = scene.trains.value[0]!.id
+    const anchor = { ...scene.trains.value[0]!.anchor }
+
+    expect(scene.apply([id], {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    const train = scene.trains.value[0]!
+
+    expect(train.id).toBe(id)
+    expect(train.anchor).toEqual(anchor)
+    expect(train.parts).toEqual(
+      Array.from({ length: 8 }, (_, index) => ({
+        value: 1,
+        orientation: 'horizontal',
+        offset: { x: index, y: 0 },
+      })),
+    )
+    expect([...scene.selection.value]).toEqual([id])
+  })
+
+  it('retains IDs and selection for multiple eligible trains', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const firstPair = scene.trains.value.map(train => train.id)
+    expect(scene.apply(firstPair, { type: 'make-train' }).allowed).toBe(true)
+
+    const firstCombined = scene.trains.value[0]!.id
+
+    scene.apply([], { type: 'create', value: 2 })
+    scene.apply([], { type: 'create', value: 4 })
+    const secondPair = scene.trains.value.slice(1).map(train => train.id)
+    expect(scene.apply(secondPair, { type: 'make-train' }).allowed).toBe(true)
+
+    const secondCombined = scene.trains.value.find(train => train.id !== firstCombined)!.id
+
+    const selectedIds = [firstCombined, secondCombined]
+    scene.select(selectedIds)
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply(selectedIds, {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    expect([...scene.selection.value]).toEqual(selectedIds)
+    expect(scene.trains.value.map(train => train.id)).toEqual(selectedIds)
+    expect(sceneSnapshot(scene).selection).toEqual(before.selection)
+
+    const trains = scene.trains.value
+    expect(trains[0]!.parts).toEqual(
+      Array.from({ length: 8 }, (_, index) => ({
+        value: 1,
+        orientation: 'horizontal',
+        offset: { x: index, y: 0 },
+      })),
+    )
+    expect(trains[1]!.parts).toEqual(
+      Array.from({ length: 6 }, (_, index) => ({
+        value: 1,
+        orientation: 'horizontal',
+        offset: { x: index, y: 0 },
+      })),
+    )
+  })
+
+  it('decomposes a multipart train and a single rod together', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const originals = scene.trains.value.map(train => train.id)
+    expect(scene.apply(originals, {
+      type: 'make-train',
+    }).allowed).toBe(true)
+
+    const combinedId = scene.trains.value[0]!.id
+
+    scene.apply([], { type: 'create', value: 2 })
+    const singleId = scene.trains.value.find(
+      train => train.id !== combinedId,
+    )!.id
+
+    const ids = [combinedId, singleId]
+    scene.select(ids)
+
+    const before = scene.trains.value.map(train => ({
+      id: train.id,
+      anchor: { ...train.anchor },
+      total: train.parts.reduce((sum, part) => sum + part.value, 0),
+    }))
+
+    expect(scene.apply(ids, {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    expect(scene.trains.value).toHaveLength(2)
+    expect([...scene.selection.value]).toEqual(ids)
+
+    for (const original of before) {
+      const train = scene.trains.value.find(train => train.id === original.id)!
+      expect(train.anchor).toEqual(original.anchor)
+      expect(train.parts).toHaveLength(original.total)
+      expect(train.parts.every(part => part.value === 1)).toBe(true)
+    }
+  })
+
+  it('rejects regrouping a rod and a tower together', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const originalIds = scene.trains.value.map(train => train.id)
+
+    const id = originalIds[0]!
+    const towerId = originalIds[1]!
+
+    expect(scene.apply([towerId], {
+      type: 'set-orientation',
+      orientation: 'tower',
+    }).allowed).toBe(true)
+
+    expect(scene.apply([id], {
+      type: 'set-orientation',
+      orientation: 'horizontal',
+    }).allowed).toBe(true)
+
+    scene.select([id, towerId])
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id, towerId], {
+      type: 'regroup-ones',
+    })).toEqual({
+      allowed: false,
+      reason: 'Lay the tower horizontally or vertically before decomposing.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('is idempotent when repeated', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    scene.apply(
+      scene.trains.value.map(train => train.id),
+      { type: 'make-train' },
+    )
+
+    const id = scene.trains.value[0]!.id
+    expect(scene.apply([id], { type: 'regroup-ones' })).toEqual({ allowed: true, createdIds: [] })
+
+    const first = sceneSnapshot(scene)
+    expect(scene.apply([id], { type: 'regroup-ones' })).toEqual({ allowed: true, createdIds: [] })
+    expect(sceneSnapshot(scene)).toEqual(first)
+  })
+
+  it('preserves state and selection on check without allocating ids', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    scene.apply(
+      scene.trains.value.map(train => train.id),
+      { type: 'make-train' },
+    )
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.check([id], {
+      type: 'regroup-ones',
+    })).toEqual({ allowed: true })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('rejects apply without mutation when editing becomes disabled after check', () => {
+    let editable = true
+    const scene = useRodScene({
+      columns: 24,
+      rows: 12,
+      spawnRows: [4],
+      editable: () => editable,
+      allowOrientation: true,
+    })
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    scene.apply(
+      scene.trains.value.map(train => train.id),
+      { type: 'make-train' },
+    )
+    const id = scene.trains.value[0]!.id
+
+    expect(scene.check([id], { type: 'regroup-ones' })).toEqual({ allowed: true })
+
+    editable = false
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id], { type: 'regroup-ones' })).toEqual({
+      allowed: false,
+      reason: 'Editing is unavailable in portrait preview.',
+    })
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+})
+
+describe('regroup-addends', () => {
+  const fivePairs: AddendPair[] = [
+    [1, 4],
+    [2, 3],
+    [3, 2],
+    [4, 1],
+  ]
+
+  it.each(fivePairs)(
+    'preserves the chosen order %i + %i',
+    (a, b) => {
+      const scene = createScene()
+
+      scene.apply([], { type: 'create', value: 5 })
+
+      const id = scene.trains.value[0]!.id
+      const anchor = { ...scene.trains.value[0]!.anchor }
+      scene.select([id])
+
+      expect(scene.apply([id], {
+        type: 'regroup-addends',
+        pair: [a, b],
+      })).toEqual({ allowed: true, createdIds: [] })
+
+      expect(scene.trains.value).toHaveLength(1)
+
+      const train = scene.trains.value[0]!
+
+      expect(train.id).toBe(id)
+      expect(train.anchor).toEqual(anchor)
+      expect([...scene.selection.value]).toEqual([id])
+
+      expect(train.parts).toEqual([
+        {
+          value: a,
+          orientation: 'horizontal',
+          offset: { x: 0, y: 0 },
+        },
+        {
+          value: b,
+          orientation: 'horizontal',
+          offset: { x: a, y: 0 },
+        },
+      ])
+    },
+  )
+
+  it('preserves the chosen order for a vertical train', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    expect(scene.apply([id], {
+      type: 'set-orientation',
+      orientation: 'vertical',
+    }).allowed).toBe(true)
+
+    const anchor = { ...scene.trains.value[0]!.anchor }
+
+    expect(scene.apply([id], {
+      type: 'regroup-addends',
+      pair: [2, 3],
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    const train = scene.trains.value[0]!
+
+    expect(train.id).toBe(id)
+    expect(train.anchor).toEqual(anchor)
+    expect(train.parts).toEqual([
+      {
+        value: 2,
+        orientation: 'vertical',
+        offset: { x: 0, y: 0 },
+      },
+      {
+        value: 3,
+        orientation: 'vertical',
+        offset: { x: 0, y: 2 },
+      },
+    ])
+  })
+
+  it('defaults to the first candidate pair when none is requested', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    expect(scene.apply([id], {
+      type: 'regroup-addends',
+    })).toEqual({ allowed: true, createdIds: [] })
+
+    expect(scene.trains.value[0]!.parts.map(part => part.value)).toEqual([1, 4])
+  })
+
+  it('rejects a requested pair that does not sum to the object\'s value', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id], {
+      type: 'regroup-addends',
+      pair: [1, 1],
+    })).toEqual({
+      allowed: false,
+      reason: 'Choose two rods valued 1–10 that add to this object’s value.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('rejects a value with no two-addend arrangement using rods valued 1-10', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 1 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id], {
+      type: 'regroup-addends',
+    })).toEqual({
+      allowed: false,
+      reason: 'Value 1 has no two-addend arrangement using rods valued 1–10.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('rejects a tower without mutation', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    expect(scene.apply([id], {
+      type: 'set-orientation',
+      orientation: 'tower',
+    }).allowed).toBe(true)
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([id], {
+      type: 'regroup-addends',
+    })).toEqual({
+      allowed: false,
+      reason: 'Lay the tower horizontally or vertically before decomposing.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('preserves state and selection on check without allocating ids', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const id = scene.trains.value[0]!.id
+    scene.select([id])
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.check([id], {
+      type: 'regroup-addends',
+      pair: [2, 3],
+    })).toEqual({ allowed: true })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('rejects the whole multiselection when one train cannot decompose', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 5 })
+    const decomposable = scene.trains.value[0]!.id
+
+    scene.apply([], { type: 'create', value: 1 })
+    const stuck = scene.trains.value.find(
+      train => train.id !== decomposable,
+    )!.id
+
+    const ids = [decomposable, stuck]
+    scene.select(ids)
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply(ids, {
+      type: 'regroup-addends',
+    })).toEqual({
+      allowed: false,
+      reason: 'Value 1 has no two-addend arrangement using rods valued 1–10.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+})
+
+describe('apply results', () => {
+  function newIds(
+    before: readonly string[],
+    scene: ReturnType<typeof createScene>,
+  ) {
+    return scene.trains.value
+      .map(train => train.id)
+      .filter(id => !before.includes(id))
+  }
+
+  it('returns the committed id of a created rod', () => {
+    const scene = createScene()
+
+    const result = scene.apply([], { type: 'create', value: 4 })
+
+    expect(result).toEqual({
+      allowed: true,
+      createdIds: [scene.trains.value[0]!.id],
+    })
+    expect(scene.trains.value).toHaveLength(1)
+    // Creating does not select; the caller decides.
+    expect([...scene.selection.value]).toEqual([])
+  })
+
+  it('returns the committed ids of clones in board order', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const originals = scene.trains.value.map(train => train.id)
+
+    const result = scene.apply(originals, { type: 'clone' })
+
+    expect(result).toEqual({
+      allowed: true,
+      createdIds: newIds(originals, scene),
+    })
+    expect(result.allowed && result.createdIds).toHaveLength(2)
+    expect(scene.trains.value).toHaveLength(4)
+    expect(scene.trains.value.slice(0, 2).map(train => train.id))
+      .toEqual(originals)
+  })
+
+  it('identifies only trains that exist after the commit', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const originals = scene.trains.value.map(train => train.id)
+
+    const joined = scene.apply(originals, { type: 'make-train' })
+    if (!joined.allowed) throw new Error(joined.reason)
+
+    expect(joined.createdIds).toEqual(newIds(originals, scene))
+    expect(joined.createdIds).toHaveLength(1)
+    expect(originals).not.toContain(joined.createdIds[0])
+
+    const released = scene.apply(joined.createdIds, { type: 'ungroup' })
+    if (!released.allowed) throw new Error(released.reason)
+
+    expect(released.createdIds).toEqual(newIds(joined.createdIds, scene))
+    expect(released.createdIds).toHaveLength(2)
+    expect(new Set([...originals, ...joined.createdIds, ...released.createdIds]).size)
+      .toBe(5)
+    expect(scene.trains.value.map(train => train.id))
+      .toEqual(released.createdIds)
+  })
+
+  it('returns no ids for actions that create nothing', () => {
+    const scene = createScene()
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.apply([], { type: 'create', value: 5 })
+    const [first, second] = scene.trains.value.map(train => train.id) as [string, string]
+    scene.apply([first, second], { type: 'make-train' })
+    const combined = scene.trains.value[0]!.id
+
+    const empty = { allowed: true, createdIds: [] }
+
+    expect(scene.apply([combined], {
+      type: 'move',
+      delta: { x: 1, y: 0 },
+    })).toEqual(empty)
+    expect(scene.apply([combined], {
+      type: 'set-orientation',
+      orientation: 'vertical',
+    })).toEqual(empty)
+    expect(scene.apply([combined], { type: 'regroup-ones' })).toEqual(empty)
+    expect(scene.apply([combined], {
+      type: 'regroup-addends',
+      pair: [3, 5],
+    })).toEqual(empty)
+    expect(scene.apply([combined], { type: 'delete' })).toEqual(empty)
+    expect(scene.trains.value).toHaveLength(0)
+  })
+
+  it('does not allocate ids on check or on a rejected apply', () => {
+    const scene = createScene()
+
+    expect(scene.check([], { type: 'create', value: 4 })).toEqual({ allowed: true })
+    expect(scene.trains.value).toHaveLength(0)
+
+    expect(scene.apply([], { type: 'create', value: 4 })).toEqual({
+      allowed: true,
+      createdIds: [scene.trains.value[0]!.id],
+    })
+
+    const before = sceneSnapshot(scene)
+    const rejected = scene.apply(['missing'], { type: 'delete' })
+
+    expect(rejected).toEqual({
+      allowed: false,
+      reason: 'Select existing trains first.',
+    })
+    expect(sceneSnapshot(scene)).toEqual(before)
   })
 })
 
@@ -488,13 +1141,17 @@ describe('ungroup', () => {
       delta: { x: 2, y: 1 },
     }).allowed).toBe(true)
 
-    expect(scene.apply([combinedId], {
+    const result = scene.apply([combinedId], {
       type: 'ungroup',
-    })).toEqual({ allowed: true })
+    })
 
     const released = scene.trains.value
 
     expect(released).toHaveLength(2)
+    expect(result).toEqual({
+      allowed: true,
+      createdIds: released.map(train => train.id),
+    })
 
     expect(released.map(train => ({
       anchor: train.anchor,
@@ -592,13 +1249,17 @@ describe('ungroup', () => {
     const secondCombined = scene.trains.value
       .find(train => train.id !== firstCombined)!.id
 
-    expect(scene.apply([firstCombined, secondCombined], {
+    const result = scene.apply([firstCombined, secondCombined], {
       type: 'ungroup',
-    })).toEqual({ allowed: true })
+    })
 
     const released = scene.trains.value
 
     expect(released).toHaveLength(4)
+    expect(result).toEqual({
+      allowed: true,
+      createdIds: released.map(train => train.id),
+    })
     expect(released.every(train => train.parts.length === 1)).toBe(true)
     expect([...scene.selection.value].sort()).toEqual(
       released.map(train => train.id).sort(),
@@ -627,13 +1288,15 @@ describe('ungroup', () => {
       offset: { ...part.offset },
     }))
 
-    expect(scene.apply([combined], { type: 'ungroup' })).toEqual({
-      allowed: true,
-    })
+    const result = scene.apply([combined], { type: 'ungroup' })
 
     const released = scene.trains.value
 
     expect(released).toHaveLength(2)
+    expect(result).toEqual({
+      allowed: true,
+      createdIds: released.map(train => train.id),
+    })
 
     expect(released.map(train => ({
       anchor: train.anchor,

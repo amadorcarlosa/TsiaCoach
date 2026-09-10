@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/playground-fixture'
+import { test, expect, type Playground } from './fixtures/playground-fixture'
 
 test('bar menu offers removal only and targets the clicked instance', async ({ playground: p }) => {
   const first = await p.add('Bar', 'six')
@@ -7,7 +7,7 @@ test('bar menu offers removal only and targets the clicked instance', async ({ p
   const menu = await p.menu(second)
   await expect(second).toHaveClass(/--selected/)
   await expect(menu.getByRole('menuitemcheckbox')).toHaveCount(0)
-  await expect(menu.getByRole('menuitem')).toHaveCount(4)
+  await expect(menu.getByRole('menuitem')).toHaveCount(6)
   await menu.getByRole('menuitem', { name: 'Delete' }).click()
   await expect(second).toHaveCount(0)
   await expect(first).toBeVisible()
@@ -47,6 +47,327 @@ test('bar train renders each part and both parts remain interactive', async ({ p
     x: before.x + 1,
     y: before.y,
   })
+})
+
+test('array can orient a composed train vertically', async ({ playground: p }) => {
+  await p.show('Array')
+
+  const first = await p.add('Array', 'three')
+  const second = await p.add('Array', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  let menu = await p.menu(first)
+  await expect(
+    menu.getByRole('menuitem', { name: 'Make a train' }),
+  ).toBeEnabled()
+
+  await menu.getByRole('menuitem', { name: 'Make a train' }).click()
+
+  const train = p.panel('Array').locator('[data-piece-id]')
+  await expect(train).toHaveCount(1)
+  await expect(train.locator('.train-part')).toHaveCount(2)
+
+  menu = await p.menu(train.locator('.train-part').first())
+
+  const vertical = menu.getByRole(
+    'menuitemcheckbox',
+    { name: 'Vertical', exact: true },
+  )
+
+  let disabledReason: string | undefined
+  if (!(await vertical.isEnabled())) {
+    const reason = await vertical.evaluate((element) => {
+      const attributes = [
+        element.getAttribute('aria-description'),
+        element.getAttribute('data-description'),
+      ]
+      for (const value of attributes) {
+        if (value) return value
+      }
+
+      const text = element.textContent?.trim()
+      return text ? `missing reason attribute, label text: ${text}` : 'missing reason'
+    })
+    disabledReason = reason
+    console.log(`Vertical menu item disabled reason: ${reason}`)
+  }
+
+  await expect(vertical, disabledReason).toBeEnabled()
+  await vertical.click()
+
+  await expect(train).toHaveCount(1)
+  await expect(train.locator('.train-part')).toHaveCount(2)
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    width: 1,
+    depth: 8,
+    height: 1,
+  })
+
+  const parts = train.locator('.train-part')
+  await expect.poll(() => p.geometry(parts.nth(0))).toMatchObject({
+    x: 0,
+    y: 0,
+  })
+  await expect.poll(() => p.geometry(parts.nth(1))).toMatchObject({
+    x: 0,
+    y: 3,
+  })
+})
+
+test('array regroups a vertical train into eight ones', async ({
+  playground: p,
+}) => {
+  await p.show('Array')
+
+  const first = await p.add('Array', 'three')
+  const second = await p.add('Array', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  let menu = await p.menu(first)
+  await menu.getByRole('menuitem', {
+    name: 'Make a train',
+    exact: true,
+  }).click()
+
+  const train = p.panel('Array').locator('[data-piece-id]')
+  await expect(train).toHaveCount(1)
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitemcheckbox', {
+    name: 'Vertical',
+    exact: true,
+  }).click()
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    width: 1,
+    depth: 8,
+    height: 1,
+  })
+
+  const id = await train.getAttribute('data-piece-id')
+  const before = await p.geometry(train)
+
+  menu = await p.menu(train.locator('.train-part').first())
+
+  const regroup = menu.getByRole('menuitem', {
+    name: 'Regroup to ones',
+    exact: true,
+  })
+
+  await expect(regroup).toBeEnabled()
+  await regroup.click()
+
+  await expect(train).toHaveCount(1)
+  await expect(train).toHaveAttribute('data-piece-id', id!)
+  await expect(train).toHaveClass(/draggable-rod--selected/)
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    x: before.x,
+    y: before.y,
+    width: 1,
+    depth: 8,
+    height: 1,
+  })
+
+  const parts = train.locator('.train-part')
+  await expect(parts).toHaveCount(8)
+
+  for (let index = 0; index < 8; index++) {
+    await expect(parts.nth(index))
+      .toHaveAttribute('data-part-value', '1')
+
+    await expect.poll(() => p.geometry(parts.nth(index)))
+      .toMatchObject({ x: 0, y: index })
+  }
+})
+
+test('undoing a regrouped train releases individual ones, and dragging still moves them as one beforehand', async ({
+  playground: p,
+}) => {
+  await p.show('Array')
+
+  const first = await p.add('Array', 'three')
+  const second = await p.add('Array', 'five')
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  let menu = await p.menu(first)
+  await menu.getByRole('menuitem', {
+    name: 'Make a train',
+    exact: true,
+  }).click()
+
+  const train = p.panel('Array').locator('[data-piece-id]')
+  await expect(train).toHaveCount(1)
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitemcheckbox', {
+    name: 'Vertical',
+    exact: true,
+  }).click()
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    width: 1,
+    depth: 8,
+    height: 1,
+  })
+
+  const trainBefore = await p.geometry(train)
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitem', {
+    name: 'Regroup to ones',
+    exact: true,
+  }).click()
+
+  const parts = train.locator('.train-part')
+  await expect(parts).toHaveCount(8)
+
+  await p.drag(parts.first(), 10, 0)
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    y: trainBefore.y,
+    width: 1,
+    depth: 8,
+    height: 1,
+  })
+  await expect.poll(async () => (await p.geometry(train)).x).toBeGreaterThan(
+    trainBefore.x,
+  )
+
+  menu = await p.menu(parts.first())
+  await menu.getByRole('menuitem', {
+    name: 'Undo train',
+    exact: true,
+  }).click()
+
+  const singles = p.panel('Array').locator('[data-piece-id] .train-part')
+  await expect(singles).toHaveCount(8)
+
+  for (let index = 0; index < 8; index++) {
+    await expect(singles.nth(index))
+      .toHaveAttribute('data-part-value', '1')
+  }
+})
+
+for (const kind of ['Bar', 'Array'] as const) {
+  test(`${kind} decomposes a single rod into ones`, async ({
+    playground: p,
+  }) => {
+    await p.show(kind)
+
+    const rod = await p.add(kind, 'five')
+
+    if (kind === 'Array') {
+      const orientationMenu = await p.menu(rod)
+      await orientationMenu.getByRole('menuitemcheckbox', {
+        name: 'Vertical',
+        exact: true,
+      }).click()
+    }
+
+    const before = await p.geometry(rod)
+    const id = await rod.getAttribute('data-piece-id')
+
+    const menu = await p.menu(rod)
+    const regroup = menu.getByRole('menuitem', {
+      name: 'Regroup to ones',
+      exact: true,
+    })
+
+    await expect(regroup).toBeEnabled()
+    await regroup.click()
+
+    await expect(p.panel(kind).locator('[data-piece-id]'))
+      .toHaveCount(1)
+
+    await expect(rod).toHaveAttribute('data-piece-id', id!)
+    await expect(rod).toHaveClass(/draggable-rod--selected/)
+
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: before.x,
+      y: before.y,
+      width: before.width,
+      depth: before.depth,
+      height: before.height,
+    })
+
+    const parts = rod.locator('.train-part')
+    await expect(parts).toHaveCount(5)
+
+    for (let index = 0; index < 5; index++) {
+      await expect(parts.nth(index))
+        .toHaveAttribute('data-part-value', '1')
+
+      await expect.poll(() => p.geometry(parts.nth(index)))
+        .toMatchObject({
+          x: kind === 'Bar' ? index : 0,
+          y: kind === 'Array' ? index : 0,
+        })
+    }
+  })
+}
+
+test('bar regroups a horizontal train into eight ones', async ({
+  playground: p,
+}) => {
+  await p.show('Bar')
+
+  const first = await p.add('Bar', 'three')
+  const second = await p.add('Bar', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  let menu = await p.menu(first)
+  await menu.getByRole('menuitem', {
+    name: 'Make a train',
+    exact: true,
+  }).click()
+
+  const train = p.panel('Bar').locator('[data-piece-id]')
+  await expect(train).toHaveCount(1)
+
+  const id = await train.getAttribute('data-piece-id')
+  const before = await p.geometry(train)
+
+  menu = await p.menu(train.locator('.train-part').first())
+
+  const regroup = menu.getByRole('menuitem', {
+    name: 'Regroup to ones',
+    exact: true,
+  })
+
+  await expect(regroup).toBeEnabled()
+  await regroup.click()
+
+  await expect(train).toHaveCount(1)
+  await expect(train).toHaveAttribute('data-piece-id', id!)
+  await expect(train).toHaveClass(/draggable-rod--selected/)
+
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    x: before.x,
+    y: before.y,
+    width: 8,
+    depth: 1,
+    height: 1,
+  })
+
+  const parts = train.locator('.train-part')
+  await expect(parts).toHaveCount(8)
+
+  for (let index = 0; index < 8; index++) {
+    await expect(parts.nth(index))
+      .toHaveAttribute('data-part-value', '1')
+
+    await expect.poll(() => p.geometry(parts.nth(index)))
+      .toMatchObject({ x: index, y: 0 })
+  }
 })
 
 test('bar clone copies train parts', async ({ playground: p }) => {
@@ -205,6 +526,108 @@ test('switching tabs during a held group drag cancels movement', async ({ page, 
   })
 })
 
+test('array selects each newly created rod', async ({ playground: p }) => {
+  await p.show('Array')
+
+  const first = await p.add('Array', 'three')
+  await expect(first).toHaveClass(/--selected/)
+
+  const second = await p.add('Array', 'five')
+  await expect(second).toHaveClass(/--selected/)
+  await expect(first).not.toHaveClass(/--selected/)
+
+  await expect(
+    p.panel('Array').getByRole('button', { name: /remove selected rod/i }),
+  ).toBeEnabled()
+})
+
+test('bar keeps its existing selection when creating a rod', async ({ playground: p }) => {
+  await p.show('Bar')
+
+  const first = await p.add('Bar', 'three')
+  await expect(first).not.toHaveClass(/--selected/)
+  await expect(
+    p.panel('Bar').getByRole('button', { name: /remove selected rod/i }),
+  ).toBeDisabled()
+
+  await first.click()
+  await expect(first).toHaveClass(/--selected/)
+
+  const second = await p.add('Bar', 'five')
+  await expect(second).not.toHaveClass(/--selected/)
+  await expect(first).toHaveClass(/--selected/)
+})
+
+test('scene state and selection stay independent across tabs', async ({ playground: p }) => {
+  await p.show('Bar')
+  const barFirst = await p.add('Bar', 'three')
+  const barSecond = await p.add('Bar', 'five')
+  await barFirst.click()
+  await barSecond.click({ modifiers: ['Shift'] })
+  await expect(barFirst).toHaveClass(/--selected/)
+  await expect(barSecond).toHaveClass(/--selected/)
+
+  await p.show('Array')
+  await expect(p.panel('Array').locator('[data-piece-id]')).toHaveCount(0)
+  const arrayFirst = await p.add('Array', 'six')
+  const arraySecond = await p.add('Array', 'two')
+  await expect(arraySecond).toHaveClass(/--selected/)
+  await expect(arrayFirst).not.toHaveClass(/--selected/)
+
+  const menu = await p.menu(arraySecond)
+  await menu.getByRole('menuitem', { name: 'Delete' }).click()
+  await expect(p.panel('Array').locator('[data-piece-id]')).toHaveCount(1)
+
+  await p.show('Bar')
+  await expect(p.panel('Bar').locator('[data-piece-id]')).toHaveCount(2)
+  await expect(barFirst).toHaveClass(/--selected/)
+  await expect(barSecond).toHaveClass(/--selected/)
+
+  await p.show('Array')
+  await expect(p.panel('Array').locator('[data-piece-id]')).toHaveCount(1)
+  await expect(arrayFirst).not.toHaveClass(/--selected/)
+  await expect(
+    p.panel('Array').getByRole('button', { name: /remove selected rod/i }),
+  ).toBeDisabled()
+})
+
+test('returning to a tab preserves committed positions without preview offsets', async ({ playground: p }) => {
+  await p.show('Bar')
+  const leader = await p.add('Bar', 'six')
+  const follower = await p.add('Bar', 'four')
+
+  await leader.click()
+  await follower.click({ modifiers: ['Shift'] })
+
+  const leaderOrigin = await p.geometry(leader)
+  const followerOrigin = await p.geometry(follower)
+
+  await p.drag(leader, 3, 0)
+
+  await expect.poll(() => p.geometry(leader)).toMatchObject({
+    x: leaderOrigin.x + 3,
+    y: leaderOrigin.y,
+    offset: 0,
+  })
+  await expect.poll(() => p.geometry(follower)).toMatchObject({
+    x: followerOrigin.x + 3,
+    y: followerOrigin.y,
+    offset: 0,
+  })
+
+  const leaderBefore = await p.geometry(leader)
+  const followerBefore = await p.geometry(follower)
+
+  await p.show('Array')
+  await p.add('Array', 'six')
+  await p.show('Bar')
+
+  await expect.poll(() => p.geometry(leader)).toEqual(leaderBefore)
+  await expect.poll(() => p.geometry(follower)).toEqual(followerBefore)
+  await expect(leader).toHaveClass(/--selected/)
+  await expect(follower).toHaveClass(/--selected/)
+})
+
   test.describe('inertia enabled', () => {
     test.use({
       contextOptions: {
@@ -253,7 +676,7 @@ test('switching tabs during a held group drag cancels movement', async ({ page, 
 
   })
 
-  test('a two-train throw clamps by the furthest-right part', async ({ page, playground: p }) => {
+  test('a two-train throw clamps by the furthest-right part', async ({ playground: p }) => {
     const columns = 24
 
     const leader = await p.add('Bar', 'six')
@@ -339,6 +762,91 @@ test('switching tabs during a held group drag cancels movement', async ({ page, 
     await expect(follower).toHaveClass(/--selected/)
   })
 
+  test('pointer-down on a tab during group inertia cancels movement before release', async ({ page, playground: p }) => {
+    const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
+    const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
+
+    await barTab.click()
+
+    const leader = await p.add('Bar', 'six')
+    const follower = await p.add('Bar', 'six')
+
+    await leader.click()
+    await follower.click({ modifiers: ['Shift'] })
+
+    const leaderBefore = await p.geometry(leader)
+    const followerBefore = await p.geometry(follower)
+
+    const face = await leader.locator('.face.top').boundingBox()
+    if (!face) throw new Error('Missing leader face')
+    const throwAxes = await leader.evaluate(el => {
+      const world = el.closest('[data-grid-world]')!
+      const rect = (name: string) =>
+        world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
+      const origin = rect('origin')
+      const x = rect('x')
+      return { xx: x.left - origin.left, xy: x.top - origin.top }
+    })
+
+    await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(
+      face.x + face.width / 2 + throwAxes.xx * 10,
+      face.y + face.height / 2 + throwAxes.xy * 10,
+      { steps: 8 },
+    )
+    await page.mouse.up()
+
+    await expect.poll(async () => (await p.geometry(leader)).offset).toBeGreaterThan(0.05)
+
+    const tab = await arrayTab.boundingBox()
+    if (!tab) throw new Error('Missing array tab')
+
+    // The tab activates on pointer-down and hides the Bar panel, which
+    // role-scoped locators then exclude. Read the held rods by id instead.
+    const hiddenBar = page.getByRole('tabpanel', {
+      name: 'Bar Rod Playground',
+      exact: true,
+      includeHidden: true,
+    })
+    const leaderId = await leader.getAttribute('data-piece-id')
+    const followerId = await follower.getAttribute('data-piece-id')
+    const heldLeader = hiddenBar.locator(`[data-piece-id="${leaderId}"]`)
+    const heldFollower = hiddenBar.locator(`[data-piece-id="${followerId}"]`)
+
+    await page.mouse.move(tab.x + tab.width / 2, tab.y + tab.height / 2)
+    await page.mouse.down()
+
+    // The pointer is still held on the tab: movement is already cancelled.
+    await expect.poll(() => p.geometry(heldLeader)).toMatchObject({
+      x: leaderBefore.x,
+      y: leaderBefore.y,
+      offset: 0,
+    })
+    await expect.poll(() => p.geometry(heldFollower)).toMatchObject({
+      x: followerBefore.x,
+      y: followerBefore.y,
+      offset: 0,
+    })
+
+    await page.mouse.up()
+    await expect(arrayTab).toHaveAttribute('aria-selected', 'true')
+    await barTab.click()
+
+    await expect.poll(() => p.geometry(leader)).toMatchObject({
+      x: leaderBefore.x,
+      y: leaderBefore.y,
+      offset: 0,
+    })
+    await expect.poll(() => p.geometry(follower)).toMatchObject({
+      x: followerBefore.x,
+      y: followerBefore.y,
+      offset: 0,
+    })
+    await expect(leader).toHaveClass(/--selected/)
+    await expect(follower).toHaveClass(/--selected/)
+  })
+
   test('keyboard tab activation during inertia cancels movement', async ({ page, playground: p }) => {
     const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
     const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
@@ -395,5 +903,112 @@ test('switching tabs during a held group drag cancels movement', async ({ page, 
     })
     await expect(leader).toHaveClass(/--selected/)
     await expect(follower).toHaveClass(/--selected/)
+  })
+})
+
+const pairLabels = ['1 + 4', '2 + 3', '3 + 2', '4 + 1'] as const
+
+async function decomposeThroughAddendPairs(
+  p: Playground,
+  method: 'mouse' | 'keyboard' | 'touch',
+) {
+  await p.show('Bar')
+
+  for (const label of pairLabels) {
+    const firstAddend = Number(label.split(' + ')[0])
+    const secondAddend = 5 - firstAddend
+
+    const rod = await p.add('Bar', 'five')
+    const id = await rod.getAttribute('data-piece-id')
+    const before = await p.geometry(rod)
+
+    const menu = method === 'touch'
+      ? await p.menuByTouch(rod)
+      : await p.menu(rod, method === 'keyboard')
+
+    const parent = menu.getByRole('menuitem', { name: 'Regroup to addends' })
+
+    if (method === 'mouse') {
+      await parent.hover()
+    } else if (method === 'keyboard') {
+      await parent.focus()
+      await parent.press('ArrowRight')
+    } else {
+      await parent.tap()
+    }
+
+    const pairItem = menu.getByRole('menuitem', { name: label, exact: true })
+    await expect(pairItem).toBeVisible()
+
+    if (method === 'touch') {
+      await pairItem.tap()
+    } else {
+      await pairItem.click()
+    }
+
+    const pieces = p.panel('Bar').locator('[data-piece-id]')
+    await expect(pieces).toHaveCount(1)
+    await expect(rod).toHaveAttribute('data-piece-id', id!)
+    await expect(rod).toHaveClass(/draggable-rod--selected/)
+
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: before.x,
+      y: before.y,
+      width: before.width,
+      depth: before.depth,
+      height: before.height,
+    })
+
+    const parts = rod.locator('.train-part')
+    await expect(parts).toHaveCount(2)
+    await expect(parts.nth(0)).toHaveAttribute('data-part-value', String(firstAddend))
+    await expect(parts.nth(1)).toHaveAttribute('data-part-value', String(secondAddend))
+
+    await expect.poll(() => p.geometry(parts.nth(0))).toMatchObject({ x: 0, y: 0 })
+    await expect.poll(() => p.geometry(parts.nth(1))).toMatchObject({ x: firstAddend, y: 0 })
+
+    const cleanupMenu = await p.menu(parts.first())
+    await cleanupMenu.getByRole('menuitem', { name: 'Delete' }).click()
+    await expect(pieces).toHaveCount(0)
+  }
+}
+
+test.describe('addend decomposition submenu', () => {
+  test('bar decomposes a 5-rod through each addend pair using mouse', async ({ playground: p }) => {
+    await decomposeThroughAddendPairs(p, 'mouse')
+  })
+
+  test('bar decomposes a 5-rod through each addend pair using keyboard', async ({ playground: p }) => {
+    await decomposeThroughAddendPairs(p, 'keyboard')
+  })
+
+  test('opening and dismissing the addend submenu performs no decomposition', async ({
+    page,
+    playground: p,
+  }) => {
+    await p.show('Bar')
+    const rod = await p.add('Bar', 'five')
+    const id = await rod.getAttribute('data-piece-id')
+    const before = await p.geometry(rod)
+
+    const menu = await p.menu(rod)
+    const parent = menu.getByRole('menuitem', { name: 'Regroup to addends' })
+    await parent.hover()
+    await expect(menu.getByRole('menuitem', { name: '1 + 4', exact: true })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
+
+    await expect(rod).toHaveAttribute('data-piece-id', id!)
+    await expect(rod.locator('.train-part')).toHaveCount(1)
+    await expect.poll(() => p.geometry(rod)).toEqual(before)
+  })
+})
+
+test.describe('addend decomposition submenu (touch)', () => {
+  test.use({ contextOptions: { hasTouch: true } })
+
+  test('bar decomposes a 5-rod through each addend pair using touch', async ({ playground: p }) => {
+    await decomposeThroughAddendPairs(p, 'touch')
   })
 })

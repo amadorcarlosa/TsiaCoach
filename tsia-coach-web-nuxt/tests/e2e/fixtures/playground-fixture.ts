@@ -39,6 +39,23 @@ export class Playground {
     return menu
   }
 
+  async menuByTouch(rod: Locator) {
+    const face = rod.locator('.face.top')
+    const box = await face.boundingBox()
+    if (!box) throw new Error('Missing rod face')
+    const x = box.x + box.width / 2, y = box.y + box.height / 2
+    await face.dispatchEvent('pointerdown', {
+      pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y,
+    })
+    await this.page.waitForTimeout(600)
+    await face.dispatchEvent('pointerup', {
+      pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y,
+    })
+    const menu = this.page.getByRole('menu')
+    await expect(menu).toBeVisible()
+    return menu
+  }
+
   async geometry(rod: Locator) {
     return rod.evaluate(el => {
       const world = el.closest('[data-grid-world]') as HTMLElement
