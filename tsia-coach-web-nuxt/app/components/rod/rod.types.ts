@@ -26,6 +26,8 @@ export type DragProps = {
     disabled?: boolean
     selected?: boolean
     dimensions?: UnitDimensions
+    beginMove?: () => boolean
+    previewDelta?: Point
 }
 
 

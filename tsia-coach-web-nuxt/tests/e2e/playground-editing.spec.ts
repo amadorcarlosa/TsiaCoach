@@ -7,7 +7,7 @@ test('bar menu offers removal only and targets the clicked instance', async ({ p
   const menu = await p.menu(second)
   await expect(second).toHaveClass(/--selected/)
   await expect(menu.getByRole('menuitemcheckbox')).toHaveCount(0)
-  await expect(menu.getByRole('menuitem')).toHaveCount(1)
+  await expect(menu.getByRole('menuitem')).toHaveCount(2)
   await menu.getByRole('menuitem', { name: 'Delete' }).click()
   await expect(second).toHaveCount(0)
   await expect(first).toBeVisible()
@@ -47,7 +47,7 @@ test('invalid array orientation and drop preserve the accepted geometry', async 
   await expect.poll(() => p.geometry(second)).toMatchObject({ x: 0, y: 0, offset: 0 })
   const before = await p.geometry(second)
   const menu = await p.menu(second)
-  await expect(menu.getByRole('menuitemcheckbox', { name: 'Vertical', exact: true })).toBeDisabled()
+  await expect(menu.getByRole('menuitemcheckbox', { name: /Vertical/i })).toBeDisabled()
   await expect.poll(() => p.geometry(second)).toEqual(before)
   await p.drag(second, 0, 1)
   await expect.poll(() => p.geometry(second)).toEqual(before)
@@ -85,6 +85,65 @@ test('bar portrait hides off-preview rods without deleting them', async ({ page,
   await expect.poll(() => p.geometry(rod)).toMatchObject({ x: 18, y: 2, offset: 0 })
 })
 
+test('switching tabs during a held group drag cancels movement', async ({ page, playground: p }) => {
+  const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
+  const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
+
+  await barTab.click()
+
+  const leader = await p.add('Bar', 'six')
+  const follower = await p.add('Bar', 'six')
+
+  await leader.click()
+  await follower.click({ modifiers: ['Shift'] })
+
+  await expect(leader).toHaveClass(/--selected/)
+  await expect(follower).toHaveClass(/--selected/)
+
+  const leaderBefore = await p.geometry(leader)
+  const followerBefore = await p.geometry(follower)
+
+  const face = await leader.locator('.face.top').boundingBox()
+  if (!face) throw new Error('Missing leader face')
+
+  await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(face.x + face.width / 2 + 60, face.y + face.height / 2 + 20, { steps: 8 })
+
+  await arrayTab.focus()
+  await page.keyboard.press('Enter')
+
+  await page.mouse.up()
+  await barTab.click()
+
+  await expect.poll(() => p.geometry(leader)).toMatchObject({
+    x: leaderBefore.x,
+    y: leaderBefore.y,
+    offset: 0,
+  })
+
+  await expect.poll(() => p.geometry(follower)).toMatchObject({
+    x: followerBefore.x,
+    y: followerBefore.y,
+    offset: 0,
+  })
+
+  await expect(leader).toHaveClass(/--selected/)
+  await expect(follower).toHaveClass(/--selected/)
+
+  await p.drag(leader, 1, 0)
+  await expect.poll(() => p.geometry(leader)).toMatchObject({
+    x: leaderBefore.x + 1,
+    y: leaderBefore.y,
+    offset: 0,
+  })
+  await expect.poll(() => p.geometry(follower)).toMatchObject({
+    x: followerBefore.x + 1,
+    y: followerBefore.y,
+    offset: 0,
+  })
+})
+
 test.describe('inertia enabled', () => {
   test.use({ contextOptions: { reducedMotion: 'no-preference' } })
 
@@ -96,5 +155,93 @@ test.describe('inertia enabled', () => {
     const menu = await p.menu(rod, true)
     await menu.getByRole('menuitem', { name: 'Delete' }).click()
     await expect(rod).toHaveCount(0)
+  })
+
+  test('switching tabs during group inertia cancels movement', async ({ page, playground: p }) => {
+    const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
+    const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
+
+    await barTab.click()
+
+    const leader = await p.add('Bar', 'six')
+    const follower = await p.add('Bar', 'six')
+
+    await leader.click()
+    await follower.click({ modifiers: ['Shift'] })
+
+    const leaderBefore = await p.geometry(leader)
+    const followerBefore = await p.geometry(follower)
+
+    const face = await leader.locator('.face.top').boundingBox()
+    if (!face) throw new Error('Missing leader face')
+
+    await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(face.x + face.width / 2 + 90, face.y + face.height / 2 + 15, { steps: 8 })
+    await page.mouse.up()
+
+    await expect.poll(async () => (await p.geometry(leader)).offset).toBeGreaterThan(0.05)
+    await arrayTab.focus()
+    await page.keyboard.press('Enter')
+    await barTab.click()
+
+    await expect.poll(() => p.geometry(leader)).toMatchObject({
+      x: leaderBefore.x,
+      y: leaderBefore.y,
+      offset: 0,
+    })
+    await expect.poll(() => p.geometry(follower)).toMatchObject({
+      x: followerBefore.x,
+      y: followerBefore.y,
+      offset: 0,
+    })
+    await expect(leader).toHaveClass(/--selected/)
+    await expect(follower).toHaveClass(/--selected/)
+  })
+
+  test('keyboard tab activation during inertia cancels movement', async ({ page, playground: p }) => {
+    const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
+    const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
+
+    await barTab.click()
+
+    const leader = await p.add('Bar', 'six')
+    const follower = await p.add('Bar', 'six')
+
+    await leader.click()
+    await follower.click({ modifiers: ['Shift'] })
+
+    const leaderBefore = await p.geometry(leader)
+    const followerBefore = await p.geometry(follower)
+
+    const face = await leader.locator('.face.top').boundingBox()
+    if (!face) throw new Error('Missing leader face')
+
+    await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(face.x + face.width / 2 + 75, face.y + face.height / 2 + 15, { steps: 8 })
+    await page.mouse.up()
+
+    await expect.poll(async () => (await p.geometry(leader)).offset).toBeGreaterThan(0.05)
+
+    await arrayTab.focus()
+    await page.keyboard.press('Enter')
+    if ((await arrayTab.getAttribute('aria-selected')) !== 'true') {
+      await page.keyboard.press('ArrowRight')
+    }
+    await barTab.click()
+
+    await expect.poll(() => p.geometry(leader)).toMatchObject({
+      x: leaderBefore.x,
+      y: leaderBefore.y,
+      offset: 0,
+    })
+    await expect.poll(() => p.geometry(follower)).toMatchObject({
+      x: followerBefore.x,
+      y: followerBefore.y,
+      offset: 0,
+    })
+    await expect(leader).toHaveClass(/--selected/)
+    await expect(follower).toHaveClass(/--selected/)
   })
 })

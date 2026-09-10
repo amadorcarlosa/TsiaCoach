@@ -5,7 +5,7 @@ import CuisenaireRod from '~/components/rod/cuisenaire/CuisenaireRod.vue'
 import type { Point } from '~/components/grid/gridPointer'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
 import {cusisenaireRodPalette, type DragProps} from "~/components/rod/rod.types.ts";
-
+import type { SelectionIntent } from '../scene/scene-interaction.types'
 const props = withDefaults(defineProps<DragProps>(), {
   snapToGrid: true,
   disabled: false,
@@ -13,8 +13,10 @@ const props = withDefaults(defineProps<DragProps>(), {
 })
 
 const emit = defineEmits<{
+  select: [intent: SelectionIntent]
   settled: [position: Point]
-  select: []
+  'move-preview': [position: Point]
+  'move-end': []
 }>()
 
 const dimensions = computed(() =>
@@ -34,6 +36,9 @@ const drag = useInertialBoardDrag({
   snapToGrid: () => props.snapToGrid,
   enabled: () => !props.disabled,
   onSettled: position => emit('settled', position),
+  onStart: () => props.beginMove?.() ?? true,
+  onPreview: position => emit('move-preview', position),
+  onEnd: () => emit('move-end'),
 })
 
 watch(
@@ -46,8 +51,33 @@ watch(
     { flush: 'sync' },
 )
 
-function requestSelection(): void {
-  if (!props.disabled) emit('select')
+function onSelectionPointerDown(event: PointerEvent): void {
+  if (props.disabled || event.button !== 0 || !event.isPrimary) return
+
+  const toggle = event.shiftKey || event.ctrlKey || event.metaKey
+
+  emit('select', {
+    mode: toggle ? 'toggle' : 'preserve',
+  })
+
+  if (toggle) {
+    // Modifier selection must not turn into a drag.
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    element.value?.focus({ preventScroll: true })
+  }
+}
+
+function onSelectionKeydown(event: KeyboardEvent): void {
+  if (props.disabled) return
+  if (event.key !== 'Enter' && event.key !== ' ') return
+
+  event.preventDefault()
+  if (event.repeat) return
+
+  emit('select', {
+    mode: event.key === ' ' ? 'toggle' : 'replace',
+  })
 }
 
 defineExpose({
@@ -75,11 +105,14 @@ defineExpose({
     top: `${y * cellSize}px`,
     width: `${dimensions.width * cellSize}px`,
     height: `${dimensions.depth * cellSize}px`,
+    translate:props.previewDelta
+  ? `${props.previewDelta.x * cellSize}px ${props.previewDelta.y * cellSize}px`
+  : '0px 0px',
   }"
-      @pointerdown.capture="requestSelection"
-      @focus="requestSelection"
-      @keydown.enter.prevent="requestSelection"
-      @keydown.space.prevent="requestSelection"
+      @pointerdown.capture="onSelectionPointerDown"
+      @keydown.capture="onSelectionKeydown"
+      
+      
   >
     <div class="rod-visual">
       <CuisenaireRod

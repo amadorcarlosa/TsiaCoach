@@ -1,15 +1,17 @@
-﻿import {
+import {
     nextTick,
     onBeforeUnmount,
     onMounted,
+    inject,
     watch,
     type Ref,
 } from 'vue'
 import type { Draggable } from 'gsap/Draggable'
 import {
     screenDeltaToGrid,
-    type Point, 
+    type Point,
 } from '~/components/grid/gridPointer'
+import { sceneCancellationKey } from '~/components/rod/scene/scene-cancellation'
 
 type BoardDragOptions = {
     el: Ref<HTMLElement | null>
@@ -18,6 +20,9 @@ type BoardDragOptions = {
     snapToGrid: () => boolean
     enabled?: () => boolean
     onSettled: (position: Point) => void
+    onStart?: () => boolean
+    onPreview?: (position: Point) => void
+    onEnd?: () => void
 }
 
 export function useInertialBoardDrag(options: BoardDragOptions) {
@@ -37,6 +42,29 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
     let axisX: Point = { x: 1, y: 0 }
     let axisY: Point = { x: 0, y: 1 }
+
+    let moving = false
+    let moveVersion = 0
+
+    const cancellationVersion = inject(sceneCancellationKey, null)
+
+    function beginMove(): boolean {
+        // Re-pressing an ongoing throw retains its captured selection.
+        if (moving) return true
+        if (options.onStart?.() === false) return false
+
+        moving = true
+        moveVersion++
+        return true
+    }
+
+    function endMove(): void {
+        if (!moving) return
+
+        moving = false
+        moveVersion++
+        options.onEnd?.()
+    }
 
     function isEnabled() {
         return options.enabled?.() ?? true
@@ -142,28 +170,42 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     function renderProxy() {
         if (!active || !draggable) return
 
-        render(boardPosition({
+        const position = boardPosition({
             x: draggable.x,
             y: draggable.y,
-        }))
+        })
+
+        render(position)
+        options.onPreview?.(position)
     }
 
     async function commit(position: Point) {
+        if (disposed || cancelling || !moving || !isEnabled()) return
+
+        const version = moveVersion
+
         render(position)
-        // The parent synchronously accepts or rejects this position.
+        options.onPreview?.(position)
         options.onSettled({ ...position })
 
-        // Wait for accepted props to reach this component.
         await nextTick()
 
-        if (disposed || active) return
-        // Read the accepted model position, not the attempted destination.
+        // An older completion must not end a newer gesture.
+        if (disposed || !moving || version !== moveVersion) return
+
         render(options.position())
-        
+        endMove()
     }
 
     function finish() {
-        if (!active || cancelling || !draggable) return
+        if (
+            disposed ||
+            cancelling ||
+            !active ||
+            !moving ||
+            !isEnabled() ||
+            !draggable
+        ) return
 
         const destination = snapPosition(boardPosition({
             x: draggable.x,
@@ -175,19 +217,28 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     }
 
     function cancel() {
+        if (cancelling) return
+
         cancelling = true
         active = false
 
-        if (draggable?.isPressed && draggable.pointerEvent) {
-            draggable.endDrag(draggable.pointerEvent)
+        try {
+            // Clear the scene's movement session before stopping the engine.
+            // This also invalidates pending commit continuations.
+            endMove()
+
+            if (draggable?.isPressed && draggable.pointerEvent) {
+                draggable.endDrag(draggable.pointerEvent)
+            }
+
+            void draggable?.tween?.kill()
+
+            if (proxy) gsap.killTweensOf(proxy)
+
+            render(options.position())
+        } finally {
+            cancelling = false
         }
-
-        void draggable?.tween?.kill()
-
-        if (proxy) gsap.killTweensOf(proxy)
-
-        render(options.position())
-        cancelling = false
     }
 
     function onKeydown(event: KeyboardEvent) {
@@ -211,6 +262,8 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
 
         event.preventDefault()
         cancel()
+
+        if (!beginMove()) return
 
         const position = options.position()
 
@@ -276,6 +329,25 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
                     cancel()
                     return
                 }
+                const event = this.pointerEvent as MouseEvent | PointerEvent | undefined
+
+                if (
+                    event &&
+                    (
+                        ('button' in event && event.button !== 0) ||
+                        event.shiftKey ||
+                        event.ctrlKey ||
+                        event.metaKey
+                    )
+                ) {
+                    cancel()
+                    return
+                }
+
+                if (!beginMove()) {
+                    cancel()
+                    return
+                }
 
                 startPosition = { ...current }
                 startProxy = { x: this.x, y: this.y }
@@ -306,6 +378,14 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
         motionPreference.addEventListener('change', updateMotionPreference)
     })
 
+    if (cancellationVersion) {
+        watch(
+            cancellationVersion,
+            () => cancel(),
+            { flush: 'sync' },
+        )
+    }
+
     watch(
         () => [options.position().x, options.position().y],
         () => {
@@ -318,9 +398,9 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
         syncInteraction,
         { flush: 'post' },
     )
-
     onBeforeUnmount(() => {
         disposed = true
+        endMove()
 
         options.el.value?.removeEventListener('keydown', onKeydown)
         window.removeEventListener('blur', cancel)

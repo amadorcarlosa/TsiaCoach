@@ -9,7 +9,7 @@ import {
   getRodDefinition,
 } from '~/components/rod/rod.types'
 
-import type { Point } from '~/components/grid/gridPointer'
+
 import { useRodScene } from '~/composables/useRodScene'
 import type {PlacedRod} from "~/components/rod/movement/rod-board.types.ts";
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
@@ -88,6 +88,13 @@ const menu = useSceneMenu({
   viewport: boardViewport,
   disabled: () => !props.active || phonePortrait.value,
 })
+const interaction = useSceneInteraction({
+  scene,
+  blocked: () =>
+      !props.active ||
+      phonePortrait.value ||
+      menu.request.value !== null,
+})
 
 const menuChoices: SceneMenuChoice[] = [
   { label: 'Clone', action: { type: 'clone' } },
@@ -121,18 +128,7 @@ function onRemoveSelectedRod(): void {
 function onChooseRod(value: CuisenaireRodValue): void {
   scene.apply([], { type: 'create', value })
 }
-function onRodSettled(id: string, position: Point): void {
-  const train = scene.trains.value.find(train => train.id === id)
-  if (!train) return
 
-  scene.apply([id], {
-    type: 'move',
-    delta: {
-      x: position.x - train.anchor.x,
-      y: position.y - train.anchor.y,
-    },
-  })
-}
 
 function intersectsPreview(
     piece: Readonly<PlacedRod>,
@@ -240,8 +236,12 @@ function intersectsPreview(
                   :selected="scene.selection.value.has(piece.id)"
                   :disabled="!props.active || phonePortrait || menu.request.value !== null"
                   :snap-to-grid="true"
-                  @select="menu.selectTrain(piece.id)"
-                  @settled="onRodSettled(piece.id, $event)"
+                  :begin-move="() => interaction.beginMove(piece.id)"
+                  :preview-delta="interaction.previewFor(piece.id)"
+                  @select="interaction.select(piece.id, $event)"
+                  @move-preview="interaction.previewMove(piece.id, $event)"
+                  @settled="interaction.settleMove(piece.id, $event)"
+                  @move-end="interaction.endMove(piece.id)"
                   @menu-request="menu.open"
               />
             </template>

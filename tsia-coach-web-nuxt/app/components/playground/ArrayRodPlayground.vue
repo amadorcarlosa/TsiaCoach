@@ -14,7 +14,7 @@ import {
   arrayRodOrientations,
   type ArrayRodOrientation,
 } from '~/components/rod/array/array-rod.types'
-import type { Point } from '~/components/grid/gridPointer'
+
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useSceneMenu } from '~/composables/useSceneMenu'
@@ -63,7 +63,13 @@ const menu = useSceneMenu({
   viewport: boardViewport,
   disabled: () => !props.active || phonePortrait.value,
 })
-
+const interaction = useSceneInteraction({
+  scene,
+  blocked: () =>
+      !props.active ||
+      phonePortrait.value ||
+      menu.request.value !== null,
+})
 const message = scene.message
 
 const trayItems = Object.values(CuisenaireRodValues)
@@ -128,18 +134,7 @@ function onChoose(value: CuisenaireRodValue): void {
   if (created) scene.select([created.id])
 }
 
-function onMove(id: string, position: Point): void {
-  const piece = renderedPieces.value.find(piece => piece.id === id)
-  if (!piece) return
 
-  scene.apply([id], {
-    type: 'move',
-    delta: {
-      x: position.x - piece.x,
-      y: position.y - piece.y,
-    },
-  })
-}
 
 function onOrient(orientation: ArrayRodOrientation): void {
   scene.apply(menu.selectedIds.value, {
@@ -232,8 +227,12 @@ function onRemove(): void {
               :selected="scene.selection.value.has(piece.id)"
               :disabled="!props.active || phonePortrait || menu.request.value !== null"
               :snap-to-grid="true"
-              @select="menu.selectTrain(piece.id)"
-              @settled="onMove(piece.id, $event)"
+              :begin-move="() => interaction.beginMove(piece.id)"
+              :preview-delta="interaction.previewFor(piece.id)"
+              @select="interaction.select(piece.id, $event)"
+              @move-preview="interaction.previewMove(piece.id, $event)"
+              @settled="interaction.settleMove(piece.id, $event)"
+              @move-end="interaction.endMove(piece.id)"
               @menu-request="menu.open"
           />
         </template>

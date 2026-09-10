@@ -4,12 +4,16 @@ import DraggableRod from '../movement/DraggableRod.vue'
 import type { DragProps } from '../rod.types'
 import type { Point } from '~/components/grid/gridPointer'
 import type { SceneMenuRequest } from './scene-menu.types'
+import type { SelectionIntent } from './scene-interaction.types'
+
 
 const props = defineProps<DragProps>()
 
 const emit = defineEmits<{
-  select: []
+  select: [intent: SelectionIntent]
   settled: [position: Point]
+  'move-preview': [position: Point]
+  'move-end': []
   'menu-request': [request: SceneMenuRequest]
 }>()
 
@@ -104,7 +108,9 @@ onBeforeUnmount(clearLongPress)
       ref="rod"
       v-bind="props"
       aria-haspopup="menu"
-      @select="emit('select')"
+      @select="emit('select', $event)"
+      @move-preview="emit('move-preview', $event)"
+      @move-end="emit('move-end')"
       @settled="emit('settled', $event)"
       @contextmenu.capture="onContextMenu"
       @keydown.capture="onKeydown"
