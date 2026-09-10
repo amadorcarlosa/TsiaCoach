@@ -94,6 +94,7 @@ const canEditSelection = computed(() =>
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { label: 'Clone', action: { type: 'clone' } },
   { label: 'Make a train', action: { type: 'make-train' } },
+  { label: 'Undo train', action: { type: 'ungroup' } },
   ...arrayRodOrientations.map(orientation => ({
     label: orientation[0]!.toUpperCase() + orientation.slice(1),
     action: {

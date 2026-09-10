@@ -101,6 +101,7 @@ const menuChoices: SceneMenuChoice[] = [
   { label: 'Clone', action: { type: 'clone' } },
   { label: 'Delete', action: { type: 'delete' } },
   { label: 'Make a train', action: { type: 'make-train' } },
+  { label: 'Undo train', action: { type: 'ungroup' } },
 ]
 
 const placedRods = computed(() =>

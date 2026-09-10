@@ -19,10 +19,11 @@ export type SceneAction =
     | { type: 'clone' }
     | { type: 'delete' }
     |{ type: 'make-train' }
+    | { type: 'ungroup' }
     | {
   type: 'set-orientation'
   orientation: TrainPart['orientation']
-  
+
 }
 
 export type ScenePolicy = {

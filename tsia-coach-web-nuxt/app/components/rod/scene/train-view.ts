@@ -1,6 +1,7 @@
 import type { DeepReadonly } from 'vue'
 import { arrayRodDimensions } from '../array/array-rod.types'
 import type { RodTrain } from './rod.scene.types'
+import { trainOrientation } from './train-orientation'
 
 export function trainView(train: DeepReadonly<RodTrain>) {
   const first = train.parts[0]
@@ -43,8 +44,6 @@ export function trainView(train: DeepReadonly<RodTrain>) {
       0,
     ),
 
-    orientation: train.parts.length === 1
-      ? first.orientation
-      : undefined,
+    orientation: trainOrientation(train),
   }
 }

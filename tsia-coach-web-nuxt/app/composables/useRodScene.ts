@@ -98,20 +98,83 @@ export function useRodScene(policy: ScenePolicy) {
                 }
                 return validate(current)
 
-            case 'set-orientation':
+            case 'set-orientation': {
                 if (!policy.allowOrientation) {
                     return reject('This scene does not allow orientation changes.')
                 }
 
-                if (selected.some(train => train.parts.length !== 1)) {
-                    return reject('This action requires single-part trains.')
+                const orientation = action.orientation
+
+                if (
+                    orientation === 'tower' &&
+                    selected.some(train => train.parts.length > 1)
+                ) {
+                    return reject('Tower is available only for individual rods.')
                 }
 
                 for (const train of selected) {
-                    train.parts[0]!.orientation = action.orientation
+                    if (train.parts.length === 1) {
+                        // Preserve existing single-rod behavior:
+                        // change orientation at the current anchor.
+                        train.parts[0]!.orientation = orientation
+                        continue
+                    }
+
+                    if (orientation === 'tower') {
+                        return reject('Tower is available only for individual rods.')
+                    }
+
+                    const total = train.parts.reduce(
+                        (sum, part) => sum + part.value,
+                        0,
+                    )
+
+                    const width = orientation === 'horizontal' ? total : 1
+                    const depth = orientation === 'vertical' ? total : 1
+
+                    if (width > policy.columns || depth > policy.rows) {
+                        return reject(
+                            `A value-${total} train cannot fit ${orientation}ly ` +
+                            `on this ${policy.columns}-column, ${policy.rows}-row board.`,
+                        )
+                    }
+
+                    // Preserve array order and each part's catalog value.
+                    let cursor = 0
+
+                    train.parts = train.parts.map(part => {
+                        const transformed = {
+                            ...part,
+                            orientation,
+                            offset: orientation === 'horizontal'
+                                ? { x: cursor, y: 0 }
+                                : { x: 0, y: cursor },
+                        }
+
+                        cursor += part.value
+                        return transformed
+                    })
+
+                    // Minimal edge correction; no search for unoccupied space.
+                    train.anchor = {
+                        x: Math.max(
+                            0,
+                            Math.min(train.anchor.x, policy.columns - width),
+                        ),
+                        y: Math.max(
+                            0,
+                            Math.min(train.anchor.y, policy.rows - depth),
+                        ),
+                    }
                 }
 
-                return validate(current)
+                // Validate all transformed destinations together.
+                const result = validate(current)
+
+                return result.allowed
+                    ? result
+                    : reject(`Cannot change orientation. ${result.reason}`)
+            }
 
             case 'clone': {
                 // Search nearby offsets first. One shared offset preserves
@@ -210,6 +273,31 @@ export function useRodScene(policy: ScenePolicy) {
                 ])
             }
 
+            case 'ungroup': {
+                if (selected.some(train => train.parts.length < 2)) {
+                    return reject('Select only trains with multiple parts.')
+                }
+
+                const released: RodTrain[] = selected.flatMap(train =>
+                    train.parts.map(part => ({
+                        id: '', // Assigned only after validation succeeds.
+                        anchor: {
+                            x: train.anchor.x + part.offset.x,
+                            y: train.anchor.y + part.offset.y,
+                        },
+                        parts: [{
+                            ...part,
+                            offset: { x: 0, y: 0 },
+                        }],
+                    })),
+                )
+
+                return validate([
+                    ...current.filter(train => !selectedIds.has(train.id)),
+                    ...released,
+                ])
+            }
+
             default: {
                 const exhaustive: never = action
                 return exhaustive
@@ -252,7 +340,11 @@ export function useRodScene(policy: ScenePolicy) {
 
         const existingIds = new Set(committed.map(train => train.id))
 
-        const nextSelection = action.type === 'make-train'
+        const selectsCreatedTrains =
+            action.type === 'make-train' ||
+            action.type === 'ungroup'
+
+        const nextSelection = selectsCreatedTrains
             ? new Set(createdIds)
             : new Set(
                 [...selection.value].filter(id => existingIds.has(id)),

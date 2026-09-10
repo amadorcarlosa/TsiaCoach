@@ -7,7 +7,7 @@ test('bar menu offers removal only and targets the clicked instance', async ({ p
   const menu = await p.menu(second)
   await expect(second).toHaveClass(/--selected/)
   await expect(menu.getByRole('menuitemcheckbox')).toHaveCount(0)
-  await expect(menu.getByRole('menuitem')).toHaveCount(3)
+  await expect(menu.getByRole('menuitem')).toHaveCount(4)
   await menu.getByRole('menuitem', { name: 'Delete' }).click()
   await expect(second).toHaveCount(0)
   await expect(first).toBeVisible()

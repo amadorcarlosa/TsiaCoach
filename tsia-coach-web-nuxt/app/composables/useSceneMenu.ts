@@ -63,7 +63,13 @@ export function useSceneMenu(options: {
 
         const result = scene.apply([...scene.selection.value], action)
 
-        if (result.allowed && action.type === 'make-train') {
+        if (
+            result.allowed &&
+            (
+                action.type === 'make-train' ||
+                action.type === 'ungroup'
+            )
+        ) {
             returnFocusId = [...scene.selection.value][0] ?? null
         }
         close()
