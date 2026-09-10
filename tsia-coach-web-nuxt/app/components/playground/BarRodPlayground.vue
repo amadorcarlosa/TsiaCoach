@@ -10,6 +10,7 @@ import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInter
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
+import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
 import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
 import type {
@@ -89,7 +90,9 @@ const scene = useRodScene({
 const {
   menu,
   interaction,
+  marquee,
   blocked,
+  highlightedIds,
   checkSelected,
   applySelected,
   addendMenuChoice,
@@ -193,10 +196,13 @@ function intersectsPreview(
           ref="boardViewport"
           tabindex="-1"
           class="board-viewport"
+          :class="{ 'marquee-enabled': !editingDisabled }"
           role="region"
           :aria-label="phonePortrait
           ? 'Rod board preview, columns zero to twelve'
           : 'Rod board, columns zero to twenty-four'"
+          @pointerdown.capture="marquee.onPointerDown"
+          @lostpointercapture="marquee.onLostPointerCapture"
       >
         <div
             class="board-frame"
@@ -226,7 +232,7 @@ function intersectsPreview(
                   :x="piece.x"
                   :y="piece.y"
                   :cell-size="pieceCellSize"
-                  :selected="scene.selection.value.has(piece.id)"
+                  :selected="highlightedIds.has(piece.id)"
                   :disabled="blocked"
                   :snap-to-grid="true"
                   :begin-move="() => interaction.beginMove(piece.id)"
@@ -237,6 +243,10 @@ function intersectsPreview(
                   @settled="interaction.settleMove(piece.id, $event)"
                   @move-end="interaction.endMove(piece.id)"
                   @menu-request="menu.open"
+              />
+              <SceneMarqueeOverlay
+                  :rectangle="marquee.rectangle.value"
+                  :cell-size="pieceCellSize"
               />
             </template>
           </RodTabla>
@@ -280,6 +290,11 @@ function intersectsPreview(
 
 
 <style scoped>
+.marquee-enabled :deep([data-grid-world]) {
+  touch-action: none;
+  user-select: none;
+}
+
 .placement-message {
   max-width: 1100px;
   margin: 8px auto;

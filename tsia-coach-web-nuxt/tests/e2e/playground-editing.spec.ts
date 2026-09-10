@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test'
 import { test, expect, type Playground } from './fixtures/playground-fixture'
 
 test('bar menu offers removal only and targets the clicked instance', async ({ playground: p }) => {
@@ -1232,5 +1233,574 @@ test.describe('factor rectangle submenu (touch)', () => {
     playground: p,
   }) => {
     await changeFactorsThroughShapes(p, 'touch')
+  })
+})
+
+test('array factor rectangle drags, clamps, clones, and undoes as one piece', async ({
+  playground: p,
+}) => {
+  const columns = 24
+
+  await p.show('Array')
+
+  const rod = await p.add('Array', 'six')
+  const id = await rod.getAttribute('data-piece-id')
+
+  let menu = await p.menu(rod)
+  await menu.getByRole('menuitem', {
+    name: 'Regroup to factors',
+    exact: true,
+  }).hover()
+  await p.page.getByRole('menuitem', {
+    name: '2 rows of 3',
+    exact: true,
+  }).click()
+  await expect(p.page.getByRole('menu')).toHaveCount(0)
+
+  const rectangle = { width: 3, depth: 2, height: 1 }
+  const start = await p.geometry(rod)
+  expect(start).toMatchObject(rectangle)
+
+  const parts = rod.locator('.train-part')
+  await expect(parts).toHaveCount(2)
+
+  // Dragging one part moves the whole rectangle and keeps its rows.
+  await p.drag(parts.first(), 4, 3)
+
+  await expect.poll(() => p.geometry(rod)).toMatchObject({
+    ...rectangle,
+    x: start.x + 4,
+    y: start.y + 3,
+    offset: 0,
+  })
+  await expect(rod).toHaveAttribute('data-piece-id', id!)
+  await expect(parts).toHaveCount(2)
+
+  for (let row = 0; row < 2; row++) {
+    await expect(parts.nth(row)).toHaveAttribute('data-part-value', '3')
+    await expect.poll(async () => {
+      const geometry = await p.geometry(parts.nth(row))
+      return { x: geometry.x, y: geometry.y }
+    }).toEqual({ x: 0, y: row })
+  }
+
+  // A drag past the right edge clamps by the rectangle's full width.
+  await p.drag(parts.last(), columns, 0)
+
+  await expect.poll(() => p.geometry(rod)).toMatchObject({
+    ...rectangle,
+    x: columns - rectangle.width,
+    y: start.y + 3,
+    offset: 0,
+  })
+
+  // Clone copies both rows with the same footprint.
+  const pieces = p.panel('Array').locator('[data-piece-id]')
+  menu = await p.menu(parts.first())
+  await menu.getByRole('menuitem', { name: 'Clone', exact: true }).click()
+
+  await expect(pieces).toHaveCount(2)
+  await expect(pieces.first().locator('.train-part')).toHaveCount(2)
+  await expect(pieces.last().locator('.train-part')).toHaveCount(2)
+  expect(await p.geometry(pieces.last())).toMatchObject(rectangle)
+
+  // Undo train releases each row of the original as its own three-rod.
+  menu = await p.menu(rod.locator('.train-part').first())
+  await menu.getByRole('menuitem', { name: 'Undo train', exact: true }).click()
+
+  await expect(pieces).toHaveCount(3)
+
+  const threes = p.panel('Array').locator('[data-piece-id] .train-part')
+  await expect(threes).toHaveCount(4)
+
+  for (let index = 0; index < 4; index++) {
+    await expect(threes.nth(index)).toHaveAttribute('data-part-value', '3')
+  }
+})
+
+test.describe('marquee selection', () => {
+  type Box = { x: number, y: number, width: number, depth: number }
+
+  /** A sweep from the empty row below the rods up across all of them. */
+  function sweep(boxes: Box[]) {
+    const left = Math.min(...boxes.map(box => box.x))
+    const right = Math.max(...boxes.map(box => box.x + box.width))
+    const top = Math.min(...boxes.map(box => box.y))
+    const bottom = Math.max(...boxes.map(box => box.y + box.depth))
+
+    return {
+      from: { x: left + 0.25, y: bottom + 0.5 },
+      to: { x: right - 0.25, y: top + 0.5 },
+      empty: { x: left + 0.25, y: bottom + 0.5 },
+    }
+  }
+
+  test('bar marquee previews, commits, and a plain empty click clears', async ({ playground: p }) => {
+    const first = await p.add('Bar', 'six')
+    const second = await p.add('Bar', 'three')
+    await expect(first).not.toHaveClass(/--selected/)
+
+    const a = await p.geometry(first)
+    const b = await p.geometry(second)
+    const { from, to, empty } = sweep([a, b])
+    const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+    await p.marquee('Bar', from, to, {
+      beforeRelease: async () => {
+        await expect(overlay).toBeVisible()
+        await expect(first).toHaveClass(/--selected/)
+        await expect(second).toHaveClass(/--selected/)
+        await expect(p.panel('Bar').getByRole('button', { name: /remove selected rod/i })).toBeDisabled()
+      },
+    })
+
+    await expect(overlay).toHaveCount(0)
+    await expect(first).toHaveClass(/--selected/)
+    await expect(second).toHaveClass(/--selected/)
+    await expect(p.panel('Bar').getByRole('button', { name: /remove selected rod/i })).toBeEnabled()
+
+    // The drag selected without moving anything.
+    await expect.poll(() => p.geometry(first)).toMatchObject({ x: a.x, y: a.y, offset: 0 })
+    await expect.poll(() => p.geometry(second)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+
+    const spot = await p.boardClient('Bar', empty)
+    await p.page.mouse.click(spot.x, spot.y)
+    await expect(first).not.toHaveClass(/--selected/)
+    await expect(second).not.toHaveClass(/--selected/)
+
+    // A shift-click on empty board keeps the selection instead.
+    await first.click()
+    await p.page.keyboard.down('Shift')
+    await p.page.mouse.click(spot.x, spot.y)
+    await p.page.keyboard.up('Shift')
+    await expect(first).toHaveClass(/--selected/)
+  })
+
+  test('array marquee follows the tilted board', async ({ playground: p }) => {
+    await p.show('Array')
+    const first = await p.add('Array', 'four')
+    const second = await p.add('Array', 'two')
+
+    const a = await p.geometry(first)
+    const b = await p.geometry(second)
+    const { from, to } = sweep([a, b])
+    const overlay = p.panel('Array').locator('[data-scene-marquee]')
+
+    await p.marquee('Array', from, to, {
+      beforeRelease: async () => {
+        await expect(overlay).toBeVisible()
+
+        // The overlay lives in board space, so on screen it is foreshortened
+        // by the tilt and overlaps each rod's ground footprint.
+        const box = await overlay.boundingBox()
+        if (!box) throw new Error('Missing marquee box')
+
+        const cell = await p.panel('Array').locator('[data-grid-world]').first()
+          .evaluate(world => parseFloat(getComputedStyle(world).getPropertyValue('--cell-size')))
+        const tilt = 15 * Math.PI / 180
+        expect(box.width).toBeCloseTo((to.x - from.x) * cell, 0)
+        expect(box.height).toBeCloseTo((from.y - to.y) * cell * Math.cos(tilt), 0)
+
+        for (const rod of [first, second]) {
+          const footprint = await rod.boundingBox()
+          if (!footprint) throw new Error('Missing rod footprint')
+          const overlapX = Math.min(box.x + box.width, footprint.x + footprint.width)
+            - Math.max(box.x, footprint.x)
+          const overlapY = Math.min(box.y + box.height, footprint.y + footprint.height)
+            - Math.max(box.y, footprint.y)
+          expect(overlapX).toBeGreaterThan(cell / 4)
+          expect(overlapY).toBeGreaterThan(cell / 4)
+        }
+
+        await expect(first).toHaveClass(/--selected/)
+        await expect(second).toHaveClass(/--selected/)
+      },
+    })
+
+    await expect(overlay).toHaveCount(0)
+    await expect(first).toHaveClass(/--selected/)
+    await expect(second).toHaveClass(/--selected/)
+    await expect.poll(() => p.geometry(first)).toMatchObject({ x: a.x, y: a.y, offset: 0 })
+    await expect.poll(() => p.geometry(second)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+
+    // Control-drag over one rod toggles it out of the committed selection.
+    await p.marquee('Array', sweep([a]).from, sweep([a]).to, { modifiers: ['Control'] })
+    await expect(first).not.toHaveClass(/--selected/)
+    await expect(second).toHaveClass(/--selected/)
+  })
+
+  test('escape during a bar marquee keeps the committed selection', async ({ page, playground: p }) => {
+    const first = await p.add('Bar', 'six')
+    const second = await p.add('Bar', 'three')
+    await second.click()
+    await expect(second).toHaveClass(/--selected/)
+
+    const { from, to } = sweep([await p.geometry(first)])
+    const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+    await p.marquee('Bar', from, to, {
+      beforeRelease: async () => {
+        await expect(overlay).toBeVisible()
+        await expect(first).toHaveClass(/--selected/)
+        await expect(second).not.toHaveClass(/--selected/)
+
+        await page.keyboard.press('Escape')
+
+        await expect(overlay).toHaveCount(0)
+        await expect(first).not.toHaveClass(/--selected/)
+        await expect(second).toHaveClass(/--selected/)
+      },
+    })
+
+    await expect(first).not.toHaveClass(/--selected/)
+    await expect(second).toHaveClass(/--selected/)
+  })
+
+  test('switching tabs during a marquee discards its preview', async ({ page, playground: p }) => {
+    const barTab = page.getByRole('tab', { name: 'Bar Rod Playground', exact: true })
+    const arrayTab = page.getByRole('tab', { name: 'Array Rod Playground', exact: true })
+
+    const first = await p.add('Bar', 'six')
+    const { from, to } = sweep([await p.geometry(first)])
+
+    await p.marquee('Bar', from, to, {
+      beforeRelease: async () => {
+        await expect(first).toHaveClass(/--selected/)
+        await arrayTab.focus()
+        await page.keyboard.press('Enter')
+      },
+    })
+
+    await barTab.click()
+    await expect(first).not.toHaveClass(/--selected/)
+    await expect(p.panel('Bar').locator('[data-scene-marquee]')).toHaveCount(0)
+  })
+})
+
+test.describe('marquee gestures', () => {
+  type Box = { x: number, y: number, width: number, depth: number }
+
+  /** Board points for a sweep from the empty row below the rods up across them. */
+  function sweep(boxes: Box[]) {
+    const left = Math.min(...boxes.map(box => box.x))
+    const right = Math.max(...boxes.map(box => box.x + box.width))
+    const top = Math.min(...boxes.map(box => box.y))
+    const bottom = Math.max(...boxes.map(box => box.y + box.depth))
+
+    return {
+      from: { x: left + 0.25, y: bottom + 0.5 },
+      to: { x: right - 0.25, y: top + 0.5 },
+      empty: { x: left + 0.25, y: bottom + 0.5 },
+    }
+  }
+
+  test('shift-drag adds hits while keeping the original selection', async ({ playground: p }) => {
+    const first = await p.add('Bar', 'six')
+    const second = await p.add('Bar', 'three')
+    const third = await p.add('Bar', 'two')
+
+    await first.click()
+    await expect(first).toHaveClass(/--selected/)
+    await expect(second).not.toHaveClass(/--selected/)
+
+    const { from, to } = sweep([await p.geometry(third)])
+
+    await p.marquee('Bar', from, to, {
+      modifiers: ['Shift'],
+      beforeRelease: async () => {
+        await expect(first).toHaveClass(/--selected/)
+        await expect(second).not.toHaveClass(/--selected/)
+        await expect(third).toHaveClass(/--selected/)
+      },
+    })
+
+    await expect(first).toHaveClass(/--selected/)
+    await expect(second).not.toHaveClass(/--selected/)
+    await expect(third).toHaveClass(/--selected/)
+  })
+
+  for (const modifier of ['Control', 'Meta'] as const) {
+    test(`${modifier}-drag toggles against the starting selection while leaving and re-entering`, async ({ page, playground: p }) => {
+      const first = await p.add('Bar', 'six')
+      const second = await p.add('Bar', 'three')
+      const third = await p.add('Bar', 'two')
+
+      await first.click()
+      await second.click({ modifiers: ['Shift'] })
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).toHaveClass(/--selected/)
+      await expect(third).not.toHaveClass(/--selected/)
+
+      const b = await p.geometry(second)
+      const c = await p.geometry(third)
+      const bottom = b.y + b.depth
+      const at = (point: { x: number, y: number }) => p.boardClient('Bar', point)
+
+      const start = await at({ x: b.x + 0.25, y: bottom + 0.5 })
+      const insideB = await at({ x: b.x + 0.75, y: b.y + 0.5 })
+      const belowB = await at({ x: b.x + 0.75, y: bottom + 0.25 })
+      const acrossBC = await at({ x: c.x + 0.5, y: c.y + 0.5 })
+      const belowC = await at({ x: c.x + 0.5, y: bottom + 0.25 })
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+      await page.keyboard.down(modifier)
+      try {
+        await page.mouse.move(start.x, start.y)
+        await page.mouse.down()
+
+        // Enter the second rod: toggled out of the starting selection.
+        await page.mouse.move(insideB.x, insideB.y, { steps: 6 })
+        await expect(overlay).toBeVisible()
+        await expect(second).not.toHaveClass(/--selected/)
+        await expect(first).toHaveClass(/--selected/)
+
+        // Leave it: the preview re-derives from the starting selection.
+        await page.mouse.move(belowB.x, belowB.y, { steps: 6 })
+        await expect(second).toHaveClass(/--selected/)
+        await expect(first).toHaveClass(/--selected/)
+
+        // Re-enter, now reaching the third rod too.
+        await page.mouse.move(acrossBC.x, acrossBC.y, { steps: 6 })
+        await expect(second).not.toHaveClass(/--selected/)
+        await expect(third).toHaveClass(/--selected/)
+        await expect(first).toHaveClass(/--selected/)
+
+        // Leave both again: back to the starting selection.
+        await page.mouse.move(belowC.x, belowC.y, { steps: 6 })
+        await expect(second).toHaveClass(/--selected/)
+        await expect(third).not.toHaveClass(/--selected/)
+
+        // Re-enter both for the final release.
+        await page.mouse.move(acrossBC.x, acrossBC.y, { steps: 6 })
+        await expect(second).not.toHaveClass(/--selected/)
+        await expect(third).toHaveClass(/--selected/)
+      } finally {
+        await page.mouse.up()
+        await page.keyboard.up(modifier)
+      }
+
+      await expect(overlay).toHaveCount(0)
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).not.toHaveClass(/--selected/)
+      await expect(third).toHaveClass(/--selected/)
+    })
+  }
+
+  test('array empty clicks: plain clears, modified preserves', async ({ page, playground: p }) => {
+    await p.show('Array')
+    const first = await p.add('Array', 'four')
+    const second = await p.add('Array', 'two')
+
+    const { from, to, empty } = sweep([await p.geometry(first), await p.geometry(second)])
+    await p.marquee('Array', from, to)
+    await expect(first).toHaveClass(/--selected/)
+    await expect(second).toHaveClass(/--selected/)
+
+    const spot = await p.boardClient('Array', empty)
+
+    for (const modifier of ['Shift', 'Control', 'Meta'] as const) {
+      await page.keyboard.down(modifier)
+      await page.mouse.click(spot.x, spot.y)
+      await page.keyboard.up(modifier)
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).toHaveClass(/--selected/)
+    }
+
+    await page.mouse.click(spot.x, spot.y)
+    await expect(first).not.toHaveClass(/--selected/)
+    await expect(second).not.toHaveClass(/--selected/)
+    await expect(p.panel('Array').getByRole('button', { name: /remove selected rod/i })).toBeDisabled()
+  })
+
+  test.describe('inertia enabled', () => {
+    test.use({
+      contextOptions: { reducedMotion: 'no-preference' },
+      reducedMotion: 'no-preference',
+    })
+
+    test('starting a marquee during a throw cancels movement and selects stationary footprints', async ({ page, playground: p }) => {
+      const thrown = await p.add('Bar', 'six')
+      const other = await p.add('Bar', 'three')
+
+      const a = await p.geometry(thrown)
+      const b = await p.geometry(other)
+
+      const face = await thrown.locator('.face.top').boundingBox()
+      if (!face) throw new Error('Missing rod face')
+      const axes = await thrown.evaluate(el => {
+        const world = el.closest('[data-grid-world]')!
+        const rect = (name: string) =>
+          world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
+        const origin = rect('origin')
+        const x = rect('x')
+        return { xx: x.left - origin.left, xy: x.top - origin.top }
+      })
+
+      await page.mouse.move(face.x + face.width / 2, face.y + face.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(
+        face.x + face.width / 2 + axes.xx * 10,
+        face.y + face.height / 2 + axes.xy * 10,
+        { steps: 8 },
+      )
+      await page.mouse.up()
+
+      await expect.poll(async () => (await p.geometry(thrown)).offset).toBeGreaterThan(0.05)
+
+      // Press on empty board below the committed footprints while the throw coasts.
+      const { from, to } = sweep([a, b])
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+      await p.marquee('Bar', from, to, {
+        beforeRelease: async () => {
+          await expect(overlay).toBeVisible()
+          // Movement was cancelled first: the rod sits on its committed anchor.
+          await expect.poll(() => p.geometry(thrown)).toMatchObject({ x: a.x, y: a.y, offset: 0 })
+          await expect(thrown).toHaveClass(/--selected/)
+          await expect(other).toHaveClass(/--selected/)
+        },
+      })
+
+      await expect(overlay).toHaveCount(0)
+      await expect(thrown).toHaveClass(/--selected/)
+      await expect(other).toHaveClass(/--selected/)
+      await expect.poll(() => p.geometry(thrown)).toMatchObject({ x: a.x, y: a.y, offset: 0 })
+      await expect.poll(() => p.geometry(other)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+    })
+  })
+
+  test.describe('touch', () => {
+    // Replacing contextOptions drops the config's reducedMotion, so restate it.
+    test.use({ contextOptions: { hasTouch: true, reducedMotion: 'reduce' } })
+
+    /** Client delta that moves a rod by `cells` columns on this board. */
+    async function columnDelta(p: Playground, cells: number) {
+      const origin = await p.boardClient('Bar', { x: 0, y: 0 })
+      const shifted = await p.boardClient('Bar', { x: cells, y: 0 })
+      return { x: shifted.x - origin.x, y: shifted.y - origin.y }
+    }
+
+    async function faceCenter(rod: Locator) {
+      const face = await rod.locator('.face.top').boundingBox()
+      if (!face) throw new Error('Missing rod face')
+      return { x: face.x + face.width / 2, y: face.y + face.height / 2 }
+    }
+
+    test('touch drag on empty board selects crossed rods without moving them', async ({ playground: p }) => {
+      const first = await p.add('Bar', 'six')
+      const second = await p.add('Bar', 'three')
+      const a = await p.geometry(first)
+      const b = await p.geometry(second)
+      const { from, to } = sweep([a, b])
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+      await p.touch.down(1, await p.boardClient('Bar', from))
+      await p.touch.move(1, await p.boardClient('Bar', to))
+
+      await expect(overlay).toBeVisible()
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).toHaveClass(/--selected/)
+
+      await p.touch.up(1)
+
+      await expect(overlay).toHaveCount(0)
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).toHaveClass(/--selected/)
+      await expect.poll(() => p.geometry(first)).toMatchObject({ x: a.x, y: a.y, offset: 0 })
+      await expect.poll(() => p.geometry(second)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+    })
+
+    test('touch drag on a part moves the whole train and never opens a marquee', async ({ playground: p }) => {
+      const first = await p.add('Bar', 'three')
+      const second = await p.add('Bar', 'five')
+      await first.click()
+      await second.click({ modifiers: ['Shift'] })
+      const menu = await p.menu(first)
+      await menu.getByRole('menuitem', { name: 'Make a train' }).click()
+
+      const train = p.panel('Bar').locator('[data-piece-id]')
+      await expect(train).toHaveCount(1)
+      const parts = train.locator('.train-part')
+      await expect(parts).toHaveCount(2)
+
+      const before = await p.geometry(train)
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+      const grab = await faceCenter(parts.nth(1))
+      const delta = await columnDelta(p, 2)
+
+      await p.touch.down(1, grab)
+      await p.touch.move(1, { x: grab.x + delta.x, y: grab.y + delta.y })
+      await expect(overlay).toHaveCount(0)
+      await p.touch.up(1)
+
+      await expect.poll(() => p.geometry(train)).toMatchObject({
+        x: before.x + 2,
+        y: before.y,
+        offset: 0,
+      })
+      await expect(parts).toHaveCount(2)
+      await expect(overlay).toHaveCount(0)
+    })
+
+    test('a second touch cannot move a rod during a marquee', async ({ playground: p }) => {
+      const first = await p.add('Bar', 'six')
+      const second = await p.add('Bar', 'three')
+      const a = await p.geometry(first)
+      const b = await p.geometry(second)
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+      // Finger 1 sweeps only the first rod.
+      const { from, to } = sweep([a])
+      await p.touch.down(1, await p.boardClient('Bar', from))
+      await p.touch.move(1, await p.boardClient('Bar', to))
+      await expect(overlay).toBeVisible()
+      await expect(first).toHaveClass(/--selected/)
+
+      // Finger 2 grabs the second rod and drags it three cells right.
+      const grab = await faceCenter(second)
+      const delta = await columnDelta(p, 3)
+      await p.touch.down(2, grab)
+      await p.touch.move(2, { x: grab.x + delta.x, y: grab.y + delta.y })
+      await expect.poll(() => p.geometry(second)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+      await expect(overlay).toBeVisible()
+      await p.touch.up(2)
+
+      // The marquee is still held by finger 1 and commits on its release.
+      await expect(overlay).toBeVisible()
+      await p.touch.up(1)
+      await expect(overlay).toHaveCount(0)
+      await expect(first).toHaveClass(/--selected/)
+      await expect(second).not.toHaveClass(/--selected/)
+      await expect.poll(() => p.geometry(second)).toMatchObject({ x: b.x, y: b.y, offset: 0 })
+    })
+
+    test('a second touch cannot start a marquee during a rod drag', async ({ playground: p }) => {
+      // The six spawns to the right of the three, leaving room to drag it further right.
+      const other = await p.add('Bar', 'three')
+      const dragged = await p.add('Bar', 'six')
+      const a = await p.geometry(dragged)
+      const b = await p.geometry(other)
+      const overlay = p.panel('Bar').locator('[data-scene-marquee]')
+
+      // Finger 1 drags the six one cell right and holds.
+      const grab = await faceCenter(dragged)
+      const delta = await columnDelta(p, 1)
+      await p.touch.down(1, grab)
+      await p.touch.move(1, { x: grab.x + delta.x, y: grab.y + delta.y })
+      await expect.poll(async () => (await p.geometry(dragged)).offset).toBeGreaterThan(0.5)
+
+      // Finger 2 sweeps empty board across the three.
+      const { from, to } = sweep([b])
+      await p.touch.down(2, await p.boardClient('Bar', from))
+      await p.touch.move(2, await p.boardClient('Bar', to))
+      await expect(overlay).toHaveCount(0)
+      await expect(other).not.toHaveClass(/--selected/)
+      await p.touch.up(2)
+
+      await p.touch.up(1)
+      await expect.poll(() => p.geometry(dragged)).toMatchObject({ x: a.x + 1, y: a.y, offset: 0 })
+      await expect(other).not.toHaveClass(/--selected/)
+      await expect(overlay).toHaveCount(0)
+    })
   })
 })

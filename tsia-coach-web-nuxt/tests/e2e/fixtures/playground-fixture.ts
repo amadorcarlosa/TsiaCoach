@@ -1,7 +1,59 @@
-import { test as base, expect, type Page, type Locator } from '@playwright/test'
+import { test as base, expect, type CDPSession, type Page, type Locator } from '@playwright/test'
+
+/**
+ * Drives real multi-touch input through CDP; requires a hasTouch context.
+ * Each event lists only the changed points; Chrome keeps the rest stationary.
+ */
+export class Touch {
+  private session: CDPSession | null = null
+  private readonly points = new Map<number, { x: number, y: number }>()
+
+  constructor(private readonly page: Page) {}
+
+  private async send(
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    ids: number[],
+  ) {
+    this.session ??= await this.page.context().newCDPSession(this.page)
+    await this.session.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: ids.map(id => {
+        const point = this.points.get(id)
+        if (!point) throw new Error(`Touch ${id} is not down`)
+        return { id, x: point.x, y: point.y }
+      }),
+    })
+  }
+
+  async down(id: number, point: { x: number, y: number }) {
+    this.points.set(id, point)
+    await this.send('touchStart', [id])
+  }
+
+  async move(id: number, point: { x: number, y: number }, steps = 8) {
+    const from = this.points.get(id)
+    if (!from) throw new Error(`Touch ${id} is not down`)
+    for (let step = 1; step <= steps; step++) {
+      this.points.set(id, {
+        x: from.x + (point.x - from.x) * step / steps,
+        y: from.y + (point.y - from.y) * step / steps,
+      })
+      await this.send('touchMove', [id])
+    }
+  }
+
+  async up(id: number) {
+    await this.send('touchEnd', [id])
+    this.points.delete(id)
+  }
+}
 
 export class Playground {
-  constructor(readonly page: Page) {}
+  readonly touch: Touch
+
+  constructor(readonly page: Page) {
+    this.touch = new Touch(page)
+  }
 
   panel(kind: 'Bar' | 'Array') {
     return this.page.getByRole('tabpanel', { name: `${kind} Rod Playground`, exact: true })
@@ -71,6 +123,43 @@ export class Playground {
         offset: Math.max(Math.abs(matrix.m41), Math.abs(matrix.m42)),
       }
     })
+  }
+
+  /** Client coordinates of a board point, following the board's tilt. */
+  async boardClient(kind: 'Bar' | 'Array', point: { x: number, y: number }) {
+    return this.panel(kind).locator('[data-grid-world]').first().evaluate((world, point) => {
+      const rect = (name: string) => world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
+      const o = rect('origin'), x = rect('x'), y = rect('y')
+      return {
+        x: o.left + point.x * (x.left - o.left) + point.y * (y.left - o.left),
+        y: o.top + point.x * (x.top - o.top) + point.y * (y.top - o.top),
+      }
+    }, point)
+  }
+
+  /** Drags a marquee between two board points, holding any modifiers. */
+  async marquee(
+    kind: 'Bar' | 'Array',
+    from: { x: number, y: number },
+    to: { x: number, y: number },
+    options: {
+      modifiers?: ('Shift' | 'Control')[]
+      beforeRelease?: () => Promise<void>
+    } = {},
+  ) {
+    const start = await this.boardClient(kind, from)
+    const end = await this.boardClient(kind, to)
+    const modifiers = options.modifiers ?? []
+    for (const key of modifiers) await this.page.keyboard.down(key)
+    try {
+      await this.page.mouse.move(start.x, start.y)
+      await this.page.mouse.down()
+      await this.page.mouse.move(end.x, end.y, { steps: 12 })
+      await options.beforeRelease?.()
+    } finally {
+      await this.page.mouse.up()
+      for (const key of modifiers) await this.page.keyboard.up(key)
+    }
   }
 
   async drag(rod: Locator, dx: number, dy: number) {

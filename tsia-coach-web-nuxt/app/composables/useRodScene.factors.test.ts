@@ -177,6 +177,43 @@ it('protects the rectangle and permits another factor shape', () => {
   ])
 })
 
+it('regroups a six-rod into 2 rows of 3 without changing identity', () => {
+  const scene = createFactorScene()
+  const id = add(scene, 6)
+  scene.select([id])
+
+  const anchor = { ...scene.trains.value[0]!.anchor }
+
+  expect(scene.apply([id], {
+    type: 'regroup-factors',
+    shape: { rows: 2, columns: 3 },
+  })).toEqual({
+    allowed: true,
+    createdIds: [],
+  })
+
+  expect(scene.trains.value).toHaveLength(1)
+
+  const train = scene.trains.value[0]!
+
+  expect(train.id).toBe(id)
+  expect(train.anchor).toEqual(anchor)
+  expect([...scene.selection.value]).toEqual([id])
+
+  expect(train.parts).toEqual([
+    {
+      value: 3,
+      orientation: 'horizontal',
+      offset: { x: 0, y: 0 },
+    },
+    {
+      value: 3,
+      orientation: 'horizontal',
+      offset: { x: 0, y: 1 },
+    },
+  ])
+})
+
 describe('regroup-factors restrictions', () => {
   it('rejects in a scene that does not allow factors (Bar)', () => {
     const scene = useRodScene({

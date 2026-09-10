@@ -33,6 +33,8 @@ withDefaults(defineProps<{
         :aria-label="ariaGridView(config)"
         :style="gridStyle(config, view)"
         data-grid-world
+        :data-grid-columns="config.columns"
+        :data-grid-rows="config.rows"
     >
       <i :class="styles.axis" data-grid-axis="origin" aria-hidden="true" />
       <i :class="styles.axis" data-grid-axis="x" :style="{ left: `${config.cellSize}px` }" aria-hidden="true" />

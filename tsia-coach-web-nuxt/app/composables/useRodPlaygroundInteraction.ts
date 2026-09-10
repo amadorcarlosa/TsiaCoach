@@ -1,6 +1,8 @@
 import {
   computed,
   provide,
+  readonly,
+  ref,
   watch,
   type Ref,
 } from 'vue'
@@ -9,6 +11,7 @@ import { sceneCancellationKey } from '~/components/rod/scene/scene-cancellation'
 import type { useRodScene } from './useRodScene'
 import { useSceneMenu } from './useSceneMenu'
 import { useSceneInteraction } from './useSceneInteraction'
+import { useSceneMarquee } from './useSceneMarquee'
 import { useAddendMenuChoice } from './useAddendMenuChoice'
 
 type Options = {
@@ -29,33 +32,50 @@ export function useRodPlaygroundInteraction(options: Options) {
     disabled: options.disabled,
   })
 
-  const blocked = computed(
+  const baseBlocked = computed(
     () => options.disabled() || menu.request.value !== null,
   )
 
   const interaction = useSceneInteraction({
     scene,
-    blocked: () => blocked.value,
+    blocked: () => baseBlocked.value || marquee.active.value,
   })
 
-  const cancellation = computed(options.cancelVersion)
+  // Keep the same injection key, scoped to this playground.
+  // A local counter allows marquee to request cancellation too.
+  const cancellation = ref(0)
 
-  // Invalidate the scene session before notifying descendant drag engines.
-  watch(
-    cancellation,
-    () => interaction.cancelMove(),
-    { flush: 'sync' },
+  function cancelMovement(): void {
+    interaction.cancelMove()
+    cancellation.value++
+  }
+
+  provide(sceneCancellationKey, readonly(cancellation))
+
+  const marquee = useSceneMarquee({
+    scene,
+    viewport: options.viewport,
+    disabled: () => baseBlocked.value,
+    beforeStart: cancelMovement,
+  })
+
+  const blocked = computed(
+    () => baseBlocked.value || marquee.active.value,
   )
 
-  // Keep the internal drag signal scoped to this playground.
-  provide(sceneCancellationKey, cancellation)
+  function cancelGestures(): void {
+    marquee.cancel()
+    cancelMovement()
+  }
 
-  watch(
-    blocked,
-    value => {
-      if (value) interaction.cancelMove()
-    },
-    { flush: 'sync' },
+  watch(options.cancelVersion, cancelGestures, { flush: 'sync' })
+
+  watch(baseBlocked, value => {
+    if (value) cancelGestures()
+  }, { flush: 'sync' })
+
+  const highlightedIds = computed(
+    () => marquee.previewIds.value ?? scene.selection.value,
   )
 
   const selectedIds = computed(() => [...scene.selection.value])
@@ -65,13 +85,22 @@ export function useRodPlaygroundInteraction(options: Options) {
   }
 
   function applySelected(action: SceneAction) {
+    if (marquee.active.value) {
+      return {
+        allowed: false as const,
+        reason: 'Finish selecting first.',
+      }
+    }
+
     return scene.apply(selectedIds.value, action)
   }
 
   return {
     menu,
     interaction,
+    marquee,
     blocked,
+    highlightedIds,
     selectedIds,
     checkSelected,
     applySelected,

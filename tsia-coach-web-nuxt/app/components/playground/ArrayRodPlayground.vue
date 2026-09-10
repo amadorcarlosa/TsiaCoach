@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
+import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
 import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
@@ -65,7 +66,9 @@ const scene = useRodScene({
 const {
   menu,
   interaction,
+  marquee,
   blocked,
+  highlightedIds,
   checkSelected,
   applySelected,
   addendMenuChoice,
@@ -178,7 +181,14 @@ function onRemove(): void {
       </div>
     </div>
 
-    <div ref="boardViewport" class="array-viewport" tabindex="-1">
+    <div
+        ref="boardViewport"
+        class="array-viewport"
+        :class="{ 'marquee-enabled': !editingDisabled }"
+        tabindex="-1"
+        @pointerdown.capture="marquee.onPointerDown"
+        @lostpointercapture="marquee.onLostPointerCapture"
+    >
       <ArrayRodTabla
           :rows="boardRows"
           :visible-columns="visibleColumns"
@@ -203,7 +213,7 @@ function onRemove(): void {
                :y="piece.y"
               :dimensions="piece.dimensions"
               :cell-size="pieceCellSize"
-              :selected="scene.selection.value.has(piece.id)"
+              :selected="highlightedIds.has(piece.id)"
               :disabled="blocked"
               :snap-to-grid="true"
               :begin-move="() => interaction.beginMove(piece.id)"
@@ -214,6 +224,10 @@ function onRemove(): void {
               @settled="interaction.settleMove(piece.id, $event)"
               @move-end="interaction.endMove(piece.id)"
               @menu-request="menu.open"
+          />
+          <SceneMarqueeOverlay
+              :rectangle="marquee.rectangle.value"
+              :cell-size="pieceCellSize"
           />
         </template>
       </ArrayRodTabla>
@@ -235,6 +249,11 @@ function onRemove(): void {
 </template>
 
 <style scoped>
+.marquee-enabled :deep([data-grid-world]) {
+  touch-action: none;
+  user-select: none;
+}
+
 .array-playground {
   max-width: 1100px;
   min-width: 0;
