@@ -76,6 +76,10 @@ it('offers 12 rows of 2 and validates its full depth', () => {
 
   expect(scene.apply([id], action).allowed).toBe(true)
   expect(scene.trains.value[0]!.parts).toHaveLength(12)
+  expect(scene.trains.value[0]!.parts.reduce(
+    (sum, part) => sum + part.value,
+    0,
+  )).toBe(24)
 })
 
 it('enables the picker while rejecting a blocked batch default', () => {
@@ -112,6 +116,12 @@ it('enables the picker while rejecting a blocked batch default', () => {
 
   const second = add(scene, 6)
   scene.select([first, second])
+
+  // The second rod alone is arrangeable, so a partial commit would
+  // be observable if the batch were not atomic.
+  expect(scene.check([second], {
+    type: 'regroup-factors',
+  }).allowed).toBe(true)
 
   const before = snapshot(scene)
 
@@ -300,6 +310,36 @@ describe('regroup-factors restrictions', () => {
     })
 
     expect(scene.trains.value[0]!.id).toBe(id)
+  })
+
+  it('allocates no ids on check or rejected apply', () => {
+    const scene = createFactorScene()
+    const id = add(scene, 6)
+    expect(id).toBe('train-1')
+
+    expect(scene.check([id], { type: 'regroup-factors' }).allowed).toBe(true)
+
+    const wrong = { rows: 2, columns: 4 } as const
+    expect(scene.check([id], {
+      type: 'regroup-factors',
+      shape: wrong,
+    }).allowed).toBe(false)
+
+    expect(scene.apply([id], {
+      type: 'regroup-factors',
+      shape: wrong,
+    }).allowed).toBe(false)
+
+    // The next allocated id is contiguous, so neither check nor the
+    // rejected apply consumed one.
+    expect(add(scene, 4)).toBe('train-2')
+
+    expect(scene.apply([id], { type: 'regroup-factors' })).toEqual({
+      allowed: true,
+      createdIds: [],
+    })
+
+    expect(add(scene, 4)).toBe('train-3')
   })
 })
 
