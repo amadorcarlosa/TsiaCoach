@@ -23,6 +23,16 @@ export type AddendChoice = {
   result: SceneResult
 }
 
+export type FactorShape = {
+  rows: number
+  columns: CuisenaireRodValue
+}
+
+export type FactorChoice = {
+  shape: FactorShape
+  result: SceneResult
+}
+
 export type SceneAction =
     | { type: 'create'; value: CuisenaireRodValue }
     | { type: 'move'; delta: Point }
@@ -31,6 +41,7 @@ export type SceneAction =
     | { type: 'make-train' }
     | { type: 'regroup-ones' }
     | { type: 'regroup-addends'; pair?: AddendPair }
+    | { type: 'regroup-factors'; shape?: FactorShape }
     | { type: 'ungroup' }
     | {
   type: 'set-orientation'
@@ -44,6 +55,7 @@ export type ScenePolicy = {
   trackRows?: readonly number[]
   editable: () => boolean
   allowOrientation: boolean
+  allowFactors?: boolean
 }
 
 export type SceneResult =

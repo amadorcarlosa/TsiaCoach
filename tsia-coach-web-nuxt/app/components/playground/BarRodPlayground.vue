@@ -83,6 +83,7 @@ const scene = useRodScene({
   trackRows: boardDefinition.targets.map(target => target.row),
   editable: () => !editingDisabled.value,
   allowOrientation: false,
+  allowFactors: false,
 })
 
 const {

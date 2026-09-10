@@ -15,6 +15,7 @@ logs
 
 # Misc
 output/playwright/grid-3d/
+output/playwright/playground/
 .DS_Store
 .fleet
 .idea

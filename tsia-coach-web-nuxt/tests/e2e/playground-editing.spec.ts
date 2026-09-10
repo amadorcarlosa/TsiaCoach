@@ -1012,3 +1012,225 @@ test.describe('addend decomposition submenu (touch)', () => {
     await decomposeThroughAddendPairs(p, 'touch')
   })
 })
+
+test('array changes a six-rod between ordered factor rectangles', async ({
+  page,
+  playground: p,
+}) => {
+  await p.show('Array')
+
+  const rod = await p.add('Array', 'six')
+  const id = await rod.getAttribute('data-piece-id')
+  const before = await p.geometry(rod)
+
+  async function chooseFactors(label: string) {
+    // Target one part: rectangles contain multiple .face.top elements.
+    const menu = await p.menu(rod.locator('.train-part').first())
+
+    const submenu = menu.getByRole('menuitem', {
+      name: 'Regroup to factors',
+      exact: true,
+    })
+
+    await expect(submenu).toBeEnabled()
+    await submenu.hover()
+
+    await page.getByRole('menuitem', {
+      name: label,
+      exact: true,
+    }).click()
+
+    await expect(page.getByRole('menu')).toHaveCount(0)
+  }
+
+  for (const shape of [
+    { rows: 2, columns: 3 },
+    { rows: 3, columns: 2 },
+  ]) {
+    await chooseFactors(`${shape.rows} rows of ${shape.columns}`)
+
+    await expect(p.panel('Array').locator('[data-piece-id]'))
+      .toHaveCount(1)
+
+    await expect(rod).toHaveAttribute('data-piece-id', id!)
+    await expect(rod).toHaveClass(/draggable-rod--selected/)
+
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: before.x,
+      y: before.y,
+      width: shape.columns,
+      depth: shape.rows,
+      height: 1,
+    })
+
+    const parts = rod.locator('.train-part')
+    await expect(parts).toHaveCount(shape.rows)
+
+    for (let row = 0; row < shape.rows; row++) {
+      await expect(parts.nth(row)).toHaveAttribute(
+        'data-part-value',
+        String(shape.columns),
+      )
+
+      await expect.poll(async () => {
+        const geometry = await p.geometry(parts.nth(row))
+        return { x: geometry.x, y: geometry.y }
+      }).toEqual({ x: 0, y: row })
+    }
+  }
+})
+
+const factorLabels = ['2 rows of 3', '3 rows of 2'] as const
+
+async function changeFactorsThroughShapes(
+  p: Playground,
+  method: 'keyboard' | 'touch',
+) {
+  await p.show('Array')
+
+  const rod = await p.add('Array', 'six')
+  const id = await rod.getAttribute('data-piece-id')
+  const before = await p.geometry(rod)
+
+  for (const label of factorLabels) {
+    const rows = Number(label.split(' rows of ')[0])
+    const columns = 6 / rows
+
+    // Rectangles contain several .face.top elements, so touch targets one part.
+    const menu = method === 'touch'
+      ? await p.menuByTouch(rod.locator('.train-part').first())
+      : await p.menu(rod, true)
+
+    const parent = menu.getByRole('menuitem', {
+      name: 'Regroup to factors',
+      exact: true,
+    })
+    await expect(parent).toBeEnabled()
+
+    if (method === 'keyboard') {
+      await parent.focus()
+      await parent.press('ArrowRight')
+    } else {
+      await parent.tap()
+    }
+
+    const shapeItem = menu.getByRole('menuitem', { name: label, exact: true })
+    await expect(shapeItem).toBeVisible()
+
+    if (method === 'touch') {
+      await shapeItem.tap()
+    } else {
+      await shapeItem.press('Enter')
+    }
+
+    await expect(p.page.getByRole('menu')).toHaveCount(0)
+
+    await expect(p.panel('Array').locator('[data-piece-id]')).toHaveCount(1)
+    await expect(rod).toHaveAttribute('data-piece-id', id!)
+    await expect(rod).toHaveClass(/draggable-rod--selected/)
+
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: before.x,
+      y: before.y,
+      width: columns,
+      depth: rows,
+      height: 1,
+    })
+
+    const parts = rod.locator('.train-part')
+    await expect(parts).toHaveCount(rows)
+
+    for (let row = 0; row < rows; row++) {
+      await expect(parts.nth(row)).toHaveAttribute('data-part-value', String(columns))
+      await expect.poll(async () => {
+        const geometry = await p.geometry(parts.nth(row))
+        return { x: geometry.x, y: geometry.y }
+      }).toEqual({ x: 0, y: row })
+    }
+  }
+}
+
+test.describe('factor rectangle submenu', () => {
+  test('array changes a six-rod between factor rectangles using keyboard', async ({
+    playground: p,
+  }) => {
+    await changeFactorsThroughShapes(p, 'keyboard')
+  })
+
+  test('array enables the factor submenu while disabling a blocked default child', async ({
+    page,
+    playground: p,
+  }) => {
+    await p.show('Array')
+
+    const six = await p.add('Array', 'six') // (0, 0)
+    const obstacle = await p.add('Array', 'one') // (6, 0)
+    const obstacleBefore = await p.geometry(obstacle)
+
+    // Park the one-rod at (2, 1): inside "2 rows of 3", outside "3 rows of 2".
+    await p.drag(obstacle, -4, 1)
+    await expect.poll(() => p.geometry(obstacle)).toMatchObject({
+      x: obstacleBefore.x - 4,
+      y: obstacleBefore.y + 1,
+    })
+
+    const id = await six.getAttribute('data-piece-id')
+    const before = await p.geometry(six)
+
+    const menu = await p.menu(six)
+    const parent = menu.getByRole('menuitem', {
+      name: 'Regroup to factors',
+      exact: true,
+    })
+    await expect(parent).toBeEnabled()
+    await parent.hover()
+
+    // A disabled item's accessible name also carries its reason.
+    const blocked = page.getByRole('menuitem', { name: /^2 rows of 3/ })
+    const open = page.getByRole('menuitem', { name: '3 rows of 2', exact: true })
+
+    await expect(blocked).toBeVisible()
+    await expect(blocked).toBeDisabled()
+    await expect(blocked).toHaveAccessibleName(/overlaps another part/)
+    await expect(open).toBeEnabled()
+
+    await open.click()
+    await expect(page.getByRole('menu')).toHaveCount(0)
+
+    await expect(p.panel('Array').locator('[data-piece-id]')).toHaveCount(2)
+    await expect(six).toHaveAttribute('data-piece-id', id!)
+    await expect(six.locator('.train-part')).toHaveCount(3)
+
+    await expect.poll(() => p.geometry(six)).toMatchObject({
+      x: before.x,
+      y: before.y,
+      width: 2,
+      depth: 3,
+      height: 1,
+    })
+
+    await expect.poll(() => p.geometry(obstacle)).toMatchObject({
+      x: obstacleBefore.x - 4,
+      y: obstacleBefore.y + 1,
+    })
+  })
+
+  test('bar menu offers no factor entry', async ({ playground: p }) => {
+    await p.show('Bar')
+    const rod = await p.add('Bar', 'six')
+    const menu = await p.menu(rod)
+
+    await expect(menu.getByRole('menuitem', { name: 'Regroup to factors' })).toHaveCount(0)
+    await expect(menu.getByRole('menuitem')).toHaveCount(6)
+  })
+})
+
+test.describe('factor rectangle submenu (touch)', () => {
+  test.use({ contextOptions: { hasTouch: true } })
+
+  test('array changes a six-rod between factor rectangles using touch', async ({
+    playground: p,
+  }) => {
+    await changeFactorsThroughShapes(p, 'touch')
+  })
+})

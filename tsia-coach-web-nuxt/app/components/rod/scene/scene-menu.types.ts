@@ -9,7 +9,8 @@ export type SceneMenuAction = Extract<
             'make-train' |
             'ungroup' |
             'regroup-ones' |
-            'regroup-addends'
+            'regroup-addends' |
+            'regroup-factors'
     }
 >
 
@@ -26,3 +27,13 @@ export type SceneMenuChoice =
       children: readonly SceneMenuChoice[]
       disabledReason?: string
     }
+
+export type SceneMenuRequest = {
+  trainId: string
+  anchor: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+}

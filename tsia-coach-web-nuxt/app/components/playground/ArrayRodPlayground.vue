@@ -15,6 +15,7 @@ import { trainView } from '~/components/rod/scene/train-view'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
+import { useFactorMenuChoice } from '~/composables/useFactorMenuChoice'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 
 const props = withDefaults(defineProps<{
@@ -58,6 +59,7 @@ const scene = useRodScene({
   spawnRows: Array.from({ length: boardRows }, (_, row) => row),
   editable: () => !editingDisabled.value,
   allowOrientation: true,
+  allowFactors: true,
 })
 
 const {
@@ -73,6 +75,8 @@ const {
   disabled: () => editingDisabled.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
+
+const factorMenuChoice = useFactorMenuChoice(scene)
 
 const message = scene.message
 
@@ -95,6 +99,7 @@ const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
 
   addendMenuChoice.value,
+  factorMenuChoice.value,
 
   ...arrayRodOrientations.map(orientation => ({
     kind: 'action' as const,

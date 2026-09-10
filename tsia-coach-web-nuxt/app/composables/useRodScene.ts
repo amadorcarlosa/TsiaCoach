@@ -9,8 +9,11 @@ import type {
     TrainPart
 } from "~/components/rod/scene/rod.scene.types.ts";
 import type { AddendChoice } from '~/components/rod/scene/rod.scene.types'
+import type { FactorChoice } from '~/components/rod/scene/rod.scene.types'
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
+import { factorShapes } from '~/components/rod/scene/factor-groupings'
+import { trainOrientation } from '~/components/rod/scene/train-orientation'
 
 
 type Candidate =
@@ -125,6 +128,12 @@ export function useRodScene(policy: ScenePolicy) {
 
                     if (orientation === 'tower') {
                         return reject('Tower is available only for individual rods.')
+                    }
+
+                    if (trainOrientation(train) === undefined) {
+                        return reject(
+                            'Choose another factor arrangement to change this rectangle.',
+                        )
                     }
 
                     const total = train.parts.reduce(
@@ -423,6 +432,62 @@ export function useRodScene(policy: ScenePolicy) {
                 return validate(current)
             }
 
+            case 'regroup-factors': {
+                if (!policy.allowFactors) {
+                    return reject('Factor arrangements are available in Array.')
+                }
+
+                for (const train of selected) {
+                    if (!train.parts.length) {
+                        return reject('This train has no parts.')
+                    }
+
+                    if (train.parts.some(part => part.orientation === 'tower')) {
+                        return reject(
+                            'Lay the tower horizontally or vertically before decomposing.',
+                        )
+                    }
+
+                    const total = train.parts.reduce(
+                        (sum, part) => sum + part.value,
+                        0,
+                    )
+
+                    const candidates = factorShapes(total)
+                    const requested = action.shape
+
+                    const shape = requested
+                        ? candidates.find(candidate =>
+                            candidate.rows === requested.rows &&
+                            candidate.columns === requested.columns,
+                        )
+                        : candidates[0]
+
+                    if (!shape) {
+                        return reject(
+                            requested
+                                ? 'Choose a supported factor arrangement for this value.'
+                                : `Value ${total} has no supported factor arrangement with both factors greater than one.`,
+                        )
+                    }
+
+                    train.parts = Array.from(
+                        { length: shape.rows },
+                        (_, row): TrainPart => ({
+                            value: shape.columns,
+                            orientation: 'horizontal',
+                            offset: { x: 0, y: row },
+                        }),
+                    )
+                }
+
+                const result = validate(current)
+
+                return result.allowed
+                    ? result
+                    : reject(`Cannot arrange these factors. ${result.reason}`)
+            }
+
             case 'ungroup': {
                 if (selected.some(train => train.parts.length < 2)) {
                     return reject('Select only trains with multiple parts.')
@@ -525,6 +590,24 @@ export function useRodScene(policy: ScenePolicy) {
         }))
     }
 
+    function getFactorChoices(id: string): FactorChoice[] {
+        const train = trains.value.find(train => train.id === id)
+        if (!train) return []
+
+        const total = train.parts.reduce(
+            (sum, part) => sum + part.value,
+            0,
+        )
+
+        return factorShapes(total).map(shape => ({
+            shape,
+            result: check([id], {
+                type: 'regroup-factors',
+                shape,
+            }),
+        }))
+    }
+
     function select(ids: readonly string[]): void {
         const existingIds = new Set(trains.value.map(train => train.id))
         selection.value = new Set(ids.filter(id => existingIds.has(id)))
@@ -569,5 +652,6 @@ export function useRodScene(policy: ScenePolicy) {
         select,
         constrainMove,
         getAddendChoices,
+        getFactorChoices,
     }
 }
