@@ -9,6 +9,10 @@ import {
 import type { Point } from '~/components/grid/gridPointer'
 import type { SceneAction } from '~/components/rod/scene/rod.scene.types'
 import { sceneCancellationKey } from '~/components/rod/scene/scene-cancellation'
+import {
+  copyScene,
+  type SceneSnapshot,
+} from '~/components/rod/scene/scene-snapshot'
 import type { useRodScene } from './useRodScene'
 import { useSceneMenu } from './useSceneMenu'
 import { useSceneInteraction } from './useSceneInteraction'
@@ -71,6 +75,26 @@ export function useRodPlaygroundInteraction(options: Options) {
     cancelMovement()
   }
 
+  function captureScene() {
+    // Discard unfinished movement before taking a snapshot.
+    cancelGestures()
+    menu.close()
+
+    return copyScene(scene.trains.value)
+  }
+
+  function replaceScene(source: SceneSnapshot) {
+    // Invalid input must not disturb the current interaction.
+    const result = scene.checkReplacement(source)
+    if (!result.allowed) return result
+
+    cancelGestures()
+    menu.close()
+
+    // Recheck at the actual replacement boundary.
+    return scene.replace(source)
+  }
+
   watch(options.cancelVersion, cancelGestures, { flush: 'sync' })
 
   watch(baseBlocked, value => {
@@ -107,6 +131,8 @@ export function useRodPlaygroundInteraction(options: Options) {
     selectedIds,
     checkSelected,
     applySelected,
+    captureScene,
+    replaceScene,
     addendMenuChoice: useAddendMenuChoice(scene),
   }
 }

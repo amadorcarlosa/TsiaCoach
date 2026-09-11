@@ -5,6 +5,7 @@ import { mount } from '@vue/test-utils'
 import { useRodScene } from '~/composables/useRodScene'
 import { useSceneInteraction } from '~/composables/useSceneInteraction'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
+import { copyScene } from '~/components/rod/scene/scene-snapshot'
 
 type Scene = ReturnType<typeof useRodScene>
 
@@ -159,6 +160,89 @@ describe('useRodPlaygroundInteraction cancellation', () => {
 
     return { wrapper, ...captured }
   }
+
+  it('captures committed anchors and cancels movement without sharing scene data', () => {
+    const { wrapper, scene, playground } = mountPlayground({
+      cancelVersion: () => 0, disabled: () => false,
+    })
+    try {
+      const [leader, follower] = selectedPair(scene)
+      const before = copyScene(scene.trains.value)
+      const origin = anchorOf(scene, leader)
+      const target = { x: origin.x + 2, y: origin.y }
+      playground.interaction.beginMove(leader)
+      playground.interaction.previewMove(leader, target)
+      expect(playground.interaction.previewFor(follower)).toEqual({ x: 2, y: 0 })
+      const captured = playground.captureScene()
+      expect(captured).toEqual(before)
+      expect(playground.interaction.leaderId.value).toBeNull()
+      expect(playground.interaction.previewFor(follower)).toBeUndefined()
+      playground.interaction.settleMove(leader, target)
+      expect(scene.trains.value).toEqual(before)
+      captured[0]!.anchor.x = 20
+      captured[0]!.parts[0]!.offset.x = 10
+      expect(scene.trains.value).toEqual(before)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('replacement clears movement and menu even when destination IDs are unchanged', () => {
+    const { wrapper, scene, playground } = mountPlayground({
+      cancelVersion: () => 0, disabled: () => false,
+    })
+    try {
+      const [leader, follower] = selectedPair(scene)
+      const destination = copyScene(scene.trains.value)
+      const origin = anchorOf(scene, leader)
+      const target = { x: origin.x + 2, y: origin.y }
+      playground.interaction.beginMove(leader)
+      playground.interaction.previewMove(leader, target)
+      expect(playground.replaceScene(destination).allowed).toBe(true)
+      expect(playground.interaction.leaderId.value).toBeNull()
+      expect(playground.interaction.previewFor(follower)).toBeUndefined()
+      playground.interaction.settleMove(leader, target)
+      expect(scene.trains.value).toEqual(destination)
+
+      playground.menu.open({ trainId: leader, anchor: { x: 0, y: 0, width: 10, height: 10 } })
+      expect(playground.menu.request.value).not.toBeNull()
+      expect(playground.replaceScene(destination).allowed).toBe(true)
+      expect(playground.menu.request.value).toBeNull()
+      expect([...scene.selection.value]).toEqual([])
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('rejected replacement preserves an active movement or open menu', () => {
+    const { wrapper, scene, playground } = mountPlayground({
+      cancelVersion: () => 0, disabled: () => false,
+    })
+    try {
+      const [leader, follower] = selectedPair(scene)
+      const invalid = copyScene(scene.trains.value)
+      invalid[0]!.anchor.x = 24
+      playground.interaction.beginMove(leader)
+      const origin = anchorOf(scene, leader)
+      playground.interaction.previewMove(leader, { x: origin.x + 2, y: origin.y })
+      const before = snapshot(scene)
+      expect(playground.replaceScene(invalid).allowed).toBe(false)
+      expect(playground.interaction.leaderId.value).toBe(leader)
+      expect(playground.interaction.previewFor(follower)).toEqual({ x: 2, y: 0 })
+      expect(snapshot(scene)).toEqual(before)
+
+      playground.menu.open({ trainId: leader, anchor: { x: 0, y: 0, width: 10, height: 10 } })
+      const request = playground.menu.request.value
+      scene.apply([], { type: 'delete' })
+      const message = scene.message.value
+      expect(playground.replaceScene(invalid).allowed).toBe(false)
+      expect(playground.menu.request.value).toEqual(request)
+      expect(scene.message.value).toBe(message)
+      expect(snapshot(scene)).toEqual(before)
+    } finally {
+      wrapper.unmount()
+    }
+  })
 
   it('cancels the session synchronously when the cancel version changes', () => {
     const version = ref(0)

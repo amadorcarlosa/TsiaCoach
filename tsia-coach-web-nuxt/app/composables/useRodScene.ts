@@ -13,6 +13,10 @@ import type {
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
+import {
+    copyScene,
+    type SceneSnapshot,
+} from '~/components/rod/scene/scene-snapshot'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
 
 
@@ -46,6 +50,104 @@ export function useRodScene(policy: ScenePolicy) {
         return result.allowed
             ? { allowed: true, trains: candidate }
             : result
+    }
+
+    function buildReplacement(source: SceneSnapshot): Candidate {
+        if (!policy.editable()) {
+            return reject('Editing is unavailable.')
+        }
+
+        const candidate = copyScene(source)
+        const ids = new Set<string>()
+
+        for (const train of candidate) {
+            if (!train.id.trim() || ids.has(train.id)) {
+                return reject('Every train needs a unique, non-empty ID.')
+            }
+            ids.add(train.id)
+
+            if (
+                !Number.isInteger(train.anchor.x) ||
+                !Number.isInteger(train.anchor.y)
+            ) {
+                return reject('Train anchors must use integer cells.')
+            }
+
+            if (train.parts.length === 0) {
+                return reject('Every train needs at least one part.')
+            }
+
+            for (const part of train.parts) {
+                if (
+                    !Number.isInteger(part.value) ||
+                    part.value < 1 ||
+                    part.value > 10
+                ) {
+                    return reject('Rod values must be integers from 1 to 10.')
+                }
+
+                if (
+                    !Number.isInteger(part.offset.x) ||
+                    !Number.isInteger(part.offset.y)
+                ) {
+                    return reject('Part offsets must use integer cells.')
+                }
+
+                if (
+                    !['horizontal', 'vertical', 'tower']
+                        .includes(part.orientation)
+                ) {
+                    return reject('Unknown rod orientation.')
+                }
+
+                if (
+                    !policy.allowOrientation &&
+                    part.orientation !== 'horizontal'
+                ) {
+                    return reject('This scene accepts horizontal rods only.')
+                }
+
+                // Track-based readouts depend on every part belonging
+                // to the train's anchor row.
+                if (
+                    policy.trackRows !== undefined &&
+                    (
+                        !policy.trackRows.includes(train.anchor.y) ||
+                        part.offset.y !== 0 ||
+                        part.orientation !== 'horizontal'
+                    )
+                ) {
+                    return reject('Keep each train on one horizontal track.')
+                }
+            }
+        }
+
+        return validate(candidate)
+    }
+
+    function checkReplacement(source: SceneSnapshot): SceneResult {
+        const result = buildReplacement(source)
+
+        return result.allowed
+            ? { allowed: true }
+            : result
+    }
+
+    /**
+     * Authoring hydration boundary.
+     * Interactive edits continue to use apply().
+     * Call through replaceScene() in the interaction composable.
+     */
+    function replace(source: SceneSnapshot): SceneResult {
+        const result = buildReplacement(source)
+
+        if (!result.allowed) return result
+
+        trains.value = result.trains
+        selection.value = new Set()
+        message.value = ''
+
+        return { allowed: true }
     }
 
     function linearLayout(train: RodTrain): LinearLayout {
@@ -543,11 +645,22 @@ export function useRodScene(policy: ScenePolicy) {
         }
 
         const createdIds: string[] = []
+        const occupiedIds = new Set(
+            result.trains
+                .filter(train => train.id !== '')
+                .map(train => train.id),
+        )
 
         const committed = result.trains.map(train => {
             if (train.id) return train
 
-            const id = `train-${nextId++}`
+            let id: string
+
+            do {
+                id = `train-${nextId++}`
+            } while (occupiedIds.has(id))
+
+            occupiedIds.add(id)
             createdIds.push(id)
 
             return { ...train, id }
@@ -649,6 +762,8 @@ export function useRodScene(policy: ScenePolicy) {
         message: readonly(message),
         check,
         apply,
+        checkReplacement,
+        replace,
         select,
         constrainMove,
         getAddendChoices,

@@ -6,12 +6,14 @@ import type { Point } from '~/components/grid/gridPointer'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
+import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
 import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import TablaPlaygroundShell from '~/components/playground/TablaPlaygroundShell.vue'
+import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { trainView } from '~/components/rod/scene/train-view'
 
@@ -148,6 +150,8 @@ const {
   checkSelected,
   applySelected,
   addendMenuChoice,
+  captureScene,
+  replaceScene,
 } = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
@@ -155,6 +159,38 @@ const {
   cancelVersion: () => props.cancelVersion?.() ?? 0,
   onBoardClick,
 })
+
+const authoring = useLevelAuthoring({
+  trains: () => scene.trains.value,
+  captureScene,
+  checkReplacement: scene.checkReplacement,
+  replaceScene,
+  editable: () => !editingDisabled.value,
+})
+
+const pendingStepId = ref<string | null>(null)
+const authoringMessage = ref('')
+
+function requestStep(id: string): void {
+  const result = authoring.selectStep(id)
+
+  pendingStepId.value =
+    !result.allowed && result.needsDecision ? id : null
+
+  authoringMessage.value = result.allowed ? '' : result.reason
+}
+
+function resolveStep(decision: 'save' | 'discard' | 'cancel'): void {
+  const id = pendingStepId.value
+  if (!id) return
+
+  const result = authoring.selectStep(id, decision)
+  authoringMessage.value = result.allowed ? '' : result.reason
+
+  if (result.allowed || decision === 'cancel') {
+    pendingStepId.value = null
+  }
+}
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
@@ -307,6 +343,58 @@ function intersectsPreview(
         </li>
       </ul>
 
+      <div class="authoring-controls" role="group" aria-label="Authoring steps">
+        <PlaygroundActionButton
+          :disabled="blocked || pendingStepId !== null"
+          @click="authoring.captureStep()"
+        >
+          Capture step
+        </PlaygroundActionButton>
+        <PlaygroundActionButton
+          :disabled="
+            blocked ||
+            !authoring.activeStepId.value ||
+            !authoring.dirty.value ||
+            pendingStepId !== null
+          "
+          @click="authoring.updateStep()"
+        >
+          Update step
+        </PlaygroundActionButton>
+        <PlaygroundActionButton
+          v-for="step in authoring.steps.value"
+          :key="step.id"
+          :disabled="blocked || pendingStepId !== null"
+          :pressed="authoring.activeStepId.value === step.id"
+          @click="requestStep(step.id)"
+        >
+          {{ step.title }}
+          <span v-if="authoring.activeStepId.value === step.id && authoring.dirty.value">
+            (unsaved)
+          </span>
+        </PlaygroundActionButton>
+      </div>
+
+      <div
+        v-if="pendingStepId"
+        class="authoring-controls authoring-decision"
+        role="group"
+        aria-label="Unsaved step changes"
+      >
+        <p>Save changes to the current step before switching?</p>
+        <PlaygroundActionButton :disabled="blocked" @click="resolveStep('save')">
+          Save and switch
+        </PlaygroundActionButton>
+        <PlaygroundActionButton :disabled="blocked" @click="resolveStep('discard')">
+          Discard and switch
+        </PlaygroundActionButton>
+        <PlaygroundActionButton @click="resolveStep('cancel')">
+          Cancel
+        </PlaygroundActionButton>
+      </div>
+
+      <p class="placement-message" role="status">{{ authoringMessage }}</p>
+
       <p
         class="placement-message"
         role="status"
@@ -365,6 +453,28 @@ function intersectsPreview(
   padding: 0;
   list-style: none;
   color: var(--mt-text);
+}
+
+.authoring-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 1100px;
+  min-width: 0;
+  margin: 8px auto;
+  color: var(--mt-text);
+}
+
+.authoring-controls > button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.authoring-decision > p {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .placement-message {
