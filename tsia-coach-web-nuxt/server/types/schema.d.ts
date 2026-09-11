@@ -104,6 +104,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/base-ten-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBaseTenBlockCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent": {
         parameters: {
             query?: never;
@@ -387,6 +403,23 @@ export interface components {
             checkCount: number | string;
             phase: components["schemas"]["AttemptPhaseResponse"];
             coachingButton: components["schemas"]["CoachingButtonResponse"];
+        };
+        /** @enum {unknown} */
+        Base10Denomination: "ones" | "tens" | "hundreds" | "thousands" | "tenThousands" | "hundredThousands" | "millions";
+        BaseTenBlockDefinitionResponse: {
+            denomination: components["schemas"]["Base10Denomination"];
+            /** Format: int32 */
+            value: number | string;
+            shape: string;
+            dimensions: components["schemas"]["BaseTenBlockDimensionsResponse"];
+        };
+        BaseTenBlockDimensionsResponse: {
+            /** Format: int32 */
+            width: number | string;
+            /** Format: int32 */
+            depth: number | string;
+            /** Format: int32 */
+            height: number | string;
         };
         CharacterSpanResponse: {
             /** Format: int32 */
@@ -714,7 +747,14 @@ export interface components {
             satisfied: boolean;
             outcome: string;
         };
-        ScaffoldLearnerResourceResponse: components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse"] | components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodSeriesResourceResponse"];
+        ScaffoldLearnerResourceResponse: components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse"] | components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerRodSeriesResourceResponse"] | components["schemas"]["ScaffoldLearnerResourceResponseScaffoldLearnerBaseTenBlockResourceResponse"];
+        ScaffoldLearnerResourceResponseScaffoldLearnerBaseTenBlockResourceResponse: {
+            /** @enum {string} */
+            type?: "baseTenBlockResource";
+            id: string;
+            denomination: string;
+            multiplicity: string;
+        };
         ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse: {
             /** @enum {string} */
             type?: "rodResource";
@@ -740,7 +780,14 @@ export interface components {
             text: string;
             focusPhraseIds: string[];
         };
-        ScaffoldResourceResponse: components["schemas"]["ScaffoldResourceResponseRodResourceResponse"] | components["schemas"]["ScaffoldResourceResponseRodSeriesResourceResponse"];
+        ScaffoldResourceResponse: components["schemas"]["ScaffoldResourceResponseRodResourceResponse"] | components["schemas"]["ScaffoldResourceResponseRodSeriesResourceResponse"] | components["schemas"]["ScaffoldResourceResponseBaseTenBlockResourceResponse"];
+        ScaffoldResourceResponseBaseTenBlockResourceResponse: {
+            /** @enum {string} */
+            type?: "baseTenBlockResource";
+            id: string;
+            denomination: string;
+            multiplicity: string;
+        };
         ScaffoldResourceResponseRodResourceResponse: {
             /** @enum {string} */
             type?: "rodResource";
@@ -1058,6 +1105,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RodDefinitionResponse"][];
+                };
+            };
+        };
+    };
+    GetBaseTenBlockCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseTenBlockDefinitionResponse"][];
                 };
             };
         };

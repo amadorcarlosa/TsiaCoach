@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useLevelFiles } from '~/composables/useLevelFiles'
+import LevelFileControls from './files/LevelFileControls.vue'
+import BoardGoalEditor from './goals/BoardGoalEditor.vue'
+import { createFractionGoalAdapter } from './goals/board-goal-adapters'
 import FractionRodTabla from '~/components/tabla/FractionRodTabla.vue'
 import { getFractionTablaGeometry } from '~/components/tabla/fraction-tabla.geometry'
 import { fractionReadout } from '~/components/tabla/fraction-readout'
@@ -162,7 +166,11 @@ const {
   onBoardClick,
 })
 
+const goalAdapter = createFractionGoalAdapter({ columns: fullColumns, pairCount })
+const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
 const authoring = useLevelAuthoring({
+  goals: goalAdapter,
+  beforeChange: () => goalEditor.value?.resolveDraft() ?? true,
   scene: {
     read: () => scene.trains.value,
     capture: captureScene,
@@ -176,6 +184,15 @@ const authoringControls = useAuthoringControls(
   authoring,
   () => blocked.value,
 )
+const levelFiles = useLevelFiles({
+  adapter: { board: { kind: 'fraction', config: { columns: fullColumns, pairCount } }, goals: goalAdapter, validateSnapshot: scene.validateSnapshot },
+  authoring,
+  editable: () => !editingDisabled.value,
+  hasWorkingRods: () => scene.trains.value.length > 0,
+  resolveDrafts: () => goalEditor.value?.resolveDraft() ?? true,
+  onImported: authoringControls.reset,
+})
+
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
@@ -347,7 +364,15 @@ function intersectsPreview(
         @request-delete="authoringControls.requestDelete"
         @confirm-delete="authoringControls.confirmDelete"
         @cancel-delete="authoringControls.cancelDelete"
-      />
+      >
+        <template #goal-editor="{ stepId, disabled }">
+          <BoardGoalEditor
+ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
+            :goal="authoring.steps.value.find(step => step.id === stepId)?.goal ?? null"
+            @apply="input => authoring.setGoal(stepId, input)" />
+        </template>
+      </PlaygroundAuthoringControls>
+      <LevelFileControls :files="levelFiles" :disabled="editingDisabled" />
 
       <p
         class="placement-message"

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useLevelFiles } from '~/composables/useLevelFiles'
+import LevelFileControls from './files/LevelFileControls.vue'
+import BoardGoalEditor from './goals/BoardGoalEditor.vue'
+import { createArrayGoalAdapter } from './goals/board-goal-adapters'
 import { computed, ref } from 'vue'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
@@ -85,7 +89,11 @@ const {
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
 
+const goalAdapter = createArrayGoalAdapter({ columns: fullColumns, rows: boardRows })
+const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
 const authoring = useLevelAuthoring({
+  goals: goalAdapter,
+  beforeChange: () => goalEditor.value?.resolveDraft() ?? true,
   scene: {
     read: () => scene.trains.value,
     capture: captureScene,
@@ -99,6 +107,15 @@ const authoringControls = useAuthoringControls(
   authoring,
   () => blocked.value,
 )
+const levelFiles = useLevelFiles({
+  adapter: { board: { kind: 'array', config: { columns: fullColumns, rows: boardRows } }, goals: goalAdapter, validateSnapshot: scene.validateSnapshot },
+  authoring,
+  editable: () => !editingDisabled.value,
+  hasWorkingRods: () => scene.trains.value.length > 0,
+  resolveDrafts: () => goalEditor.value?.resolveDraft() ?? true,
+  onImported: authoringControls.reset,
+})
+
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 
@@ -283,7 +300,15 @@ function onRemove(): void {
       @request-delete="authoringControls.requestDelete"
       @confirm-delete="authoringControls.confirmDelete"
       @cancel-delete="authoringControls.cancelDelete"
-    />
+    >
+        <template #goal-editor="{ stepId, disabled }">
+          <BoardGoalEditor
+ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
+            :goal="authoring.steps.value.find(step => step.id === stepId)?.goal ?? null"
+            @apply="input => authoring.setGoal(stepId, input)" />
+        </template>
+      </PlaygroundAuthoringControls>
+      <LevelFileControls :files="levelFiles" :disabled="editingDisabled" />
 
     <p role="status" aria-live="polite">{{ message }}</p>
     <p>{{ renderedPieces.length }} objects on the board</p>

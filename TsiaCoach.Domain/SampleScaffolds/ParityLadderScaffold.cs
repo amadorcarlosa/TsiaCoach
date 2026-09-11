@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.SampleQuestions;
 using TsiaCoach.Domain.Scaffolds;
 using TsiaCoach.Domain.Semantics;

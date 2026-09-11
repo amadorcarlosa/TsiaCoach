@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.ValueObjects;
@@ -112,6 +113,14 @@ public static class ScaffoldValidator
                 {
                     throw new InvalidOperationException(
                         $"Rod series '{series.Id.Value}' cannot repeat a length.");
+                }
+                break;
+
+            case BaseTenBlockResource block:
+                if (!Enum.IsDefined(block.Denomination))
+                {
+                    throw new InvalidOperationException(
+                        $"Base-ten block resource '{block.Id.Value}' has an unknown denomination.");
                 }
                 break;
 
@@ -472,6 +481,7 @@ public static class ScaffoldValidator
         {
             RodResource value => value.Id,
             RodSeriesResource value => value.Id,
+            BaseTenBlockResource value => value.Id,
             _ => throw Unsupported("scaffold resource", resource.Value)
         };
 

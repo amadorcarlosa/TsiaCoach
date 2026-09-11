@@ -2,6 +2,7 @@ using System.Reflection;
 
 using TsiaCoach.Domain.Attempts;
 using TsiaCoach.Domain.Coaching;
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.SampleCoaching;
 using TsiaCoach.Domain.SampleQuestions;

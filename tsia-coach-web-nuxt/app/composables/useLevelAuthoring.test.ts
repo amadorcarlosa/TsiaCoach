@@ -1,3 +1,4 @@
+import { createArrayGoalAdapter } from '~/components/playground/goals/board-goal-adapters'
 import { describe, expect, it, vi } from 'vitest'
 import { copyScene } from '~/components/rod/scene/scene-snapshot'
 import { useLevelAuthoring } from './useLevelAuthoring'
@@ -13,6 +14,7 @@ function setup() {
   const checkReplacement = vi.fn(scene.checkReplacement)
   const replaceScene = vi.fn(scene.replace)
   const authoring = useLevelAuthoring({
+    goals: createArrayGoalAdapter({ columns: 100, rows: 100 }),
     scene: {
       read: () => scene.trains.value,
       capture: captureScene,
@@ -309,4 +311,27 @@ describe('level authoring', () => {
     expect(checkReplacement).toHaveBeenCalledExactlyOnceWith(before.steps[1]!.trains)
     expect(replaceScene).toHaveBeenCalledTimes(failure === 'preflight' ? 0 : 1)
   })
+})
+
+it('goal metadata preserves dirty board and saved snapshot through authoring operations', () => {
+  const { authoring, add, captureScene } = setup()
+  add()
+  authoring.captureStep()
+  expect(authoring.steps.value[0]!.goal).toBeNull()
+  const saved = copyScene(authoring.steps.value[0]!.trains)
+  add()
+  captureScene.mockClear()
+  const input = { type: 'all', conditions: [{ type: 'occupied-area', regionId: 'array', cells: 3 }] }
+  expect(authoring.setGoal('step-1', input).allowed).toBe(true)
+  input.conditions[0]!.cells = 99
+  expect(authoring.steps.value[0]!.goal?.conditions[0]).toMatchObject({ cells: 3 })
+  expect(authoring.dirty.value).toBe(true)
+  expect(authoring.steps.value[0]!.trains).toEqual(saved)
+  expect(captureScene).not.toHaveBeenCalled()
+  authoring.updateStep()
+  authoring.captureStep()
+  authoring.moveStep('step-1', 'later')
+  authoring.selectStep('step-1')
+  expect(authoring.steps.value[1]!.goal?.conditions[0]).toMatchObject({ cells: 3 })
+  expect(authoring.setGoal('missing', null).allowed).toBe(false)
 })

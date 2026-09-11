@@ -1,3 +1,4 @@
+import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
 import { readonly, ref } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type {
@@ -58,59 +59,7 @@ export function useRodScene(policy: ScenePolicy) {
             return reject('Editing is unavailable.')
         }
 
-        const candidate = copyScene(source)
-        const ids = new Set<string>()
-
-        for (const train of candidate) {
-            if (!train.id.trim() || ids.has(train.id)) {
-                return reject('Every train needs a unique, non-empty ID.')
-            }
-            ids.add(train.id)
-
-            if (
-                !Number.isInteger(train.anchor.x) ||
-                !Number.isInteger(train.anchor.y)
-            ) {
-                return reject('Train anchors must use integer cells.')
-            }
-
-            if (train.parts.length === 0) {
-                return reject('Every train needs at least one part.')
-            }
-
-            for (const part of train.parts) {
-                if (
-                    !Number.isInteger(part.value) ||
-                    part.value < 1 ||
-                    part.value > 10
-                ) {
-                    return reject('Rod values must be integers from 1 to 10.')
-                }
-
-                if (
-                    !Number.isInteger(part.offset.x) ||
-                    !Number.isInteger(part.offset.y)
-                ) {
-                    return reject('Part offsets must use integer cells.')
-                }
-
-                if (
-                    !['horizontal', 'vertical', 'tower']
-                        .includes(part.orientation)
-                ) {
-                    return reject('Unknown rod orientation.')
-                }
-
-                if (
-                    !policy.allowOrientation &&
-                    part.orientation !== 'horizontal'
-                ) {
-                    return reject('This scene accepts horizontal rods only.')
-                }
-            }
-        }
-
-        return validate(candidate)
+        return validateSnapshot(source, policy)
     }
 
     function checkReplacement(source: SceneSnapshot): SceneResult {
@@ -802,6 +751,10 @@ export function useRodScene(policy: ScenePolicy) {
         check,
         apply,
         checkReplacement,
+        validateSnapshot: (source: SceneSnapshot): SceneResult => {
+            const result = validateSnapshot(source, policy)
+            return result.allowed ? { allowed: true } : result
+        },
         replace,
         select,
         constrainMove,

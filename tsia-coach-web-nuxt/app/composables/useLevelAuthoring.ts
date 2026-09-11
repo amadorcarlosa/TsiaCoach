@@ -33,8 +33,10 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
       return { allowed: false, reason: 'Editing is unavailable.' }
     }
 
+    if (options.beforeChange && !options.beforeChange()) return { allowed: false, reason: 'Goal draft kept.' }
     const snapshot = options.scene.capture()
-    const id = `step-${nextStepId++}`
+    let id: string
+    do { id = `step-${nextStepId++}` } while (steps.value.some(step => step.id === id))
 
     steps.value = [
       ...steps.value,
@@ -42,6 +44,7 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
         id,
         title: `Step ${steps.value.length + 1}`,
         prompt: '',
+        goal: null,
         trains: copyScene(snapshot),
       },
     ]
@@ -98,6 +101,8 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
       }
     }
 
+    if (options.beforeChange && !options.beforeChange()) return { allowed: false, reason: 'Goal draft kept.' }
+
     // Reject an invalid destination before saving or switching.
     const checked = options.scene.checkReplacement(target.trains)
     if (!checked.allowed) return checked
@@ -145,6 +150,39 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
       }
     })
 
+    return { allowed: true }
+  }
+
+  /** Synchronous commit: validation/replacement failure cannot install partial authoring state. */
+  function replaceSteps(source: readonly AuthoringStep[]): AuthoringResult {
+    if (!options.editable()) return { allowed: false, reason: 'Editing is unavailable.' }
+    const owned: AuthoringStep[] = []
+    const ids = new Set<string>()
+    for (const step of source) {
+      if (ids.has(step.id)) return { allowed: false, reason: 'Duplicate step ID.' }
+      ids.add(step.id)
+      const checked = options.scene.checkReplacement(step.trains)
+      if (!checked.allowed) return checked
+      const parsed = step.goal === null ? { allowed: true as const, value: null } : options.goals.parse(step.goal)
+      if (!parsed.allowed) return parsed
+      owned.push({ id: step.id, title: step.title, prompt: step.prompt, trains: copyScene(step.trains), goal: parsed.value })
+    }
+    const replaced = options.scene.replace(owned[0]?.trains ?? [])
+    if (!replaced.allowed) return replaced
+    // No await between scene replacement and installing steps/active ID.
+    steps.value = owned
+    activeStepId.value = owned[0]?.id ?? null
+    return { allowed: true }
+  }
+
+  function setGoal(id: string, input: unknown): AuthoringResult {
+    if (!options.editable()) return { allowed: false, reason: 'Editing is unavailable.' }
+    if (!steps.value.some(step => step.id === id)) return { allowed: false, reason: 'Unknown step.' }
+    const parsed = input === null ? { allowed: true as const, value: null } : options.goals.parse(input)
+    if (!parsed.allowed) return parsed
+    steps.value = steps.value.map(step => step.id === id
+      ? { ...step, goal: parsed.value === null ? null : structuredClone(parsed.value) }
+      : step)
     return { allowed: true }
   }
 
@@ -206,6 +244,8 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
       }
     }
 
+    if (deletingActive && options.beforeChange && !options.beforeChange()) return { allowed: false, reason: 'Goal draft kept.' }
+
     const remaining = steps.value.filter(step => step.id !== id)
 
     if (!deletingActive) {
@@ -240,6 +280,8 @@ export function useLevelAuthoring(options: LevelAuthoringOptions) {
     updateStep,
     selectStep,
     patchStep,
+    setGoal,
+    replaceSteps,
     moveStep,
     deleteStep,
   }

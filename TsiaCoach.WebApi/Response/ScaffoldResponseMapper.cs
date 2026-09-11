@@ -58,6 +58,10 @@ internal static class ScaffoldResponseMapper
             RodSeriesResource value => new ScaffoldLearnerRodSeriesResourceResponse(
                 Id: value.Id.Value,
                 Lengths: value.Lengths.Select(length => length.Value).ToArray()),
+            BaseTenBlockResource value => new ScaffoldLearnerBaseTenBlockResourceResponse(
+                Id: value.Id.Value,
+                Denomination: ContractName(value.Denomination),
+                Multiplicity: ContractName(value.Multiplicity)),
             _ => throw Unsupported("scaffold learner resource", resource.Value)
         };
 
@@ -91,6 +95,10 @@ internal static class ScaffoldResponseMapper
             RodSeriesResource value => new RodSeriesResourceResponse(
                 Id: value.Id.Value,
                 Lengths: value.Lengths.Select(length => length.Value).ToArray()),
+            BaseTenBlockResource value => new BaseTenBlockResourceResponse(
+                Id: value.Id.Value,
+                Denomination: ContractName(value.Denomination),
+                Multiplicity: ContractName(value.Multiplicity)),
             _ => throw Unsupported("scaffold resource", resource.Value)
         };
 

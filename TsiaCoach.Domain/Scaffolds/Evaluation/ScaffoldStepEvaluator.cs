@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.Semantics;
@@ -443,6 +444,7 @@ public static class ScaffoldStepEvaluator
         {
             RodResource value => value.Id,
             RodSeriesResource value => value.Id,
+            BaseTenBlockResource value => value.Id,
             _ => throw Unsupported("scaffold resource", resource.Value)
         };
 

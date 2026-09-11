@@ -178,6 +178,8 @@ function cancelDelete(): void {
       />
     </label>
 
+    <slot v-if="active" name="goal-editor" :step-id="active.id" :disabled="locked" />
+
     <div class="authoring-controls">
       <PlaygroundActionButton
         :disabled="locked || activeIndex === 0"

@@ -1,3 +1,4 @@
+import { createArrayGoalAdapter } from '~/components/playground/goals/board-goal-adapters'
 import { describe, expect, it } from 'vitest'
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
 import { getFractionTablaGeometry } from '~/components/tabla/fraction-tabla.geometry'
@@ -32,6 +33,7 @@ function setup(kind: keyof typeof policies) {
   const policy = policies[kind]
   const scene = useRodScene(policy)
   const authoring = useLevelAuthoring({
+    goals: createArrayGoalAdapter({ columns: 100, rows: 100 }),
     scene: {
       read: () => scene.trains.value,
       capture: () => copyScene(scene.trains.value),

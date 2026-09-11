@@ -27,7 +27,14 @@ public sealed record ScaffoldPromptResponse(
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(RodResourceResponse), "rodResource")]
 [JsonDerivedType(typeof(RodSeriesResourceResponse), "rodSeriesResource")]
+[JsonDerivedType(typeof(BaseTenBlockResourceResponse), "baseTenBlockResource")]
 public abstract record ScaffoldResourceResponse;
+
+public sealed record BaseTenBlockResourceResponse(
+    string Id,
+    string Denomination,
+    string Multiplicity
+) : ScaffoldResourceResponse;
 
 public sealed record RodResourceResponse(
     string Id,

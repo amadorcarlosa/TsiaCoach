@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.PracticeItems;
 using TsiaCoach.Domain.Semantics;
 using TsiaCoach.Domain.ValueObjects;

@@ -1,3 +1,4 @@
+import type { AuthoringGoal, GoalAdapter } from './goals/goal.types'
 import type {
   RodTrain,
   SceneResult,
@@ -9,6 +10,7 @@ export type AuthoringStep = {
   title: string
   prompt: string
   trains: RodTrain[]
+  goal: AuthoringGoal | null
 }
 
 export type StepMetadataPatch =
@@ -39,6 +41,8 @@ export type AuthoringSceneAdapter = {
 }
 
 export type LevelAuthoringOptions = {
+  goals: GoalAdapter
+  beforeChange?: () => boolean
   scene: AuthoringSceneAdapter
   editable: () => boolean
 }

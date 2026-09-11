@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.Mathematics;
 using TsiaCoach.Domain.SampleQuestions;
 using TsiaCoach.Domain.SampleScaffolds;
@@ -119,6 +120,7 @@ public sealed class ScaffoldDomainTests
             {
                 RodResource rod => rod.Id,
                 RodSeriesResource series => series.Id,
+                BaseTenBlockResource block => block.Id,
                 _ => throw new InvalidOperationException("Unsupported resource.")
             })
             .ToHashSet();

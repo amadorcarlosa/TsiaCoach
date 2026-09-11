@@ -5,6 +5,7 @@ export type ScaffoldStep = components['schemas']['ScaffoldStepResponse']
 export type ScaffoldResource = components['schemas']['ScaffoldResourceResponse']
 export type RodResource = components['schemas']['ScaffoldResourceResponseRodResourceResponse']
 export type RodSeriesResource = components['schemas']['ScaffoldResourceResponseRodSeriesResourceResponse']
+export type BaseTenBlockResource = components['schemas']['ScaffoldResourceResponseBaseTenBlockResourceResponse']
 export type ScaffoldScene = components['schemas']['ScaffoldSceneResponse']
 export type QuantityJoinScene = components['schemas']['ScaffoldSceneResponseQuantityJoinSceneResponse']
 export type GridScene = components['schemas']['ScaffoldSceneResponseGridSceneResponse']
@@ -23,6 +24,8 @@ export type CompletedScaffoldSessionState =
   components['schemas']['ScaffoldSessionStateResponseCompletedScaffoldSessionResponse']
 export type ScaffoldLearnerStep = components['schemas']['ScaffoldLearnerStepResponse']
 export type ScaffoldLearnerResource = components['schemas']['ScaffoldLearnerResourceResponse']
+export type ScaffoldLearnerBaseTenBlockResource =
+  components['schemas']['ScaffoldLearnerResourceResponseScaffoldLearnerBaseTenBlockResourceResponse']
 export type ScaffoldLearnerRodResource =
   components['schemas']['ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse']
 export type ScaffoldLearnerRodSeriesResource =

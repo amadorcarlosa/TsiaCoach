@@ -121,8 +121,9 @@ public sealed class CoachingTurnService(
             return new(CoachingTurnResultKind.Cancelled);
         }
 
-        if (runResult.Error is AgentError error)
+        if (runResult.Error is not null)
         {
+            AgentError error = runResult.Error.Value;
             CoachingTurnResultKind mapped = MapAgentError(error);
 
             logger.LogWarning(

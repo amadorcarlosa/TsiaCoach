@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.ValueObjects;
 
 namespace TsiaCoach.Domain.Scaffolds;
@@ -14,9 +15,16 @@ public sealed record RodSeriesResource(
     IReadOnlyList<UnitLength> Lengths
 );
 
+public sealed record BaseTenBlockResource(
+    ScaffoldResourceId Id,
+    Base10Denomination Denomination,
+    ResourceMultiplicity Multiplicity
+);
+
 public union ScaffoldResource(
     RodResource,
-    RodSeriesResource
+    RodSeriesResource,
+    BaseTenBlockResource
 );
 
 public sealed record LiteralLength(

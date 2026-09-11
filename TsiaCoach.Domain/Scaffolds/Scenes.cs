@@ -1,3 +1,4 @@
+using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.ValueObjects;
 
 namespace TsiaCoach.Domain.Scaffolds;

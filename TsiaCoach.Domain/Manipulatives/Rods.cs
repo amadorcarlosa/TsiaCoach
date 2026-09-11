@@ -1,7 +1,8 @@
 using System.Collections.ObjectModel;
+using TsiaCoach.Domain.Scaffolds;
 using TsiaCoach.Domain.ValueObjects;
 
-namespace TsiaCoach.Domain.Scaffolds;
+namespace TsiaCoach.Domain.Manipulatives;
 
 /// <summary>The ten Cuisenaire colours, numbered by the length each one stands for.</summary>
 public enum RodColor

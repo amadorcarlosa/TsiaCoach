@@ -125,6 +125,7 @@ export function useAuthoringControls(
   }
 
   return {
+    reset: () => { pendingStepId.value = null; pendingDeleteId.value = null; message.value = '' },
     pendingStepId: readonly(pendingStepId),
     pendingDeleteId: readonly(pendingDeleteId),
     pendingDeleteTitle: computed(() => pendingDelete.value?.title ?? ''),

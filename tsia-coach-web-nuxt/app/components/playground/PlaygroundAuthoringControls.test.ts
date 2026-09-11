@@ -1,3 +1,4 @@
+import { createArrayGoalAdapter } from './goals/board-goal-adapters'
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
@@ -19,6 +20,7 @@ function setup() {
   })
   const checkReplacement = vi.fn(scene.checkReplacement)
   const authoring = useLevelAuthoring({
+    goals: createArrayGoalAdapter({ columns: 24, rows: 12 }),
     scene: {
       read: () => scene.trains.value, capture: () => copyScene(scene.trains.value),
       checkReplacement, replace: scene.replace,
