@@ -1,6 +1,9 @@
 import { test as base, expect, type CDPSession, type Page, type Locator } from '@playwright/test'
 
-type PlaygroundKind = 'Bar' | 'Array' | 'Fraction'
+type PlaygroundKind = 'Bar' | 'Array' | 'Fraction' | 'MathTabla'
+
+const playgroundLabel = (kind: PlaygroundKind) =>
+  kind === 'MathTabla' ? 'MathTabla Playground' : `${kind} Rod Playground`
 
 /**
  * Drives real multi-touch input through CDP; requires a hasTouch context.
@@ -58,11 +61,11 @@ export class Playground {
   }
 
   panel(kind: PlaygroundKind) {
-    return this.page.getByRole('tabpanel', { name: `${kind} Rod Playground`, exact: true })
+    return this.page.getByRole('tabpanel', { name: playgroundLabel(kind), exact: true })
   }
 
   async show(kind: PlaygroundKind) {
-    await this.page.getByRole('tab', { name: `${kind} Rod Playground`, exact: true }).click()
+    await this.page.getByRole('tab', { name: playgroundLabel(kind), exact: true }).click()
     await expect(this.panel(kind)).toBeVisible()
     return this.panel(kind)
   }

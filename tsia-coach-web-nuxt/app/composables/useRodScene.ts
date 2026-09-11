@@ -18,6 +18,7 @@ import {
     type SceneSnapshot,
 } from '~/components/rod/scene/scene-snapshot'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
+import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
 
 
 type Candidate =
@@ -217,6 +218,29 @@ export function useRodScene(policy: ScenePolicy) {
         }))
 
         if (action.type === 'create') {
+            if (action.regionId !== undefined) {
+                if (action.row !== undefined) {
+                    return reject('Choose a region or a row, not both.')
+                }
+                const region = policy.regions?.find(item => item.id === action.regionId)
+                if (!region) return reject('Choose an available region.')
+                const orientation = region.orientations[0]
+                if (!orientation) return reject('This region does not accept rods.')
+
+                for (let y = region.y; y < region.y + region.depth; y++) {
+                    for (let x = region.x; x < region.x + region.width; x++) {
+                        const train: RodTrain = {
+                            id: '', anchor: { x, y },
+                            parts: [{ value: action.value, offset: { x: 0, y: 0 }, orientation }],
+                        }
+                        if (!trainFitsRegion(train, region)) continue
+                        const result = validate([...current, train])
+                        if (result.allowed) return result
+                    }
+                }
+                return reject(`No room for a ${action.value}-rod in this region.`)
+            }
+
             const requestedRow = action.row
 
             if (
@@ -727,6 +751,34 @@ export function useRodScene(policy: ScenePolicy) {
         const minY = -Math.min(...parts.map(part => part.y))
         const maxY = policy.rows - Math.max(...parts.map(part => part.y + part.depth))
         if (minX > maxX || minY > maxY) return { x: 0, y: 0 }
+        if (policy.regions) {
+            const selectedIds = new Set(ids)
+            const selected = trains.value.filter(train => selectedIds.has(train.id))
+            let best = { x: 0, y: 0 }
+            let bestDistance = Number.POSITIVE_INFINITY
+            let bestTravel = Number.POSITIVE_INFINITY
+
+            for (let y = Math.ceil(minY); y <= Math.floor(maxY); y++) {
+                for (let x = Math.ceil(minX); x <= Math.floor(maxX); x++) {
+                    const fits = selected.every(train => {
+                        const proposed = {
+                            ...train,
+                            anchor: { x: train.anchor.x + x, y: train.anchor.y + y },
+                        }
+                        return policy.regions!.some(region => trainFitsRegion(proposed, region))
+                    })
+                    if (!fits) continue
+                    const distance = (x - delta.x) ** 2 + (y - delta.y) ** 2
+                    const travel = x * x + y * y
+                    if (distance < bestDistance || (distance === bestDistance && travel < bestTravel)) {
+                        best = { x: x || 0, y: y || 0 }
+                        bestDistance = distance
+                        bestTravel = travel
+                    }
+                }
+            }
+            return best
+        }
         const x = Math.max(minX, Math.min(maxX, Math.round(delta.x)))
         if (!policy.trackRows) {
             return { x, y: Math.max(minY, Math.min(maxY, Math.round(delta.y))) }

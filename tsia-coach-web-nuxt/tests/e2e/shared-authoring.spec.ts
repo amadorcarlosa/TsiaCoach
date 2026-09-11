@@ -16,7 +16,7 @@ function authoring(panel: Locator) {
   }
 }
 
-for (const kind of ['Bar', 'Array', 'Fraction'] as const) {
+for (const kind of ['Bar', 'Array', 'Fraction', 'MathTabla'] as const) {
   test(`${kind} authoring edits metadata, reorders, cancels and confirms deletion`, async ({ playground: p }) => {
     const panel = await p.show(kind)
     const ui = authoring(panel)

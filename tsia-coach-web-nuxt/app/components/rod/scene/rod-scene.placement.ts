@@ -1,4 +1,5 @@
 import type {RodTrain, ScenePolicy, SceneResult} from "~/components/rod/scene/rod.scene.types.ts";
+import { trainFitsRegion } from './scene-regions'
 
 
 export function validateScene(
@@ -18,6 +19,13 @@ export function validateScene(
             allowed: false,
             reason: 'Keep every part horizontal and on its train’s anchor row.',
         }
+    }
+
+    if (
+        policy.regions &&
+        trains.some(train => !policy.regions!.some(region => trainFitsRegion(train, region)))
+    ) {
+        return { allowed: false, reason: 'Keep each train entirely within one compatible region.' }
     }
 
     const footprints = trains.flatMap(train =>

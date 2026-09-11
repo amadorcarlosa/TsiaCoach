@@ -13,6 +13,15 @@ export type RodTrain = {
   parts: TrainPart[]
 }
 
+export type SceneRegion = {
+  id: string
+  x: number
+  y: number
+  width: number
+  depth: number
+  orientations: readonly TrainPart['orientation'][]
+}
+
 export type AddendPair = readonly [
   CuisenaireRodValue,
   CuisenaireRodValue,
@@ -38,6 +47,7 @@ export type SceneAction =
       type: 'create'
       value: CuisenaireRodValue
       row?: number
+      regionId?: string
     }
     | { type: 'move'; delta: Point }
     | { type: 'clone' }
@@ -57,6 +67,7 @@ export type ScenePolicy = {
   rows: number
   spawnRows: readonly number[]
   trackRows?: readonly number[]
+  regions?: readonly SceneRegion[]
   editable: () => boolean
   allowOrientation: boolean
   allowFactors?: boolean
