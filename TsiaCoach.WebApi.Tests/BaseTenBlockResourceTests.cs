@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using TsiaCoach.Domain.Manipulatives;
 using TsiaCoach.Domain.SampleQuestions;
 using TsiaCoach.Domain.SampleScaffolds;
@@ -33,6 +34,7 @@ public sealed class BaseTenBlockResourceTests
         ScaffoldResource block = new BaseTenBlockResource(
             new ScaffoldResourceId("tens"), Base10Denomination.Tens, ResourceMultiplicity.Repeatable);
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         string authoring = JsonSerializer.Serialize(
             ScaffoldResponseMapper.ToResourceResponse(block), options);
         string learner = JsonSerializer.Serialize(

@@ -410,7 +410,7 @@ export interface components {
             denomination: components["schemas"]["Base10Denomination"];
             /** Format: int32 */
             value: number | string;
-            shape: string;
+            shape: components["schemas"]["BaseTenShape"];
             dimensions: components["schemas"]["BaseTenBlockDimensionsResponse"];
         };
         BaseTenBlockDimensionsResponse: {
@@ -421,6 +421,8 @@ export interface components {
             /** Format: int32 */
             height: number | string;
         };
+        /** @enum {unknown} */
+        BaseTenShape: "cube" | "long" | "flat";
         CharacterSpanResponse: {
             /** Format: int32 */
             start: number | string;
@@ -752,7 +754,7 @@ export interface components {
             /** @enum {string} */
             type?: "baseTenBlockResource";
             id: string;
-            denomination: string;
+            denomination: components["schemas"]["Base10Denomination"];
             multiplicity: string;
         };
         ScaffoldLearnerResourceResponseScaffoldLearnerRodResourceResponse: {
@@ -785,7 +787,7 @@ export interface components {
             /** @enum {string} */
             type?: "baseTenBlockResource";
             id: string;
-            denomination: string;
+            denomination: components["schemas"]["Base10Denomination"];
             multiplicity: string;
         };
         ScaffoldResourceResponseRodResourceResponse: {

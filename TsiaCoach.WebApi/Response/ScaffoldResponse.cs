@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TsiaCoach.Domain.Manipulatives;
 
 namespace TsiaCoach.WebApi.Response;
 
@@ -32,7 +33,7 @@ public abstract record ScaffoldResourceResponse;
 
 public sealed record BaseTenBlockResourceResponse(
     string Id,
-    string Denomination,
+    Base10Denomination Denomination,
     string Multiplicity
 ) : ScaffoldResourceResponse;
 

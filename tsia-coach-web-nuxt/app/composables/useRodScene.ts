@@ -14,10 +14,7 @@ import type {
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
-import {
-    copyScene,
-    type SceneSnapshot,
-} from '~/components/rod/scene/scene-snapshot'
+import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
 

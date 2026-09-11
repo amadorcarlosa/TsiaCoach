@@ -60,7 +60,7 @@ internal static class ScaffoldResponseMapper
                 Lengths: value.Lengths.Select(length => length.Value).ToArray()),
             BaseTenBlockResource value => new ScaffoldLearnerBaseTenBlockResourceResponse(
                 Id: value.Id.Value,
-                Denomination: ContractName(value.Denomination),
+                Denomination: value.Denomination,
                 Multiplicity: ContractName(value.Multiplicity)),
             _ => throw Unsupported("scaffold learner resource", resource.Value)
         };
@@ -97,7 +97,7 @@ internal static class ScaffoldResponseMapper
                 Lengths: value.Lengths.Select(length => length.Value).ToArray()),
             BaseTenBlockResource value => new BaseTenBlockResourceResponse(
                 Id: value.Id.Value,
-                Denomination: ContractName(value.Denomination),
+                Denomination: value.Denomination,
                 Multiplicity: ContractName(value.Multiplicity)),
             _ => throw Unsupported("scaffold resource", resource.Value)
         };
