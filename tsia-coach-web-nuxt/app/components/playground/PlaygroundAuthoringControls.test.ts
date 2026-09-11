@@ -31,8 +31,15 @@ function setup() {
       steps: authoring.steps.value, activeStepId: authoring.activeStepId.value,
       dirty: authoring.dirty.value, blocked: blocked.value,
       pendingStepId: controls.pendingStepId.value, message: controls.message.value,
+      pendingDeleteId: controls.pendingDeleteId.value,
+      pendingDeleteTitle: controls.pendingDeleteTitle.value,
+      deletingDirtyActive: controls.deletingDirtyActive.value,
       onCapture: controls.capture, onUpdate: controls.update,
       'onSelect-step': controls.requestStep, onResolve: controls.resolve,
+      onPatch: controls.patch, onMove: controls.move,
+      'onRequest-delete': controls.requestDelete,
+      'onConfirm-delete': controls.confirmDelete,
+      'onCancel-delete': controls.cancelDelete,
     }),
   }))
   const button = (label: string) => {
@@ -83,6 +90,11 @@ describe('shared authoring controls and controller', () => {
     controls.capture()
     controls.update()
     controls.requestStep('missing')
+    controls.requestDelete('step-2')
+    controls.patch('step-2', { title: 'Blocked' })
+    controls.move('step-2', 'earlier')
+    expect(controls.pendingDeleteId.value).toBeNull()
+    expect(authoring.steps.value.map(step => step.title)).toEqual(['Step 1', 'Step 2'])
     expect(authoring.steps.value).toHaveLength(2)
     expect(authoring.steps.value[1]!.trains).toHaveLength(2)
     expect(controls.pendingStepId.value).toBe('step-1')
@@ -133,5 +145,114 @@ describe('shared authoring controls and controller', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('')
     expect(authoring.steps.value[1]!.trains).toEqual(before)
     expect(authoring.dirty.value).toBe(false)
+  })
+
+  it('routes metadata and movement while retaining a dirty board and positional empty-title fallback', async () => {
+    const { wrapper, button, authoring, scene, add } = setup()
+    add()
+    await button('Capture step').trigger('click')
+    add()
+    await button('Capture step').trigger('click')
+    add()
+    const before = copyScene(scene.trains.value)
+    const saved = authoring.steps.value.map(step => copyScene(step.trains))
+    await wrapper.get('input').setValue('')
+    await wrapper.get('textarea').setValue('Compare the lengths.')
+    expect(wrapper.get('button[aria-pressed="true"]').text().replace(/\s+/g, ' ')).toBe('Step 2 (unsaved)')
+    await button('Move earlier').trigger('click')
+    expect(wrapper.get('button[aria-pressed="true"]').text().replace(/\s+/g, ' ')).toBe('Step 1 (unsaved)')
+    expect(button('Move earlier').attributes('disabled')).toBeDefined()
+    expect(authoring.steps.value.map(step => step.id)).toEqual(['step-2', 'step-1'])
+    expect(authoring.steps.value[0]).toMatchObject({ title: '', prompt: 'Compare the lengths.' })
+    expect(authoring.steps.value.map(step => step.trains)).toEqual([...saved].reverse())
+    expect(scene.trains.value).toEqual(before)
+    expect(authoring.dirty.value).toBe(true)
+  })
+
+  it('locks other intentions during deletion and allows cancelling without losing changes', async () => {
+    const { wrapper, button, authoring, controls, scene, add } = setup()
+    add()
+    await button('Capture step').trigger('click')
+    await button('Capture step').trigger('click')
+    add()
+    await button('Delete step').trigger('click')
+    const before = copyScene(scene.trains.value)
+    const steps = authoring.steps.value
+    expect(wrapper.get('[aria-label="Confirm step deletion"]').text()).toContain('Cancel and capture another step')
+    expect(wrapper.get('[aria-label="Confirm step deletion"]').findAll('button').map(b => b.text()))
+      .toEqual(['Delete step and discard changes', 'Cancel'])
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    for (const item of wrapper.get('[aria-label="Authoring steps"]').findAll('button')) {
+      expect(item.attributes('disabled')).toBeDefined()
+    }
+    controls.capture()
+    controls.update()
+    controls.requestStep('step-1')
+    controls.patch('step-2', { title: 'Blocked' })
+    controls.move('step-2', 'earlier')
+    controls.requestDelete('step-1')
+    expect(authoring.steps.value).toEqual(steps)
+    expect(controls.pendingStepId.value).toBeNull()
+    expect(controls.pendingDeleteId.value).toBe('step-2')
+    await button('Cancel').trigger('click')
+    expect(controls.pendingDeleteId.value).toBeNull()
+    expect(scene.trains.value).toEqual(before)
+    expect(authoring.dirty.value).toBe(true)
+    await button('Capture step').trigger('click')
+    expect(authoring.steps.value[2]!.trains).toEqual(before)
+  })
+
+  it('rechecks dirty state at confirmation when the board changes after opening deletion', async () => {
+    const { wrapper, button, authoring, controls, scene, add } = setup()
+    add()
+    await button('Capture step').trigger('click')
+    await button('Delete step').trigger('click')
+    expect(controls.deletingDirtyActive.value).toBe(false)
+    add()
+    const before = copyScene(scene.trains.value)
+    controls.confirmDelete(false)
+    await wrapper.vm.$nextTick()
+    expect(controls.pendingDeleteId.value).toBe('step-1')
+    expect(controls.deletingDirtyActive.value).toBe(true)
+    expect(wrapper.get('[role="status"]').text()).toBe('Confirm discarding this step’s unsaved board changes.')
+    expect(scene.trains.value).toEqual(before)
+    expect(authoring.steps.value).toHaveLength(1)
+    await button('Delete step and discard changes').trigger('click')
+    expect(controls.pendingDeleteId.value).toBeNull()
+    expect(authoring.steps.value).toEqual([])
+    expect(authoring.activeStepId.value).toBeNull()
+    expect(authoring.dirty.value).toBe(false)
+    expect(scene.trains.value).toEqual([])
+  })
+
+  it('keeps rejected deletion pending for retry and permits cancellation while blocked', async () => {
+    const { wrapper, button, authoring, controls, blocked, scene, add, checkReplacement } = setup()
+    controls.requestDelete('missing')
+    expect(controls.message.value).toBe('Unknown step.')
+    expect(controls.pendingDeleteId.value).toBeNull()
+    add()
+    await button('Capture step').trigger('click')
+    controls.requestDelete('step-1')
+    const before = copyScene(scene.trains.value)
+    checkReplacement.mockReturnValueOnce({ allowed: false, reason: 'Replacement rejected.' })
+    controls.confirmDelete()
+    await wrapper.vm.$nextTick()
+    expect(controls.pendingDeleteId.value).toBe('step-1')
+    expect(wrapper.get('[role="status"]').text()).toBe('Replacement rejected.')
+    expect(authoring.steps.value).toHaveLength(1)
+    expect(scene.trains.value).toEqual(before)
+    blocked.value = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[aria-label="Confirm step deletion"]').findAll('button')[0]!.attributes('disabled')).toBeDefined()
+    controls.confirmDelete(true)
+    expect(authoring.steps.value).toHaveLength(1)
+    await button('Cancel').trigger('click')
+    expect(controls.pendingDeleteId.value).toBeNull()
+    expect(controls.message.value).toBe('')
+    blocked.value = false
+    controls.requestDelete('step-1')
+    controls.confirmDelete()
+    expect(controls.pendingDeleteId.value).toBeNull()
+    expect(authoring.steps.value).toEqual([])
   })
 })

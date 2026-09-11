@@ -7,7 +7,18 @@ import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 export type AuthoringStep = {
   id: string
   title: string
+  prompt: string
   trains: RodTrain[]
+}
+
+export type StepMetadataPatch =
+  Partial<Pick<AuthoringStep, 'title' | 'prompt'>>
+
+export type StepDirection = 'earlier' | 'later'
+
+export type DeleteStepOptions = {
+  confirmed: boolean
+  discardChanges?: boolean
 }
 
 export type SwitchDecision = 'save' | 'discard' | 'cancel'

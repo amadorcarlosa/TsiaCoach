@@ -9,8 +9,133 @@ function authoring(panel: Locator) {
     update: controls.getByRole('button', { name: 'Update step', exact: true }),
     step: (n: number) => controls.getByRole('button', { name: new RegExp(`^Step ${n}(?:$|\\s)`) }),
     prompt: panel.getByRole('group', { name: 'Unsaved step changes', exact: true }),
+    details: panel.getByRole('group', { name: 'Step details', exact: true }),
+    title: panel.getByRole('textbox', { name: 'Title', exact: true }),
+    instruction: panel.getByRole('textbox', { name: 'Prompt', exact: true }),
+    deletion: panel.getByRole('group', { name: 'Confirm step deletion', exact: true }),
   }
 }
+
+for (const kind of ['Bar', 'Array', 'Fraction'] as const) {
+  test(`${kind} authoring edits metadata, reorders, cancels and confirms deletion`, async ({ playground: p }) => {
+    const panel = await p.show(kind)
+    const ui = authoring(panel)
+    await p.add(kind, 'two')
+    const original = await snapshot(p, panel)
+    await ui.capture.click()
+    await ui.title.fill('Original arrangement')
+    await ui.instruction.fill('Compare these rods.')
+    if (kind === 'Fraction') {
+      await panel.getByRole('button', { name: /^Fraction 1 denominator/ }).click()
+    }
+    const added = await p.add(kind, 'three')
+    const changed = await snapshot(p, panel)
+    await ui.capture.click()
+    await added.click()
+    await expect(added).toHaveClass(/--selected/)
+    await ui.title.fill('Second arrangement')
+    await ui.instruction.fill('Explain what changed.\nUse the board.')
+    const second = ui.controls.getByRole('button', { name: 'Second arrangement', exact: true })
+    const first = ui.controls.getByRole('button', { name: 'Original arrangement', exact: true })
+    await expect(second).toHaveAttribute('aria-pressed', 'true')
+    await expect(ui.update).toBeDisabled()
+    await expect(ui.details.getByRole('button', { name: 'Move later', exact: true })).toBeDisabled()
+    await ui.details.getByRole('button', { name: 'Move earlier', exact: true }).click()
+    await expect(ui.controls.getByRole('button')).toHaveText(['Capture step', 'Update step', 'Second arrangement', 'Original arrangement'])
+    await expect(second).toHaveAttribute('aria-pressed', 'true')
+    await expect(added).toHaveClass(/--selected/)
+    await expect.poll(() => snapshot(p, panel)).toEqual(changed)
+    await expect(ui.details.getByRole('button', { name: 'Move earlier', exact: true })).toBeDisabled()
+
+    // Visit both snapshots so metadata edits and reordering cannot mask a save.
+    await first.click()
+    await expect.poll(() => snapshot(p, panel)).toEqual(original)
+    await expect(ui.title).toHaveValue('Original arrangement')
+    await expect(ui.instruction).toHaveValue('Compare these rods.')
+    await second.click()
+    await expect.poll(() => snapshot(p, panel)).toEqual(changed)
+    await expect(ui.instruction).toHaveValue('Explain what changed.\nUse the board.')
+    await ui.details.getByRole('button', { name: 'Delete step', exact: true }).click()
+    await expect(ui.deletion).toContainText('Second arrangement')
+    await expect(ui.prompt).toHaveCount(0)
+    await expect(ui.title).toBeDisabled()
+    await expect(ui.capture).toBeDisabled()
+    await ui.deletion.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(ui.deletion).toHaveCount(0)
+    await expect(second).toBeFocused()
+    await expect(ui.controls.getByRole('button')).toHaveCount(4)
+    await expect.poll(() => snapshot(p, panel)).toEqual(changed)
+
+    await ui.details.getByRole('button', { name: 'Delete step', exact: true }).click()
+    await ui.deletion.getByRole('button', { name: 'Delete step', exact: true }).click()
+    await expect(ui.deletion).toHaveCount(0)
+    await expect(second).toHaveCount(0)
+    await expect(first).toBeFocused()
+    await expect(first).toHaveAttribute('aria-pressed', 'true')
+    await expect(ui.controls.getByRole('button')).toHaveCount(3)
+    await expect.poll(() => snapshot(p, panel)).toEqual(original)
+    await expect(ui.title).toHaveValue('Original arrangement')
+    await expect(ui.instruction).toHaveValue('Compare these rods.')
+    await expect(ui.update).toBeDisabled()
+  })
+}
+
+test('dirty deletion explicitly discards changes and offers cancellation to capture another step', async ({ playground: p }) => {
+  const panel = await p.show('Bar')
+  const ui = authoring(panel)
+  await p.add('Bar', 'two')
+  await ui.capture.click()
+  const original = await snapshot(p, panel)
+  await p.add('Bar', 'three')
+  await ui.capture.click()
+  await p.add('Bar', 'one')
+  const working = await snapshot(p, panel)
+  await ui.details.getByRole('button', { name: 'Delete step', exact: true }).click()
+  await expect(ui.deletion).toContainText('Its unsaved board changes will also be discarded.')
+  await expect(ui.deletion).toContainText('Cancel and capture another step if you want to keep them.')
+  await expect(ui.deletion.getByRole('button')).toHaveText(['Delete step and discard changes', 'Cancel'])
+  await expect(ui.prompt).toHaveCount(0)
+  await ui.deletion.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(ui.step(2)).toBeFocused()
+  await expect(ui.step(2)).toContainText('(unsaved)')
+  await expect.poll(() => snapshot(p, panel)).toEqual(working)
+
+  // Cancellation really does allow preserving the working board as another step.
+  await ui.capture.click()
+  await ui.step(2).click()
+  await p.add('Bar', 'one')
+  await ui.details.getByRole('button', { name: 'Delete step', exact: true }).click()
+  await ui.deletion.getByRole('button', { name: 'Delete step and discard changes', exact: true }).click()
+  await expect(ui.step(2)).toHaveCount(0)
+  await expect(ui.step(3)).toBeFocused()
+  await expect(ui.step(3)).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => snapshot(p, panel)).toEqual(working)
+  await expect(ui.update).toBeDisabled()
+  await ui.step(1).click()
+  await expect.poll(() => snapshot(p, panel)).toEqual(original)
+})
+
+test('deleting the sole step clears the board and returns focus to Capture', async ({ playground: p }) => {
+  const panel = await p.show('Fraction')
+  const ui = authoring(panel)
+  await p.add('Fraction', 'two')
+  await ui.capture.click()
+  await ui.title.fill('')
+  await expect(ui.step(1)).toHaveText('Step 1')
+  await ui.details.getByRole('button', { name: 'Delete step', exact: true }).click()
+  await expect(ui.deletion).toContainText('Untitled step')
+  await ui.deletion.getByRole('button', { name: 'Delete step', exact: true }).click()
+  await expect(ui.deletion).toHaveCount(0)
+  await expect(ui.controls.getByRole('button')).toHaveText(['Capture step', 'Update step'])
+  await expect(ui.controls.getByRole('button', { pressed: true })).toHaveCount(0)
+  await expect(ui.details).toHaveCount(0)
+  await expect(panel.locator('[data-piece-id]')).toHaveCount(0)
+  await expect(ui.update).toBeDisabled()
+  await expect(ui.capture).toBeFocused()
+  await ui.capture.click()
+  await expect(ui.step(1)).toHaveAttribute('aria-pressed', 'true')
+  await expect(ui.update).toBeDisabled()
+})
 
 async function snapshot(p: Playground, panel: Locator) {
   return Promise.all((await panel.locator('[data-piece-id]').all()).map(async train => ({

@@ -270,11 +270,19 @@ function onRemove(): void {
       :dirty="authoring.dirty.value"
       :blocked="blocked"
       :pending-step-id="authoringControls.pendingStepId.value"
+      :pending-delete-id="authoringControls.pendingDeleteId.value"
+      :pending-delete-title="authoringControls.pendingDeleteTitle.value"
+      :deleting-dirty-active="authoringControls.deletingDirtyActive.value"
       :message="authoringControls.message.value"
       @capture="authoringControls.capture"
       @update="authoringControls.update"
       @select-step="authoringControls.requestStep"
       @resolve="authoringControls.resolve"
+      @patch="authoringControls.patch"
+      @move="authoringControls.move"
+      @request-delete="authoringControls.requestDelete"
+      @confirm-delete="authoringControls.confirmDelete"
+      @cancel-delete="authoringControls.cancelDelete"
     />
 
     <p role="status" aria-live="polite">{{ message }}</p>
