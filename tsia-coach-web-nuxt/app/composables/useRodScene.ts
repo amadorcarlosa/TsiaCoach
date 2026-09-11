@@ -1,15 +1,15 @@
 import { readonly, ref } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type {
+    AddendChoice,
+    FactorChoice,
     RodTrain,
     SceneAction,
-    ScenePolicy,
     SceneApplyResult,
+    ScenePolicy,
     SceneResult,
     TrainPart
-} from "~/components/rod/scene/rod.scene.types.ts";
-import type { AddendChoice } from '~/components/rod/scene/rod.scene.types'
-import type { FactorChoice } from '~/components/rod/scene/rod.scene.types'
+} from '~/components/rod/scene/rod.scene.types'
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
@@ -18,6 +18,16 @@ import { trainOrientation } from '~/components/rod/scene/train-orientation'
 
 type Candidate =
     | { allowed: true; trains: RodTrain[] }
+    | { allowed: false; reason: string }
+
+type LinearLayout =
+    | {
+        allowed: true
+        orientation: TrainPart['orientation']
+        vertical: boolean
+        start: Point
+        total: number
+    }
     | { allowed: false; reason: string }
 
 export function useRodScene(policy: ScenePolicy) {
@@ -36,6 +46,67 @@ export function useRodScene(policy: ScenePolicy) {
         return result.allowed
             ? { allowed: true, trains: candidate }
             : result
+    }
+
+    function linearLayout(train: RodTrain): LinearLayout {
+        const first = train.parts[0]
+
+        if (!first) {
+            return { allowed: false, reason: 'This train has no parts.' }
+        }
+
+        const orientation = first.orientation
+
+        if (train.parts.some(part => part.orientation === 'tower')) {
+            return {
+                allowed: false,
+                reason: 'Lay the tower horizontally or vertically before decomposing.',
+            }
+        }
+
+        if (train.parts.some(part => part.orientation !== orientation)) {
+            return {
+                allowed: false,
+                reason: 'Arrange each selected train horizontally or vertically first.',
+            }
+        }
+
+        const vertical = orientation === 'vertical'
+
+        const ordered = [...train.parts].sort((a, b) =>
+            vertical
+                ? a.offset.y - b.offset.y
+                : a.offset.x - b.offset.x,
+        )
+
+        const start = { ...ordered[0]!.offset }
+        let total = 0
+
+        // Require a continuous line and preserve its occupied footprint.
+        for (const part of ordered) {
+            const expectedX = start.x + (vertical ? 0 : total)
+            const expectedY = start.y + (vertical ? total : 0)
+
+            if (
+                part.offset.x !== expectedX ||
+                part.offset.y !== expectedY
+            ) {
+                return {
+                    allowed: false,
+                    reason: 'Arrange each selected train in one continuous line first.',
+                }
+            }
+
+            total += part.value
+        }
+
+        return {
+            allowed: true,
+            orientation,
+            vertical,
+            start,
+            total,
+        }
     }
 
     function build(
@@ -57,7 +128,24 @@ export function useRodScene(policy: ScenePolicy) {
         }))
 
         if (action.type === 'create') {
-            for (const y of policy.spawnRows) {
+            const requestedRow = action.row
+
+            if (
+                requestedRow !== undefined &&
+                (
+                    !Number.isInteger(requestedRow) ||
+                    !policy.spawnRows.includes(requestedRow)
+                )
+            ) {
+                return reject('Choose an available track.')
+            }
+
+            const candidateRows =
+                requestedRow === undefined
+                    ? policy.spawnRows
+                    : [requestedRow]
+
+            for (const y of candidateRows) {
                 for (let x = 0; x < policy.columns; x++) {
                     const result = validate([
                         ...current,
@@ -286,56 +374,17 @@ export function useRodScene(policy: ScenePolicy) {
             }
             case 'regroup-ones': {
                 for (const train of selected) {
-                    const orientation = train.parts[0]!.orientation
-
-                    if (train.parts.some(part => part.orientation === 'tower')) {
-                        return reject(
-                            'Lay the tower horizontally or vertically before decomposing.',
-                        )
-                    }
-
-                    if (train.parts.some(part => part.orientation !== orientation)) {
-                        return reject(
-                            'Arrange each selected train horizontally or vertically first.',
-                        )
-                    }
-
-                    const vertical = orientation === 'vertical'
-
-                    const ordered = [...train.parts].sort((a, b) =>
-                        vertical
-                            ? a.offset.y - b.offset.y
-                            : a.offset.x - b.offset.x,
-                    )
-
-                    const firstOffset = { ...ordered[0]!.offset }
-                    let cursor = 0
-
-                    // Require a continuous line and preserve its occupied footprint.
-                    for (const part of ordered) {
-                        const expectedX = firstOffset.x + (vertical ? 0 : cursor)
-                        const expectedY = firstOffset.y + (vertical ? cursor : 0)
-
-                        if (
-                            part.offset.x !== expectedX ||
-                            part.offset.y !== expectedY
-                        ) {
-                            return reject(
-                                'Arrange each selected train in one continuous line first.',
-                            )
-                        }
-
-                        cursor += part.value
-                    }
+                    const layout = linearLayout(train)
+                    if (!layout.allowed) return layout
 
                     train.parts = Array.from(
-                        { length: cursor },
+                        { length: layout.total },
                         (_, index): TrainPart => ({
                             value: 1,
-                            orientation,
+                            orientation: layout.orientation,
                             offset: {
-                                x: firstOffset.x + (vertical ? 0 : index),
-                                y: firstOffset.y + (vertical ? index : 0),
+                                x: layout.start.x + (layout.vertical ? 0 : index),
+                                y: layout.start.y + (layout.vertical ? index : 0),
                             },
                         }),
                     )
@@ -346,54 +395,10 @@ export function useRodScene(policy: ScenePolicy) {
 
             case 'regroup-addends': {
                 for (const train of selected) {
-                    const first = train.parts[0]
+                    const layout = linearLayout(train)
+                    if (!layout.allowed) return layout
 
-                    if (!first) {
-                        return reject('This train has no parts.')
-                    }
-
-                    const orientation = first.orientation
-
-                    if (
-                        orientation === 'tower' ||
-                        train.parts.some(part => part.orientation === 'tower')
-                    ) {
-                        return reject(
-                            'Lay the tower horizontally or vertically before decomposing.',
-                        )
-                    }
-
-                    if (train.parts.some(part => part.orientation !== orientation)) {
-                        return reject(
-                            'Arrange each selected train horizontally or vertically first.',
-                        )
-                    }
-
-                    const vertical = orientation === 'vertical'
-
-                    const ordered = [...train.parts].sort((a, b) =>
-                        vertical
-                            ? a.offset.y - b.offset.y
-                            : a.offset.x - b.offset.x,
-                    )
-
-                    const start = { ...ordered[0]!.offset }
-                    let total = 0
-
-                    for (const part of ordered) {
-                        if (
-                            part.offset.x !== start.x + (vertical ? 0 : total) ||
-                            part.offset.y !== start.y + (vertical ? total : 0)
-                        ) {
-                            return reject(
-                                'Arrange each selected train in one continuous line first.',
-                            )
-                        }
-
-                        total += part.value
-                    }
-
-                    const candidates = addendPairs(total)
+                    const candidates = addendPairs(layout.total)
                     const requested = action.pair
 
                     const pair = requested
@@ -407,7 +412,7 @@ export function useRodScene(policy: ScenePolicy) {
                         return reject(
                             requested
                                 ? 'Choose two rods valued 1–10 that add to this object’s value.'
-                                : `Value ${total} has no two-addend arrangement using rods valued 1–10.`,
+                                : `Value ${layout.total} has no two-addend arrangement using rods valued 1–10.`,
                         )
                     }
 
@@ -417,10 +422,10 @@ export function useRodScene(policy: ScenePolicy) {
                     train.parts = pair.map((value): TrainPart => {
                         const part: TrainPart = {
                             value,
-                            orientation,
+                            orientation: layout.orientation,
                             offset: {
-                                x: start.x + (vertical ? 0 : cursor),
-                                y: start.y + (vertical ? cursor : 0),
+                                x: layout.start.x + (layout.vertical ? 0 : cursor),
+                                y: layout.start.y + (layout.vertical ? cursor : 0),
                             },
                         }
 
@@ -511,11 +516,6 @@ export function useRodScene(policy: ScenePolicy) {
                     ...current.filter(train => !selectedIds.has(train.id)),
                     ...released,
                 ])
-            }
-
-            default: {
-                const exhaustive: never = action
-                return exhaustive
             }
         }
     }

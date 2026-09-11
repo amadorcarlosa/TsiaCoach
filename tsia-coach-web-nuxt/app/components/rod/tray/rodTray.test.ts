@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import RodTray from './RodTray.vue'
 import CuisenaireRod from "~/components/rod/cuisenaire/CuisenaireRod.vue";
-import { cusisenaireRodPalette, getRodDefinition } from '../rod.types'
+import { cuisenaireRodPalette, getRodDefinition } from '../rod.types'
 import { ariaRod, ariaTray, type RodTrayProps } from './rodTray.types'
 
 // One place to build props. Tests override only what they care about.
@@ -41,7 +41,7 @@ describe('RodTray', () => {
         expect(wrapper.getComponent(CuisenaireRod).props()).toEqual({
             dimensions: { width: 5, depth: 1, height: 1 },
             unitSize: 24,
-            appearance: cusisenaireRodPalette[5],
+            appearance: cuisenaireRodPalette[5],
             label: '5',
         })
     })

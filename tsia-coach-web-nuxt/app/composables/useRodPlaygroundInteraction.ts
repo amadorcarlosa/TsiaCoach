@@ -6,6 +6,7 @@ import {
   watch,
   type Ref,
 } from 'vue'
+import type { Point } from '~/components/grid/gridPointer'
 import type { SceneAction } from '~/components/rod/scene/rod.scene.types'
 import { sceneCancellationKey } from '~/components/rod/scene/scene-cancellation'
 import type { useRodScene } from './useRodScene'
@@ -21,6 +22,7 @@ type Options = {
 
   /** Reactive getter; incrementing its source cancels synchronously. */
   cancelVersion: () => number
+  onBoardClick?: (point: Point) => void
 }
 
 export function useRodPlaygroundInteraction(options: Options) {
@@ -57,6 +59,7 @@ export function useRodPlaygroundInteraction(options: Options) {
     viewport: options.viewport,
     disabled: () => baseBlocked.value,
     beforeStart: cancelMovement,
+    onBoardClick: point => options.onBoardClick?.(point),
   })
 
   const blocked = computed(

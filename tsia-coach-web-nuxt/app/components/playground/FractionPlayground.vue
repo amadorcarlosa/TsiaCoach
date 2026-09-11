@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import RodTabla from '~/components/tabla/RodTabla.vue'
-import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
+import FractionRodTabla from '~/components/tabla/FractionRodTabla.vue'
+import { getFractionTablaGeometry } from '~/components/tabla/fraction-tabla.geometry'
+import { fractionReadout } from '~/components/tabla/fraction-readout'
+import type { Point } from '~/components/grid/gridPointer'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
@@ -21,16 +23,22 @@ const props = withDefaults(defineProps<{
   cancelVersion: undefined,
 })
 
-const targetCount = 3
+const pairCount = 2
 const fullColumns = 24
 const horizontalPadding = 32
 
-const boardDefinition = getTablaGeometry(
-  targetCount,
+const boardDefinition = getFractionTablaGeometry(
+  pairCount,
   36,
   fullColumns,
 )
 
+const trackRows = boardDefinition.targets.flatMap(target => [
+  target.numeratorRow,
+  target.denominatorRow,
+])
+
+const activeRow = ref(trackRows[0]!)
 const {
   boardViewport,
   workspaceTools,
@@ -59,8 +67,8 @@ const {
 })
 
 const geometry = computed(() =>
-  getTablaGeometry(
-    targetCount,
+  getFractionTablaGeometry(
+    pairCount,
     cellSize.value,
     visibleColumns.value,
   ),
@@ -88,12 +96,25 @@ const editingDisabled = computed(
 const scene = useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
-  spawnRows: boardDefinition.targets.map(target => target.row),
-  trackRows: boardDefinition.targets.map(target => target.row),
+  spawnRows: trackRows,
+  trackRows,
   editable: () => !editingDisabled.value,
   allowOrientation: false,
   allowFactors: false,
 })
+
+const readouts = computed(() =>
+  fractionReadout(scene.trains.value, boardDefinition.targets),
+)
+
+function activateTrack(row: number): void {
+  if (blocked.value || !trackRows.includes(row)) return
+  activeRow.value = row
+}
+
+function onBoardClick(point: Point): void {
+  activateTrack(Math.floor(point.y))
+}
 
 const {
   menu,
@@ -109,6 +130,7 @@ const {
   viewport: boardViewport,
   disabled: () => editingDisabled.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
+  onBoardClick,
 })
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
@@ -131,7 +153,13 @@ function onRemoveSelectedRod(): void {
 }
 
 function onChooseRod(value: CuisenaireRodValue): void {
-  scene.apply([], { type: 'create', value })
+  if (blocked.value) return
+
+  scene.apply([], {
+    type: 'create',
+    value,
+    row: activeRow.value,
+  })
 }
 
 function intersectsPreview(
@@ -155,7 +183,7 @@ function intersectsPreview(
     :set-board-viewport="setBoardViewport"
     :set-workspace-tools="setWorkspaceTools"
     :short-landscape="shortLandscape"
-    tray-id="tabla-rod-tray"
+    tray-id="fraction-rod-tray"
     :tray-open="trayOpen"
     :workspace-style="workspaceStyle"
     @board-lost-pointer-capture="marquee.onLostPointerCapture"
@@ -165,12 +193,16 @@ function intersectsPreview(
     @update-tray-open="trayOpen = $event"
   >
     <template #board>
-      <RodTabla
-        :target-count="targetCount"
+      <FractionRodTabla
+        :pair-count="pairCount"
         :cell-size="cellSize"
         :visible-columns="visibleColumns"
+        :active-row="activeRow"
+        :readouts="readouts"
+        :disabled="blocked"
         viewport-padding="var(--workspace-padding-y) 16px"
         embedded
+        @activate-track="activateTrack"
       >
         <template #pieces="{ cellSize: pieceCellSize }">
           <SceneRod
@@ -201,7 +233,7 @@ function intersectsPreview(
             :cell-size="pieceCellSize"
           />
         </template>
-      </RodTabla>
+      </FractionRodTabla>
     </template>
 
     <template #menu>
@@ -217,6 +249,23 @@ function intersectsPreview(
     </template>
 
     <template #after-workspace>
+      <ul
+        class="fraction-readouts"
+        aria-label="Fraction readouts"
+      >
+        <li
+          v-for="(readout, index) in readouts"
+          :key="readout.pairId"
+          :data-fraction-pair="readout.pairId"
+        >
+          <span>Fraction {{ index + 1 }}: </span>
+          <span v-if="readout.complete">
+            {{ readout.numerator }}/{{ readout.denominator }}
+          </span>
+          <span v-else>incomplete</span>
+        </li>
+      </ul>
+
       <p
         class="placement-message"
         role="status"
@@ -230,6 +279,17 @@ function intersectsPreview(
 </template>
 
 <style scoped>
+.fraction-readouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  max-width: 1100px;
+  margin: 8px auto;
+  padding: 0;
+  list-style: none;
+  color: var(--mt-text);
+}
+
 .placement-message {
   max-width: 1100px;
   margin: 8px auto;

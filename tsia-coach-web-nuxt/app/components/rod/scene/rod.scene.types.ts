@@ -34,7 +34,11 @@ export type FactorChoice = {
 }
 
 export type SceneAction =
-    | { type: 'create'; value: CuisenaireRodValue }
+    | {
+      type: 'create'
+      value: CuisenaireRodValue
+      row?: number
+    }
     | { type: 'move'; delta: Point }
     | { type: 'clone' }
     | { type: 'delete' }

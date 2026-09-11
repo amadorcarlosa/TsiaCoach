@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type RawFetch = ((url: string, options?: unknown) => Promise<{ status: number; _data: unknown }>)
+type CoachAttempt = typeof import('#server/utils/coaching')['coachAttempt']
+type CoachEvent = Parameters<CoachAttempt>[0]
 
 function stubNitroGlobals() {
   vi.stubGlobal('useRuntimeConfig', () => ({
@@ -48,17 +50,18 @@ describe('coaching proxy contract', () => {
 
     const { coachAttempt } = await import('#server/utils/coaching')
 
-    await coachAttempt({} as any, 'attempt-1', {
+    const unsafeRequest = {
       event: 'helpRequested',
-       
       model: 'blocked',
       instructions: 'blocked',
       history: [],
       phase: 'blocked',
       misconception: 'blocked',
       suggestedStepId: 'blocked',
-      correctAnswerId: 'blocked'
-    } as any)
+      correctAnswerId: 'blocked',
+    } as const
+
+    await coachAttempt({} as CoachEvent, 'attempt-1', unsafeRequest)
 
     const [url, options] = rawFetch.mock.calls[0] as [string, { method: string; body: Record<string, unknown> }]
     expect(url).toBe('/api/attempts/attempt-1/coach')
@@ -82,7 +85,7 @@ describe('coaching proxy contract', () => {
     vi.stubGlobal('$fetch', { raw: rawFetch })
     const { coachAttempt, parseCoachTurnRequest } = await import('#server/utils/coaching')
 
-    await coachAttempt({} as any, 'attempt-1', parseCoachTurnRequest({
+    await coachAttempt({} as CoachEvent, 'attempt-1', parseCoachTurnRequest({
       event: 'probeAnswered',
       answer: 'one left over'
     }))
@@ -147,7 +150,7 @@ describe('coaching proxy contract', () => {
     vi.stubGlobal('$fetch', { raw: rawFetch })
     const { coachAttempt } = await import('#server/utils/coaching')
 
-    await expect(coachAttempt({} as any, 'attempt-1', { event: 'helpRequested' }))
+    await expect(coachAttempt({} as CoachEvent, 'attempt-1', { event: 'helpRequested' }))
       .rejects.toMatchObject({ statusCode: 409 })
   })
 
@@ -160,7 +163,7 @@ describe('coaching proxy contract', () => {
     vi.stubGlobal('$fetch', { raw: rawFetch })
     const { coachAttempt } = await import('#server/utils/coaching')
 
-    await expect(coachAttempt({} as any, 'attempt-1', { event: 'diagnosisRequested' }))
+    await expect(coachAttempt({} as CoachEvent, 'attempt-1', { event: 'diagnosisRequested' }))
       .rejects.toMatchObject({
         statusCode: 429,
         statusMessage: 'The coach is busy. Try again in a moment.'
@@ -176,7 +179,7 @@ describe('coaching proxy contract', () => {
     vi.stubGlobal('$fetch', { raw: rawFetch })
     const { coachAttempt } = await import('#server/utils/coaching')
 
-    await expect(coachAttempt({} as any, 'attempt-1', { event: 'explainCorrect' }))
+    await expect(coachAttempt({} as CoachEvent, 'attempt-1', { event: 'explainCorrect' }))
       .rejects.toMatchObject({ statusCode: 502 })
   })
 
@@ -195,7 +198,7 @@ describe('coaching proxy contract', () => {
 
     let thrown: unknown
     try {
-      await coachAttempt({} as any, 'attempt-1', { event: 'helpRequested' })
+      await coachAttempt({} as CoachEvent, 'attempt-1', { event: 'helpRequested' })
     } catch (error) {
       thrown = error
     }

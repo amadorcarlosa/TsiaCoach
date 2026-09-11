@@ -6,7 +6,7 @@ import type { Point } from '~/components/grid/gridPointer'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
 import type { DragProps } from '~/components/rod/rod.types.ts'
 import { arrayRodDimensions } from '../array/array-rod.types'
-import { cusisenaireRodPalette } from '~/components/rod/rod.types.ts'
+import { cuisenaireRodPalette } from '~/components/rod/rod.types.ts'
 import type { SelectionIntent } from '../scene/scene-interaction.types'
 
 const props = withDefaults(defineProps<DragProps>(), {
@@ -164,7 +164,7 @@ defineExpose({
         <CuisenaireRod
             :dimensions="part.dimensions"
             :unit-size="cellSize"
-            :appearance="cusisenaireRodPalette[part.value]"
+            :appearance="cuisenaireRodPalette[part.value]"
             :label="String(part.value)"
         />
       </div>

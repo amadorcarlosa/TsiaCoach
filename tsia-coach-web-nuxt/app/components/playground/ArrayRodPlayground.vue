@@ -24,6 +24,7 @@ const props = withDefaults(defineProps<{
   cancelVersion?: () => number
 }>(), {
   active: true,
+  cancelVersion: undefined,
 })
 
 const fullColumns = 24

@@ -63,6 +63,7 @@ function pointerEvent(
 function mountHost(options: {
   disabled?: Ref<boolean>
   cancelVersion?: Ref<number>
+  onBoardClick?: (point: Point) => void
 } = {}) {
   const disabled = options.disabled ?? ref(false)
   const cancelVersion = options.cancelVersion ?? ref(0)
@@ -94,6 +95,7 @@ function mountHost(options: {
         viewport,
         disabled: () => disabled.value,
         cancelVersion: () => cancelVersion.value,
+        onBoardClick: options.onBoardClick,
       })
 
       return () => h(
@@ -305,6 +307,60 @@ describe('useSceneMarquee selection', () => {
     host.move({ x: spot.x + 0.1, y: spot.y })
     host.up({ x: spot.x + 0.1, y: spot.y })
     expect(host.selected()).toEqual([])
+
+    host.wrapper.unmount()
+  })
+
+  it('fires the board-click callback for completed empty-board clicks', async () => {
+    const onBoardClick = vi.fn()
+    const host = mountHost({ onBoardClick })
+    const [a] = await host.createPair()
+    host.scene.select([a])
+
+    const plain = { x: 20, y: 1 }
+    host.down(plain)
+    host.up(plain)
+
+    expect(host.selected()).toEqual([])
+    expect(onBoardClick).toHaveBeenCalledWith(plain)
+
+    host.scene.select([a])
+    const modified = { x: 21, y: 1 }
+    host.down(modified, { shiftKey: true })
+    host.up(modified, { shiftKey: true })
+
+    expect(host.selected()).toEqual([a])
+    expect(onBoardClick).toHaveBeenLastCalledWith(modified)
+    expect(onBoardClick).toHaveBeenCalledTimes(2)
+
+    host.wrapper.unmount()
+  })
+
+  it('does not fire the board-click callback for drag, cancellation, or rod presses', async () => {
+    const onBoardClick = vi.fn()
+    const host = mountHost({ onBoardClick })
+    const [a] = await host.createPair()
+
+    const { end } = sweepAcross(host, a)
+    host.up(end)
+    expect(onBoardClick).not.toHaveBeenCalled()
+
+    const cancelled = { x: 20, y: 1 }
+    host.down(cancelled)
+    host.cancelPointer(cancelled)
+    host.up(cancelled)
+    expect(onBoardClick).not.toHaveBeenCalled()
+
+    const escaped = { x: 21, y: 1 }
+    host.down(escaped)
+    host.escape()
+    host.up(escaped)
+    expect(onBoardClick).not.toHaveBeenCalled()
+
+    const rod = host.rodElement(a)
+    host.down(host.anchorOf(a), {}, rod)
+    host.up(host.anchorOf(a))
+    expect(onBoardClick).not.toHaveBeenCalled()
 
     host.wrapper.unmount()
   })

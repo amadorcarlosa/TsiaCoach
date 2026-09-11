@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
 import ArrayRodPlayground from '~/components/playground/ArrayRodPlayground.vue'
 import BarRodPlayground from '~/components/playground/BarRodPlayground.vue'
+import FractionPlayground from '~/components/playground/FractionPlayground.vue'
 
 const tabs = playgroundTabs.map(({ id, label }) => ({
   label,
@@ -55,6 +56,12 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
         <BarRodPlayground
           :active="activeTab === 'barModelPlayground'"
           :cancel-version="readCancelVersion"
+        />
+      </template>
+      <template #fractionModelPlayground>
+        <FractionPlayground
+            :active="activeTab === 'fractionModelPlayground'"
+            :cancel-version="readCancelVersion"
         />
       </template>
     </UTabs>

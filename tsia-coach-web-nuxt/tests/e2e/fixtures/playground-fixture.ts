@@ -1,5 +1,7 @@
 import { test as base, expect, type CDPSession, type Page, type Locator } from '@playwright/test'
 
+type PlaygroundKind = 'Bar' | 'Array' | 'Fraction'
+
 /**
  * Drives real multi-touch input through CDP; requires a hasTouch context.
  * Each event lists only the changed points; Chrome keeps the rest stationary.
@@ -55,17 +57,17 @@ export class Playground {
     this.touch = new Touch(page)
   }
 
-  panel(kind: 'Bar' | 'Array') {
+  panel(kind: PlaygroundKind) {
     return this.page.getByRole('tabpanel', { name: `${kind} Rod Playground`, exact: true })
   }
 
-  async show(kind: 'Bar' | 'Array') {
+  async show(kind: PlaygroundKind) {
     await this.page.getByRole('tab', { name: `${kind} Rod Playground`, exact: true }).click()
     await expect(this.panel(kind)).toBeVisible()
     return this.panel(kind)
   }
 
-  async add(kind: 'Bar' | 'Array', name: string) {
+  async add(kind: PlaygroundKind, name: string) {
     const panel = this.panel(kind)
     const choice = panel.getByRole('button', { name: `Choose ${name} rod`, exact: true })
     if (!await choice.isVisible()) {
@@ -126,7 +128,7 @@ export class Playground {
   }
 
   /** Client coordinates of a board point, following the board's tilt. */
-  async boardClient(kind: 'Bar' | 'Array', point: { x: number, y: number }) {
+  async boardClient(kind: PlaygroundKind, point: { x: number, y: number }) {
     return this.panel(kind).locator('[data-grid-world]').first().evaluate((world, point) => {
       const rect = (name: string) => world.querySelector(`[data-grid-axis="${name}"]`)!.getBoundingClientRect()
       const o = rect('origin'), x = rect('x'), y = rect('y')
@@ -139,7 +141,7 @@ export class Playground {
 
   /** Drags a marquee between two board points, holding any modifiers. */
   async marquee(
-    kind: 'Bar' | 'Array',
+    kind: PlaygroundKind,
     from: { x: number, y: number },
     to: { x: number, y: number },
     options: {

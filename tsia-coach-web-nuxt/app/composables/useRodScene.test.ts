@@ -12,7 +12,7 @@ function createScene() {
   })
 }
 
-function sceneSnapshot(scene: ReturnType<typeof createScene>) {
+function sceneSnapshot(scene: ReturnType<typeof useRodScene>) {
   return {
     trains: scene.trains.value.map(train => ({
       ...train,
@@ -25,6 +25,86 @@ function sceneSnapshot(scene: ReturnType<typeof createScene>) {
     selection: [...scene.selection.value],
   }
 }
+
+describe('create', () => {
+  function createTrackScene() {
+    return useRodScene({
+      columns: 5,
+      rows: 6,
+      spawnRows: [1, 2],
+      trackRows: [1, 2],
+      editable: () => true,
+      allowOrientation: false,
+    })
+  }
+
+  it('respects a requested spawn row', () => {
+    const scene = createTrackScene()
+
+    expect(scene.apply([], {
+      type: 'create',
+      value: 3,
+      row: 2,
+    }).allowed).toBe(true)
+
+    expect(scene.trains.value).toHaveLength(1)
+    expect(scene.trains.value[0]!.anchor).toEqual({ x: 0, y: 2 })
+  })
+
+  it('rejects a full requested row without falling back or mutating', () => {
+    const scene = createTrackScene()
+
+    expect(scene.apply([], {
+      type: 'create',
+      value: 5,
+      row: 2,
+    }).allowed).toBe(true)
+
+    const before = sceneSnapshot(scene)
+
+    expect(scene.apply([], {
+      type: 'create',
+      value: 1,
+      row: 2,
+    })).toEqual({
+      allowed: false,
+      reason: 'No room for a 1-rod.',
+    })
+
+    expect(sceneSnapshot(scene)).toEqual(before)
+  })
+
+  it('rejects invalid requested rows without mutation', () => {
+    const scene = createTrackScene()
+    scene.apply([], { type: 'create', value: 2, row: 1 })
+    const before = sceneSnapshot(scene)
+
+    for (const row of [0, 1.5, 3]) {
+      expect(scene.apply([], {
+        type: 'create',
+        value: 1,
+        row,
+      })).toEqual({
+        allowed: false,
+        reason: 'Choose an available track.',
+      })
+
+      expect(sceneSnapshot(scene)).toEqual(before)
+    }
+  })
+
+  it('preserves first-available behavior when no row is requested', () => {
+    const scene = createTrackScene()
+
+    expect(scene.apply([], { type: 'create', value: 5 }).allowed).toBe(true)
+    expect(scene.apply([], { type: 'create', value: 1 }).allowed).toBe(true)
+
+    expect(scene.trains.value.map(train => train.anchor)).toEqual([
+      { x: 0, y: 1 },
+      { x: 0, y: 2 },
+    ])
+  })
+})
 
 describe('make-train', () => {
   it('packs in board order and selects the resulting train', () => {

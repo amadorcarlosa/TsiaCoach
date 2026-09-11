@@ -4,6 +4,7 @@ import { getPracticeItems } from '#server/utils/practice-items'
 import { AttemptPhaseKinds, type AttemptProjection } from '#shared/types/sample-items'
 
 type RawFetch = ((url: string, options?: unknown) => Promise<{ status: number; _data: unknown }>)
+type AttemptEvent = Parameters<typeof startAttempt>[0]
 
 describe('attempt and practice-item proxy contracts', () => {
   beforeEach(() => {
@@ -37,7 +38,7 @@ describe('attempt and practice-item proxy contracts', () => {
       raw: rawFetch
     })
 
-    await getPracticeItems({} as any)
+    await getPracticeItems({} as Parameters<typeof getPracticeItems>[0])
 
     expect(rawFetch).toHaveBeenCalledWith('/api/practice-items', {
       baseURL: 'https://example.invalid',
@@ -66,13 +67,13 @@ describe('attempt and practice-item proxy contracts', () => {
       raw: rawFetch
     })
 
-    const event = {} as any
-
-    await startAttempt(event, {
+    const event = {} as AttemptEvent
+    const unsafeRequest = {
       practiceItemId: 'item-1',
-       
-      selectedAnswerId: 'blocked'
-    } as any)
+      selectedAnswerId: 'blocked',
+    }
+
+    await startAttempt(event, unsafeRequest)
 
     const [, options] = rawFetch.mock.calls[0] as [string, { method: string; body: { practiceItemId: string } }]
     expect(options.body).toEqual({ practiceItemId: 'item-1' })
@@ -100,11 +101,12 @@ describe('attempt and practice-item proxy contracts', () => {
       raw: rawFetch
     })
 
-    await checkAttempt({}, 'attempt-1', {
+    const unsafeRequest = {
       selectedAnswerId: 'selected-answer',
-       
-      extraKey: 'blocked'
-    } as any)
+      extraKey: 'blocked',
+    }
+
+    await checkAttempt({} as AttemptEvent, 'attempt-1', unsafeRequest)
 
     const [, options] = rawFetch.mock.calls[0] as [string, { method: string; body: { selectedAnswerId: string } }]
     expect(options.body).toEqual({ selectedAnswerId: 'selected-answer' })

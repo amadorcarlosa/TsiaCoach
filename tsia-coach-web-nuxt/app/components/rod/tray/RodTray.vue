@@ -6,7 +6,7 @@ import  {
   ariaRod, } from './rodTray.types'
 import {
   type CuisenaireRodValue,
-  cusisenaireRodPalette} from "~/components/rod/rod.types.ts";
+  cuisenaireRodPalette} from "~/components/rod/rod.types.ts";
 
 import styles from './rodTray.styles.module.css'
 import CuisenaireRod from "~/components/rod/cuisenaire/CuisenaireRod.vue";
@@ -42,7 +42,7 @@ const emit = defineEmits<{
      style="--rod-label-offset: -3px"
      :dimensions="{ width: item.value, depth: 1, height: 1 }"
      :unit-size="unitSize"
-     :appearance="cusisenaireRodPalette[item.value]"
+     :appearance="cuisenaireRodPalette[item.value]"
      :label="String(item.value)"
  />
       </span>

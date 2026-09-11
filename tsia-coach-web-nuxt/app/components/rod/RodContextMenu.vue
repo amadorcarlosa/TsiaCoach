@@ -7,7 +7,7 @@ import type { Point } from '~/components/grid/gridPointer'
 import type {
   ArrayRodOrientation,
 } from './array/array-rod.types'
-import DraggableRod from "~/components/rod/movement/DraggableRod.vue";
+import DraggableRod from '~/components/rod/movement/DraggableRod.vue'
 
 const props = withDefaults(defineProps<DragProps & {
   allowOrientation?: boolean
@@ -18,6 +18,7 @@ const props = withDefaults(defineProps<DragProps & {
   selected: false,
   snapToGrid: true,
   allowOrientation: false,
+  orientation: undefined,
   visible: true,
 })
 
@@ -123,8 +124,8 @@ function onMenuKeydown(event: KeyboardEvent): void {
   >
     <DraggableRod
         v-show="visible"
-        ref="rod"
         :id="id"
+        ref="rod"
         :value="value"
         :x="x"
         :y="y"

@@ -24,6 +24,7 @@ type Options = {
   viewport: Ref<HTMLElement | null>
   disabled: () => boolean
   beforeStart: () => void
+  onBoardClick?: (point: Point) => void
 }
 
 type Session = {
@@ -231,8 +232,16 @@ export function useSceneMarquee(options: Options) {
       ? [...(previewIds.value ?? current.initial)]
       : current.mode === 'replace' ? [] : [...current.initial]
 
+    const clickPoint = current.crossedThreshold
+      ? null
+      : { ...current.start }
+
     cancel()
     options.scene.select(next)
+
+    if (clickPoint) {
+      options.onBoardClick?.(clickPoint)
+    }
   }
 
   function onPointerCancel(event: PointerEvent): void {

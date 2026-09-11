@@ -50,6 +50,82 @@ test('bar train renders each part and both parts remain interactive', async ({ p
   })
 })
 
+test.describe('fraction playground', () => {
+  function readout(p: Playground, pairId = 'pair-0') {
+    return p.panel('Fraction').locator(`[data-fraction-pair="${pairId}"]`)
+  }
+
+  function trackButton(p: Playground, name: RegExp) {
+    return p.panel('Fraction').getByRole('button', { name })
+  }
+
+  test('builds a fraction by selecting denominator and numerator tracks', async ({ playground: p }) => {
+    await p.show('Fraction')
+
+    await trackButton(p, /^Fraction 1 denominator/).click()
+    const denominator = await p.add('Fraction', 'three')
+
+    await expect(readout(p)).toContainText('Fraction 1: 0/3')
+    await expect.poll(() => p.geometry(denominator)).toMatchObject({
+      x: 0,
+      y: 2,
+      width: 3,
+      depth: 1,
+    })
+
+    await trackButton(p, /^Fraction 1 numerator/).click()
+    const numerator = await p.add('Fraction', 'two')
+
+    await expect(readout(p)).toContainText('Fraction 1: 2/3')
+    await expect.poll(() => p.geometry(numerator)).toMatchObject({
+      x: 0,
+      y: 1,
+      width: 2,
+      depth: 1,
+    })
+
+    await denominator.click()
+    await p.panel('Fraction').getByRole('button', {
+      name: /remove selected rod/i,
+    }).click()
+
+    await expect(denominator).toHaveCount(0)
+    await expect(readout(p)).toContainText('Fraction 1: incomplete')
+  })
+
+  test('empty track clicks change destination, while dragging there selects by marquee', async ({ page, playground: p }) => {
+    await p.show('Fraction')
+
+    const emptyTrackCell = await p.boardClient('Fraction', { x: 10, y: 5.5 })
+    await page.mouse.click(emptyTrackCell.x, emptyTrackCell.y)
+
+    await expect(trackButton(p, /^Fraction 2 denominator/))
+      .toHaveAttribute('aria-pressed', 'true')
+
+    const rod = await p.add('Fraction', 'three')
+    await expect.poll(() => p.geometry(rod)).toMatchObject({
+      x: 0,
+      y: 5,
+      width: 3,
+      depth: 1,
+    })
+
+    await trackButton(p, /^Fraction 1 numerator/).click()
+    await expect(trackButton(p, /^Fraction 1 numerator/))
+      .toHaveAttribute('aria-pressed', 'true')
+
+    await p.marquee(
+      'Fraction',
+      { x: 4, y: 5.5 },
+      { x: 1, y: 4.5 },
+    )
+
+    await expect(rod).toHaveClass(/--selected/)
+    await expect(trackButton(p, /^Fraction 1 numerator/))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
 test('array can orient a composed train vertically', async ({ playground: p }) => {
   await p.show('Array')
 

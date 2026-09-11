@@ -124,7 +124,7 @@ export function rodStyle(size: UnitDimensions, cellSize: number) {
     }
 }
 
-export const cusisenaireRodPalette = {
+export const cuisenaireRodPalette = {
     1: { name: 'White', fill: '#f4f4ef', ink: '#1c1c1c' },
     2: { name: 'Red', fill: '#d63c3c', ink: '#ffffff' },
     3: { name: 'Light green', fill: '#7bc95a', ink: '#10240c' },
