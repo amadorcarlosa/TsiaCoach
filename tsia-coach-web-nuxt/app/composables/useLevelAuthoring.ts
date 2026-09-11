@@ -1,39 +1,14 @@
 import { computed, readonly, ref } from 'vue'
+import { copyScene } from '~/components/rod/scene/scene-snapshot'
 import type {
-  RodTrain,
-  SceneResult,
-} from '~/components/rod/scene/rod.scene.types'
-import {
-  copyScene,
-  type SceneSnapshot,
-} from '~/components/rod/scene/scene-snapshot'
+  AuthoringStep,
+  AuthoringResult,
+  LevelAuthoringOptions,
+  SwitchDecision,
+} from '~/components/playground/authoring.types'
 
-type Step = {
-  id: string
-  title: string
-  trains: RodTrain[]
-}
-
-type SwitchDecision = 'save' | 'discard' | 'cancel'
-
-type AuthoringResult =
-  | { allowed: true }
-  | {
-      allowed: false
-      reason: string
-      needsDecision?: boolean
-    }
-
-type Options = {
-  trains: () => SceneSnapshot
-  captureScene: () => RodTrain[]
-  checkReplacement: (source: SceneSnapshot) => SceneResult
-  replaceScene: (source: SceneSnapshot) => SceneResult
-  editable: () => boolean
-}
-
-export function useLevelAuthoring(options: Options) {
-  const steps = ref<Step[]>([])
+export function useLevelAuthoring(options: LevelAuthoringOptions) {
+  const steps = ref<AuthoringStep[]>([])
   const activeStepId = ref<string | null>(null)
   let nextStepId = 1
 
@@ -46,7 +21,7 @@ export function useLevelAuthoring(options: Options) {
     const active = activeStep.value
     if (!active) return false
 
-    return JSON.stringify(copyScene(options.trains())) !==
+    return JSON.stringify(copyScene(options.scene.read())) !==
       JSON.stringify(active.trains)
   })
 
@@ -55,7 +30,7 @@ export function useLevelAuthoring(options: Options) {
       return { allowed: false, reason: 'Editing is unavailable.' }
     }
 
-    const snapshot = options.captureScene()
+    const snapshot = options.scene.capture()
     const id = `step-${nextStepId++}`
 
     steps.value = [
@@ -81,7 +56,7 @@ export function useLevelAuthoring(options: Options) {
       return { allowed: false, reason: 'Capture a step first.' }
     }
 
-    const snapshot = options.captureScene()
+    const snapshot = options.scene.capture()
 
     steps.value = steps.value.map(step =>
       step.id === active.id
@@ -120,15 +95,15 @@ export function useLevelAuthoring(options: Options) {
     }
 
     // Reject an invalid destination before saving or switching.
-    const checked = options.checkReplacement(target.trains)
+    const checked = options.scene.checkReplacement(target.trains)
     if (!checked.allowed) return checked
 
     const previousId = activeStepId.value
     const saved = dirty.value && decision === 'save'
-      ? options.captureScene()
+      ? options.scene.capture()
       : null
 
-    const result = options.replaceScene(target.trains)
+    const result = options.scene.replace(target.trains)
     if (!result.allowed) return result
 
     if (saved && previousId) {

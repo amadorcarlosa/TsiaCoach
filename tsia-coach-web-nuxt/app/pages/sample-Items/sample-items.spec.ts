@@ -63,12 +63,16 @@ function makePrompt(id: string, answers: string[]): PracticeItemPrompt {
         makeToken(`${id}-t2`, 2, 'b', 4)
       ],
       sentences: [
-        { start: 0, length: `${id} text`.length }
+        {
+          id: `${id}-sentence-1`,
+          span: { start: 0, length: 3 },
+          characterSpan: { start: 0, length: `${id} text`.length }
+        }
       ],
       phrases: [
         {
           id: `${id}-phrase-1`,
-          tokenSpan: { start: 0, length: 1 },
+          span: { start: 0, length: 1 },
           characterSpan: { start: 0, length: 2 }
         }
       ]
@@ -88,7 +92,7 @@ function makePrompt(id: string, answers: string[]): PracticeItemPrompt {
         mathObjectId: `math-${answer.id}`
       }))
     }
-  } as PracticeItemPrompt
+  }
 }
 
 function beforeCheckProjection(itemId: string, attemptId: string): AttemptProjection {
@@ -144,14 +148,14 @@ function correctProjection(itemId: string, attemptId: string): AttemptProjection
 }
 
 function createDeferred<T>() {
-  let resolve: ((value: T) => void) | null = null
+  let resolve!: (value: T) => void
   const promise = new Promise<T>(res => {
     resolve = res
   })
 
   return {
     promise,
-    resolve: resolve as (value: T) => void
+    resolve
   }
 }
 
@@ -368,7 +372,7 @@ describe('sample item attempt store', () => {
       }
 
       if (url === '/api/attempts/attempt-1/checks') {
-        capturedBody = options?.body
+        capturedBody = options?.body ?? null
         return incorrectProjection('item-1', 'attempt-1')
       }
 

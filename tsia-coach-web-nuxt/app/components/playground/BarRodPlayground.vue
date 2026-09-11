@@ -144,7 +144,7 @@ function intersectsPreview(
 
 <template>
   <TablaPlaygroundShell
-    :aria-label="boardAriaLabel"
+    :board-aria-label="boardAriaLabel"
     :board-width="boardWidth"
     :blocked="blocked"
     :compact-layout="compactLayout"

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 
 import RodTabla from '~/components/tabla/RodTabla.vue'
-import DraggableRod from '~/components/rod/DraggableRod.vue'
+import DraggableRod from '~/components/rod/movement/DraggableRod.vue'
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
 import {
   type CuisenaireRodValue,
   CuisenaireRodValues,
   getRodDefinition,
 } from '~/components/rod/rod.types'
-import type { PlacedRod } from '~/components/rod/rod-board.types'
+import type { PlacedRod } from '~/components/rod/movement/rod-board.types'
 import type { Point } from '~/components/grid/gridPointer'
 import { useRodBoard } from '~/composables/useRodBoard'
 

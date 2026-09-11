@@ -21,7 +21,7 @@ function apiUrlFor(event: H3Event): string {
 }
 
 async function forwardProblemAwareResponse<T>(
-  request: () => Promise<{ status: number; _data: unknown }>,
+  request: () => Promise<{ status: number; _data?: unknown }>,
   fallbackStatusMessage: string,
 ): Promise<T> {
   let response

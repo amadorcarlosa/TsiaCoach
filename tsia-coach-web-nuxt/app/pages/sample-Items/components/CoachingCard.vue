@@ -52,14 +52,18 @@ function submitAnswer() {
       :title="errorView.title"
       :description="errorView.description"
       variant="subtle"
-      :actions="[{
-        'label': errorView.retryLabel,
-        'color': 'error',
-        'variant': 'outline',
-        'data-testid': 'coaching-retry',
-        'onClick': () => emit('retry')
-      }]"
-    />
+    >
+      <template #actions>
+        <UButton
+          :label="errorView.retryLabel"
+          color="error"
+          variant="outline"
+          size="xs"
+          data-testid="coaching-retry"
+          @click="emit('retry')"
+        />
+      </template>
+    </UAlert>
 
     <div
       v-else-if="cardView"

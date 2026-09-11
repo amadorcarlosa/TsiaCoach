@@ -17,10 +17,10 @@ describe('attempt and practice-item proxy contracts', () => {
       statusMessage?: string
       data?: unknown
     }) => {
-      const thrown = new Error(error.statusMessage)
-      ;(thrown as { statusCode: number; data: unknown }).statusCode = error.statusCode
-      ;(thrown as { statusCode: number; data: unknown }).data = error.data
-      throw thrown
+      return Object.assign(new Error(error.statusMessage), {
+        statusCode: error.statusCode,
+        data: error.data
+      })
     })
   })
 
@@ -126,7 +126,7 @@ describe('attempt and practice-item proxy contracts', () => {
       raw: rawFetch
     })
 
-    await expect(getAttempt({}, 'attempt-1')).rejects.toMatchObject({
+    await expect(getAttempt({} as AttemptEvent, 'attempt-1')).rejects.toMatchObject({
       statusCode: 409,
       data: {
         title: 'Conflict',

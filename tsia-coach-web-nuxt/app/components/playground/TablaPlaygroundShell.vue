@@ -8,7 +8,7 @@ import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 
 defineProps<{
-  ariaLabel: string
+  boardAriaLabel: string
   boardWidth: number
   blocked: boolean
   compactLayout: boolean
@@ -99,7 +99,7 @@ const emit = defineEmits<{
         class="board-viewport"
         :class="{ 'marquee-enabled': !editingDisabled }"
         role="region"
-        :aria-label="ariaLabel"
+        :aria-label="boardAriaLabel"
         @pointerdown.capture="emit('boardPointerDown', $event)"
         @lostpointercapture="emit('boardLostPointerCapture', $event)"
       >
