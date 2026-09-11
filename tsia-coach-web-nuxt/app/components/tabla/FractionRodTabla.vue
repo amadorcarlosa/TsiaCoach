@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
 import { getFractionTablaGeometry } from './fraction-tabla.geometry'
-import type { FractionReadout } from './fraction-readout'
 
 const props = withDefaults(defineProps<{
   pairCount?: number
@@ -11,8 +10,6 @@ const props = withDefaults(defineProps<{
   cellSize?: number
   visibleColumns?: number
   activeRow?: number
-  disabled?: boolean
-  readouts?: readonly FractionReadout[]
 }>(), {
   pairCount: 2,
   embedded: false,
@@ -20,13 +17,7 @@ const props = withDefaults(defineProps<{
   cellSize: 36,
   visibleColumns: 24,
   activeRow: 1,
-  disabled: false,
-  readouts: () => [],
 })
-
-const emit = defineEmits<{
-  'activate-track': [row: number]
-}>()
 
 const geometry = computed(() =>
     getFractionTablaGeometry(
@@ -39,26 +30,16 @@ const geometry = computed(() =>
 const config = computed(() => geometry.value.config)
 
 const tracks = computed(() =>
-    geometry.value.targets.flatMap((target, index) => {
-      const readout = props.readouts.find(
-          item => item.pairId === target.id,
-      )
-
-      return [
-        {
-          id: `${target.id}-numerator`,
-          row: target.numeratorRow,
-          label: `Fraction ${index + 1} numerator`,
-          total: readout?.numerator ?? 0,
-        },
-        {
-          id: `${target.id}-denominator`,
-          row: target.denominatorRow,
-          label: `Fraction ${index + 1} denominator`,
-          total: readout?.denominator ?? 0,
-        },
-      ]
-    }),
+  geometry.value.targets.flatMap(target => [
+    {
+      id: `${target.id}-numerator`,
+      row: target.numeratorRow,
+    },
+    {
+      id: `${target.id}-denominator`,
+      row: target.denominatorRow,
+    },
+  ]),
 )
 </script>
 
@@ -67,21 +48,6 @@ const tracks = computed(() =>
       class="fraction-tabla"
       :class="{ 'fraction-tabla--embedded': embedded }"
   >
-    <!-- Outside the grid so labels remain reachable and unclipped. -->
-    <div class="track-controls" aria-label="Active fraction track">
-      <button
-          v-for="track in tracks"
-          :key="track.id"
-          type="button"
-          :disabled="disabled"
-          :aria-pressed="activeRow === track.row"
-          @click="emit('activate-track', track.row)"
-      >
-        {{ track.label }}
-        <span v-if="track.total > 0">: {{ track.total }}</span>
-      </button>
-    </div>
-
     <GridSurface
         :config="config"
         :view="geometry.view"
@@ -149,32 +115,6 @@ const tracks = computed(() =>
   background: transparent;
   border: 0;
   border-radius: 0;
-}
-
-.track-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 16px;
-}
-
-.track-controls button {
-  min-height: 44px;
-  padding: 6px 10px;
-  font: inherit;
-  color: var(--mt-text);
-  background: var(--mt-surface-2);
-  border: 1px solid var(--mt-border);
-  border-radius: var(--radius-md);
-}
-
-.track-controls button[aria-pressed="true"] {
-  border-color: var(--ui-primary);
-}
-
-.track-controls button:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
 }
 
 .reference-row,

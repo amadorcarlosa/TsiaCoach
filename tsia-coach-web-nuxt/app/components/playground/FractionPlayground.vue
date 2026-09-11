@@ -107,6 +107,29 @@ const readouts = computed(() =>
   fractionReadout(scene.trains.value, boardDefinition.targets),
 )
 
+const trackControls = computed(() =>
+  boardDefinition.targets.flatMap((target, index) => {
+    const readout = readouts.value.find(
+      item => item.pairId === target.id,
+    )
+
+    return [
+      {
+        id: `${target.id}-numerator`,
+        row: target.numeratorRow,
+        label: `Fraction ${index + 1} numerator`,
+        total: readout?.numerator ?? 0,
+      },
+      {
+        id: `${target.id}-denominator`,
+        row: target.denominatorRow,
+        label: `Fraction ${index + 1} denominator`,
+        total: readout?.denominator ?? 0,
+      },
+    ]
+  }),
+)
+
 function activateTrack(row: number): void {
   if (blocked.value || !trackRows.includes(row)) return
   activeRow.value = row
@@ -192,17 +215,35 @@ function intersectsPreview(
     @remove-selected="onRemoveSelectedRod"
     @update-tray-open="trayOpen = $event"
   >
+    <template #board-controls>
+      <div
+        class="track-controls"
+        role="group"
+        aria-label="Active fraction track"
+      >
+        <button
+          v-for="track in trackControls"
+          :key="track.id"
+          type="button"
+          :disabled="blocked"
+          :aria-pressed="activeRow === track.row"
+          :data-track-control="track.id"
+          @click="activateTrack(track.row)"
+        >
+          {{ track.label }}
+          <span v-if="track.total > 0">: {{ track.total }}</span>
+        </button>
+      </div>
+    </template>
+
     <template #board>
       <FractionRodTabla
         :pair-count="pairCount"
         :cell-size="cellSize"
         :visible-columns="visibleColumns"
         :active-row="activeRow"
-        :readouts="readouts"
-        :disabled="blocked"
         viewport-padding="var(--workspace-padding-y) 16px"
         embedded
-        @activate-track="activateTrack"
       >
         <template #pieces="{ cellSize: pieceCellSize }">
           <SceneRod
@@ -279,6 +320,42 @@ function intersectsPreview(
 </template>
 
 <style scoped>
+.track-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 16px;
+}
+
+.track-controls button {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font: inherit;
+  color: var(--mt-text);
+  background: var(--mt-surface-2);
+  border: 1px solid var(--mt-border);
+  border-radius: var(--radius-md);
+}
+
+.track-controls button[aria-pressed="true"] {
+  border-color: var(--ui-primary);
+}
+
+.track-controls button:focus-visible {
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+}
+
 .fraction-readouts {
   display: flex;
   flex-wrap: wrap;

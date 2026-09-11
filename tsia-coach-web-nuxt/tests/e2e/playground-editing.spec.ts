@@ -59,6 +59,69 @@ test.describe('fraction playground', () => {
     return p.panel('Fraction').getByRole('button', { name })
   }
 
+  for (const viewport of [
+    { width: 412, height: 915 },
+    { width: 915, height: 412 },
+    { width: 1440, height: 900 },
+  ]) {
+    test(`track controls fit above the board at ${viewport.width} × ${viewport.height}`, async ({ page, playground: p }) => {
+      await page.setViewportSize(viewport)
+      const panel = await p.show('Fraction')
+      const controls = panel.getByRole('group', {
+        name: 'Active fraction track',
+      })
+      const buttons = controls.getByRole('button')
+      const portrait = viewport.width < viewport.height && viewport.width < 600
+
+      await expect(buttons).toHaveCount(4)
+      await controls.scrollIntoViewIfNeeded()
+
+      for (const button of await buttons.all()) {
+        if (portrait) await expect(button).toBeDisabled()
+        else await expect(button).toBeEnabled()
+
+        const container = await controls.boundingBox()
+        const bounds = await button.boundingBox()
+
+        expect(container).not.toBeNull()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.x).toBeGreaterThanOrEqual(container!.x - 1)
+        expect(bounds!.x + bounds!.width)
+          .toBeLessThanOrEqual(container!.x + container!.width + 1)
+        expect(bounds!.y).toBeGreaterThanOrEqual(container!.y - 1)
+        expect(bounds!.y + bounds!.height)
+          .toBeLessThanOrEqual(container!.y + container!.height + 1)
+        expect(container!.x).toBeGreaterThanOrEqual(-1)
+        expect(container!.x + container!.width).toBeLessThanOrEqual(viewport.width + 1)
+        expect(await button.evaluate(el => el.scrollWidth <= el.clientWidth))
+          .toBe(true)
+      }
+
+      const container = await controls.boundingBox()
+      const frame = await panel.locator('.board-frame').boundingBox()
+      expect(frame).not.toBeNull()
+      expect(container!.y + container!.height).toBeLessThanOrEqual(frame!.y + 1)
+
+      if (!portrait) {
+        await trackButton(p, /^Fraction 2 denominator/).click()
+        await expect(trackButton(p, /^Fraction 2 denominator/))
+          .toHaveAttribute('aria-pressed', 'true')
+        await expect(panel.locator('[data-fraction-track="pair-1-denominator"]'))
+          .toHaveClass(/fraction-track--active/)
+        await expect(panel.locator('[data-scene-marquee]')).toHaveCount(0)
+
+        const rod = await p.add('Fraction', 'three')
+        await expect.poll(() => p.geometry(rod)).toMatchObject({ y: 5, width: 3 })
+        await expect(trackButton(p, /^Fraction 2 denominator/)).toContainText(': 3')
+        await rod.scrollIntoViewIfNeeded()
+        await expect(rod).toBeInViewport({ ratio: 1 })
+        await readout(p, 'pair-1').scrollIntoViewIfNeeded()
+        await expect(readout(p, 'pair-1')).toContainText('Fraction 2: 0/3')
+        await expect(readout(p, 'pair-1')).toBeInViewport({ ratio: 1 })
+      }
+    })
+  }
+
   test('builds a fraction by selecting denominator and numerator tracks', async ({ playground: p }) => {
     await p.show('Fraction')
 

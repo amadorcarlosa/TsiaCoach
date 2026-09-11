@@ -103,6 +103,8 @@ const emit = defineEmits<{
         @pointerdown.capture="emit('boardPointerDown', $event)"
         @lostpointercapture="emit('boardLostPointerCapture', $event)"
       >
+        <slot name="board-controls" />
+
         <div
           class="board-frame"
           :style="{ width: `${boardWidth}px` }"

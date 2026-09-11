@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { useRodScene } from '~/composables/useRodScene'
-import type { AddendPair } from '~/components/rod/scene/rod.scene.types'
+import type { CuisenaireRodValue } from '~/components/rod/rod.types'
+import type { AddendPair, SceneApplyResult } from '~/components/rod/scene/rod.scene.types'
 
 function createScene() {
   return useRodScene({
@@ -24,6 +25,26 @@ function sceneSnapshot(scene: ReturnType<typeof useRodScene>) {
     })),
     selection: [...scene.selection.value],
   }
+}
+
+function createdId(result: SceneApplyResult): string {
+  if (!result.allowed) throw new Error(result.reason)
+  expect(result.createdIds).toHaveLength(1)
+  const id = result.createdIds[0]
+  if (id === undefined) throw new Error('Expected a created train ID')
+  return id
+}
+
+function createRod(scene: ReturnType<typeof useRodScene>, value: CuisenaireRodValue) {
+  return createdId(scene.apply([], { type: 'create', value }))
+}
+
+function createTrain(
+  scene: ReturnType<typeof useRodScene>,
+  ...values: [CuisenaireRodValue, CuisenaireRodValue, ...CuisenaireRodValue[]]
+) {
+  const ids = values.map(value => createRod(scene, value))
+  return createdId(scene.apply(ids, { type: 'make-train' }))
 }
 
 describe('create', () => {
@@ -110,10 +131,8 @@ describe('make-train', () => {
   it('packs in board order and selects the resulting train', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    const a = scene.trains.value[0]!.id
-    scene.apply([], { type: 'create', value: 5 })
-    const b = scene.trains.value[1]!.id
+    const a = createRod(scene, 3)
+    const b = createRod(scene, 5)
 
     // Initially A is at x=0 and B at x=3.
     scene.apply([b], {
@@ -153,8 +172,7 @@ describe('make-train', () => {
 
   it('rejects with one selected train', () => {
     const scene = createScene()
-    scene.apply([], { type: 'create', value: 3 })
-    const first = scene.trains.value[0]!.id
+    const first = createRod(scene, 3)
 
     const beforeTrains = scene.trains.value.map(train => ({ ...train }))
     const beforeSelection = new Set(scene.selection.value)
@@ -171,20 +189,15 @@ describe('make-train', () => {
   it('rejects vertical or tower rods without mutation', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 4 })
-
-    const [vertical, tower] = scene.trains.value.map(train => train.id)
+    const vertical = createRod(scene, 3)
+    const tower = createRod(scene, 4)
 
     scene.apply([vertical], {
       type: 'set-orientation',
       orientation: 'vertical',
     })
 
-    const beforeVertical = scene.trains.value.map(train => ({
-      ...train,
-      parts: train.parts.map(part => ({ ...part })),
-    }))
+    const beforeVertical = sceneSnapshot(scene)
 
     expect(scene.apply([vertical, tower], {
       type: 'make-train',
@@ -192,16 +205,13 @@ describe('make-train', () => {
       allowed: false,
       reason: 'Lay all selected rods horizontally first.',
     })
-    expect(scene.trains.value).toEqual(beforeVertical)
+    expect(sceneSnapshot(scene)).toEqual(beforeVertical)
 
     scene.apply([tower], {
       type: 'set-orientation',
       orientation: 'tower',
     })
-    const beforeTower = scene.trains.value.map(train => ({
-      ...train,
-      parts: train.parts.map(part => ({ ...part })),
-    }))
+    const beforeTower = sceneSnapshot(scene)
 
     expect(scene.apply([vertical, tower], {
       type: 'make-train',
@@ -210,16 +220,16 @@ describe('make-train', () => {
       reason: 'Lay all selected rods horizontally first.',
     })
 
-    expect(scene.trains.value).toEqual(beforeTower)
+    expect(sceneSnapshot(scene)).toEqual(beforeTower)
   })
 
   it('rejects packing into an unselected obstacle', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
+    const first = createRod(scene, 3)
+    const second = createRod(scene, 5)
     expect(
-      scene.apply([scene.trains.value[1]!.id], {
+      scene.apply([second], {
         type: 'move',
         delta: { x: 1, y: 0 },
       }),
@@ -227,15 +237,10 @@ describe('make-train', () => {
 
     scene.apply([], { type: 'create', value: 1 })
 
-    const [first, second, _obstacle] = scene.trains.value.map(train => train.id)
-
     // The obstacle sits in the gap that opening the selected pair creates:
     // current selected rods are at x=0 and x=4, leaving x=3 unused.
 
-    const before = scene.trains.value.map(train => ({
-      ...train,
-      parts: train.parts.map(part => ({ ...part })),
-    }))
+    const before = sceneSnapshot(scene)
 
     expect(scene.apply([first, second], {
       type: 'make-train',
@@ -244,16 +249,14 @@ describe('make-train', () => {
       reason: 'That arrangement overlaps another part.',
     })
 
-    expect(scene.trains.value).toEqual(before)
+    expect(sceneSnapshot(scene)).toEqual(before)
   })
 
   it('rejects packing beyond the board without relocation', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 10 })
-    const first = scene.trains.value[0]!.id
-    scene.apply([], { type: 'create', value: 5 })
-    const second = scene.trains.value[1]!.id
+    const first = createRod(scene, 10)
+    const second = createRod(scene, 5)
 
     expect(
       scene.apply([second], {
@@ -273,10 +276,7 @@ describe('make-train', () => {
     )!.id
     expect(packed).toEqual({ allowed: true, createdIds: [combined] })
 
-    const before = scene.trains.value.map(train => ({
-      ...train,
-      parts: train.parts.map(part => ({ ...part })),
-    }))
+    const before = sceneSnapshot(scene)
 
     expect(scene.apply([combined, second], {
       type: 'make-train',
@@ -285,16 +285,14 @@ describe('make-train', () => {
       reason: 'Keep every part inside the board.',
     })
 
-    expect(scene.trains.value).toEqual(before)
+    expect(sceneSnapshot(scene)).toEqual(before)
   })
 
   it('flattens an existing horizontal multi-part train plus another train', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-
-    const [first, second] = scene.trains.value.map(train => train.id)
+    const first = createRod(scene, 3)
+    const second = createRod(scene, 5)
     const firstJoin = scene.apply([first, second], { type: 'make-train' })
 
     const combined = scene.trains.value.find(train => ![first, second].includes(train.id))!
@@ -390,9 +388,7 @@ describe('regroup-ones', () => {
   it('accepts decomposing a one-rod without changing its arrangement', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 1 })
-
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 1)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -598,14 +594,7 @@ describe('regroup-ones', () => {
   it('is idempotent when repeated', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    scene.apply(
-      scene.trains.value.map(train => train.id),
-      { type: 'make-train' },
-    )
-
-    const id = scene.trains.value[0]!.id
+    const id = createTrain(scene, 3, 5)
     expect(scene.apply([id], { type: 'regroup-ones' })).toEqual({ allowed: true, createdIds: [] })
 
     const first = sceneSnapshot(scene)
@@ -616,13 +605,7 @@ describe('regroup-ones', () => {
   it('preserves state and selection on check without allocating ids', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    scene.apply(
-      scene.trains.value.map(train => train.id),
-      { type: 'make-train' },
-    )
-    const id = scene.trains.value[0]!.id
+    const id = createTrain(scene, 3, 5)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -644,13 +627,7 @@ describe('regroup-ones', () => {
       allowOrientation: true,
     })
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    scene.apply(
-      scene.trains.value.map(train => train.id),
-      { type: 'make-train' },
-    )
-    const id = scene.trains.value[0]!.id
+    const id = createTrain(scene, 3, 5)
 
     expect(scene.check([id], { type: 'regroup-ones' })).toEqual({ allowed: true })
 
@@ -678,9 +655,7 @@ describe('regroup-addends', () => {
     (a, b) => {
       const scene = createScene()
 
-      scene.apply([], { type: 'create', value: 5 })
-
-      const id = scene.trains.value[0]!.id
+      const id = createRod(scene, 5)
       const anchor = { ...scene.trains.value[0]!.anchor }
       scene.select([id])
 
@@ -715,8 +690,7 @@ describe('regroup-addends', () => {
   it('preserves the chosen order for a vertical train', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 5)
     scene.select([id])
 
     expect(scene.apply([id], {
@@ -752,8 +726,7 @@ describe('regroup-addends', () => {
   it('defaults to the first candidate pair when none is requested', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 5)
     scene.select([id])
 
     expect(scene.apply([id], {
@@ -766,8 +739,7 @@ describe('regroup-addends', () => {
   it('rejects a requested pair that does not sum to the object\'s value', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 5)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -786,8 +758,7 @@ describe('regroup-addends', () => {
   it('rejects a value with no two-addend arrangement using rods valued 1-10', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 1 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 1)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -805,8 +776,7 @@ describe('regroup-addends', () => {
   it('rejects a tower without mutation', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 5)
     scene.select([id])
 
     expect(scene.apply([id], {
@@ -829,8 +799,7 @@ describe('regroup-addends', () => {
   it('preserves state and selection on check without allocating ids', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 5)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -846,8 +815,7 @@ describe('regroup-addends', () => {
   it('rejects the whole multiselection when one train cannot decompose', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 5 })
-    const decomposable = scene.trains.value[0]!.id
+    const decomposable = createRod(scene, 5)
 
     scene.apply([], { type: 'create', value: 1 })
     const stuck = scene.trains.value.find(
@@ -1057,12 +1025,7 @@ describe('set-orientation', () => {
   it('rejects a value-13 train that cannot fit vertically', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 10 })
-    scene.apply([], { type: 'create', value: 3 })
-    const ids = scene.trains.value.map(train => train.id)
-    scene.apply(ids, { type: 'make-train' })
-
-    const id = scene.trains.value[0]!.id
+    const id = createTrain(scene, 10, 3)
     const before = sceneSnapshot(scene)
 
     expect(scene.apply([id], {
@@ -1078,8 +1041,7 @@ describe('set-orientation', () => {
   it('rejects an obstacle at the edge-adjusted destination', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 1 })
-    const obstacle = scene.trains.value[0]!.id
+    const obstacle = createRod(scene, 1)
     scene.apply([obstacle], {
       type: 'move',
       delta: { x: 0, y: -4 },
@@ -1108,14 +1070,7 @@ describe('set-orientation', () => {
   it('rejects selected trains whose adjusted destinations overlap', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 10 })
-    scene.apply([], { type: 'create', value: 2 })
-    scene.apply(
-      scene.trains.value.map(train => train.id),
-      { type: 'make-train' },
-    )
-
-    const first = scene.trains.value[0]!.id
+    const first = createTrain(scene, 10, 2)
     scene.apply([first], {
       type: 'move',
       delta: { x: 0, y: -4 },
@@ -1145,14 +1100,7 @@ describe('set-orientation', () => {
   it('rejects Tower for a multipart train', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    scene.apply(
-      scene.trains.value.map(train => train.id),
-      { type: 'make-train' },
-    )
-
-    const id = scene.trains.value[0]!.id
+    const id = createTrain(scene, 3, 5)
     const before = sceneSnapshot(scene)
 
     expect(scene.apply([id], {
@@ -1176,8 +1124,7 @@ describe('set-orientation', () => {
         allowOrientation: false,
       })
 
-      scene.apply([], { type: 'create', value: 3 })
-      const id = scene.trains.value[0]!.id
+      const id = createRod(scene, 3)
       scene.select([id])
       const before = sceneSnapshot(scene)
 
@@ -1269,8 +1216,7 @@ describe('ungroup', () => {
   it('rejects a single rod without changing scene or selection', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    const id = scene.trains.value[0]!.id
+    const id = createRod(scene, 3)
     scene.select([id])
 
     const before = sceneSnapshot(scene)
@@ -1286,11 +1232,7 @@ describe('ungroup', () => {
   it('rejects when the selection mixes a multipart train and a single rod', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    const combinedIds = scene.trains.value.map(train => train.id)
-    scene.apply(combinedIds, { type: 'make-train' })
-    const combined = scene.trains.value[0]!.id
+    const combined = createTrain(scene, 3, 5)
 
     scene.apply([], { type: 'create', value: 2 })
     const single = scene.trains.value.find(train => train.id !== combined)!.id
@@ -1349,11 +1291,7 @@ describe('ungroup', () => {
   it('preserves vertical orientation and absolute position when ungrouping', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    const ids = scene.trains.value.map(train => train.id)
-    scene.apply(ids, { type: 'make-train' })
-    const combined = scene.trains.value[0]!.id
+    const combined = createTrain(scene, 3, 5)
 
     expect(scene.apply([combined], {
       type: 'set-orientation',
@@ -1403,11 +1341,7 @@ describe('ungroup', () => {
   it('preserves state and selection on check without allocating ids', () => {
     const scene = createScene()
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    const ids = scene.trains.value.map(train => train.id)
-    scene.apply(ids, { type: 'make-train' })
-    const combined = scene.trains.value[0]!.id
+    const combined = createTrain(scene, 3, 5)
     scene.select([combined])
 
     const beforeTrains = scene.trains.value.map(train => train.id)
@@ -1435,11 +1369,7 @@ describe('ungroup', () => {
       allowOrientation: true,
     })
 
-    scene.apply([], { type: 'create', value: 3 })
-    scene.apply([], { type: 'create', value: 5 })
-    const ids = scene.trains.value.map(train => train.id)
-    scene.apply(ids, { type: 'make-train' })
-    const combined = scene.trains.value[0]!.id
+    const combined = createTrain(scene, 3, 5)
 
     expect(scene.check([combined], { type: 'ungroup' })).toEqual({
       allowed: true,
