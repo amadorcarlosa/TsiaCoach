@@ -13,8 +13,12 @@ function setup() {
   const checkReplacement = vi.fn(scene.checkReplacement)
   const replaceScene = vi.fn(scene.replace)
   const authoring = useLevelAuthoring({
-    trains: () => scene.trains.value,
-    captureScene, checkReplacement, replaceScene,
+    scene: {
+      read: () => scene.trains.value,
+      capture: captureScene,
+      checkReplacement,
+      replace: replaceScene,
+    },
     editable: () => editable,
   })
   const add = () => {

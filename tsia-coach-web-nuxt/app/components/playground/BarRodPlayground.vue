@@ -4,12 +4,15 @@ import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
+import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
+import { useAuthoringControls } from '~/composables/useAuthoringControls'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
 import SceneRod from '~/components/rod/scene/SceneRod.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
 import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import TablaPlaygroundShell from '~/components/playground/TablaPlaygroundShell.vue'
+import PlaygroundAuthoringControls from '~/components/playground/PlaygroundAuthoringControls.vue'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { trainView } from '~/components/rod/scene/train-view'
 
@@ -93,6 +96,7 @@ const scene = useRodScene({
   editable: () => !editingDisabled.value,
   allowOrientation: false,
   allowFactors: false,
+  requireHorizontalAnchorRow: true,
 })
 
 const {
@@ -104,12 +108,29 @@ const {
   checkSelected,
   applySelected,
   addendMenuChoice,
+  captureScene,
+  replaceScene,
 } = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
   disabled: () => editingDisabled.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
+
+const authoring = useLevelAuthoring({
+  scene: {
+    read: () => scene.trains.value,
+    capture: captureScene,
+    checkReplacement: scene.checkReplacement,
+    replace: replaceScene,
+  },
+  editable: () => !editingDisabled.value,
+})
+
+const authoringControls = useAuthoringControls(
+  authoring,
+  () => blocked.value,
+)
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
@@ -217,6 +238,19 @@ function intersectsPreview(
     </template>
 
     <template #after-workspace>
+      <PlaygroundAuthoringControls
+        :steps="authoring.steps.value"
+        :active-step-id="authoring.activeStepId.value"
+        :dirty="authoring.dirty.value"
+        :blocked="blocked"
+        :pending-step-id="authoringControls.pendingStepId.value"
+        :message="authoringControls.message.value"
+        @capture="authoringControls.capture"
+        @update="authoringControls.update"
+        @select-step="authoringControls.requestStep"
+        @resolve="authoringControls.resolve"
+      />
+
       <p
         class="placement-message"
         role="status"

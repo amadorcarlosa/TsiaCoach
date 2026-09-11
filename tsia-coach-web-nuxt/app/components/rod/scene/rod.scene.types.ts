@@ -60,6 +60,8 @@ export type ScenePolicy = {
   editable: () => boolean
   allowOrientation: boolean
   allowFactors?: boolean
+  /** Every part must be horizontal and share the train's anchor row. */
+  requireHorizontalAnchorRow?: boolean
 }
 
 export type SceneResult =

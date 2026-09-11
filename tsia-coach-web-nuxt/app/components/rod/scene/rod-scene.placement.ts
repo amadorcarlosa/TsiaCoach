@@ -5,6 +5,21 @@ export function validateScene(
     trains: readonly RodTrain[],
     policy: ScenePolicy,
 ): SceneResult {
+    if (
+        policy.requireHorizontalAnchorRow &&
+        trains.some(train =>
+            train.parts.some(part =>
+                part.orientation !== 'horizontal' ||
+                part.offset.y !== 0,
+            ),
+        )
+    ) {
+        return {
+            allowed: false,
+            reason: 'Keep every part horizontal and on its train’s anchor row.',
+        }
+    }
+
     const footprints = trains.flatMap(train =>
         train.parts.map(part => ({
             x: train.anchor.x + part.offset.x,

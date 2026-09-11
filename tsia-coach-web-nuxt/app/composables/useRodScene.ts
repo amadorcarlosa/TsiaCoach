@@ -106,19 +106,6 @@ export function useRodScene(policy: ScenePolicy) {
                 ) {
                     return reject('This scene accepts horizontal rods only.')
                 }
-
-                // Track-based readouts depend on every part belonging
-                // to the train's anchor row.
-                if (
-                    policy.trackRows !== undefined &&
-                    (
-                        !policy.trackRows.includes(train.anchor.y) ||
-                        part.offset.y !== 0 ||
-                        part.orientation !== 'horizontal'
-                    )
-                ) {
-                    return reject('Keep each train on one horizontal track.')
-                }
             }
         }
 

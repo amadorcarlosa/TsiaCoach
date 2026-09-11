@@ -110,6 +110,37 @@ describe('scene replacement', () => {
     expect(new Set(scene.trains.value.map(t => t.id)).size).toBe(4)
   })
 
+  it('treats permitted track footprints separately from the horizontal anchor-row invariant', () => {
+    const source: RodTrain[] = [{
+      id: 'rectangle', anchor: { x: 0, y: 4 }, parts: [
+        { value: 3, orientation: 'horizontal', offset: { x: 0, y: 0 } },
+        { value: 3, orientation: 'horizontal', offset: { x: 0, y: 1 } },
+      ],
+    }]
+    expect(createScene({ trackRows: [4, 5] }).replace(source).allowed).toBe(true)
+    expect(createScene({ trackRows: [4] }).replace(source)).toEqual({
+      allowed: false, reason: 'Keep every part inside the board.',
+    })
+    // This rule must apply even when trackRows is omitted.
+    const restricted = createScene({ requireHorizontalAnchorRow: true })
+    expect(restricted.replace(source)).toEqual({
+      allowed: false, reason: 'Keep every part horizontal and on its train’s anchor row.',
+    })
+  })
+
+  it.each(['vertical', 'factors'] as const)('enforces the anchor-row rule during interactive %s actions too', kind => {
+    const scene = createScene({ requireHorizontalAnchorRow: true, allowFactors: true })
+    expect(scene.apply([], { type: 'create', value: 6 }).allowed).toBe(true)
+    const before = copyScene(scene.trains.value)
+    const action = kind === 'vertical'
+      ? { type: 'set-orientation', orientation: 'vertical' } as const
+      : { type: 'regroup-factors', shape: { rows: 2, columns: 3 } } as const
+    const checked = scene.check(['train-1'], action)
+    expect(checked).toMatchObject({ allowed: false, reason: expect.stringContaining('anchor row') })
+    expect(scene.apply(['train-1'], action)).toEqual(checked)
+    expect(scene.trains.value).toEqual(before)
+  })
+
   it('owns a deep copy of supplied snapshots', () => {
     const scene = createScene()
     const source = importedScene()

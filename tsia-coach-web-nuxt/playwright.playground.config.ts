@@ -5,7 +5,7 @@ const baseURL = external ?? 'http://127.0.0.1:3117'
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: ['playground-editing.spec.ts', 'fraction-authoring.spec.ts'],
+  testMatch: ['playground-editing.spec.ts', 'fraction-authoring.spec.ts', 'shared-authoring.spec.ts'],
   outputDir: './output/playwright/playground',
   workers: 1,
   use: {
