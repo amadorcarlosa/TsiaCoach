@@ -15,6 +15,217 @@ test('bar menu offers removal only and targets the clicked instance', async ({ p
   await expect(p.panel('Bar').getByRole('button', { name: /remove selected rod/i })).toBeDisabled()
 })
 
+test.describe('Fraction tab cancellation', () => {
+  test.use({
+    contextOptions: { reducedMotion: 'no-preference' },
+    viewport: { width: 1440, height: 900 },
+    reducedMotion: 'no-preference',
+  })
+
+  const cases = [
+    { name: 'held drag via keyboard', inertia: false, pointer: false },
+    { name: 'inertia via keyboard', inertia: true, pointer: false },
+    { name: 'inertia via pointer-down', inertia: true, pointer: true },
+  ] as const
+
+  async function previewOffset(
+    rod: Parameters<Playground['geometry']>[0],
+  ): Promise<number> {
+    return rod.evaluate(el => {
+      const style = getComputedStyle(el)
+      const matrix = new DOMMatrixReadOnly(style.transform)
+
+      // Follower previews use pixel-valued CSS translate.
+      const translate = style.translate === 'none'
+        ? [0, 0]
+        : style.translate.split(/\s+/).map(Number.parseFloat)
+
+      return Math.max(
+        Math.abs(matrix.m41),
+        Math.abs(matrix.m42),
+        Math.abs(translate[0] ?? 0),
+        Math.abs(translate[1] ?? 0),
+      )
+    })
+  }
+
+  for (const scenario of cases) {
+    test(`fraction cancels ${scenario.name}`, async ({
+      page,
+      playground: p,
+    }) => {
+      await p.show('Fraction')
+
+      const fractionTab = page.getByRole('tab', {
+        name: 'Fraction Rod Playground',
+        exact: true,
+      })
+      const arrayTab = page.getByRole('tab', {
+        name: 'Array Rod Playground',
+        exact: true,
+      })
+
+      // Both rods are created on the default numerator track.
+      const leader = await p.add('Fraction', 'three')
+      const follower = await p.add('Fraction', 'five')
+
+      await leader.click()
+      await follower.click({ modifiers: ['Shift'] })
+
+      await expect(leader).toHaveClass(/--selected/)
+      await expect(follower).toHaveClass(/--selected/)
+
+      const beforeLeader = await p.geometry(leader)
+      const beforeFollower = await p.geometry(follower)
+
+      const readouts = p.panel('Fraction')
+        .locator('[data-fraction-pair]')
+      const beforeReadouts = await readouts.allTextContents()
+
+      // These locators remain usable when the Fraction tab is hidden.
+      const hiddenPanel = page.getByRole('tabpanel', {
+        name: 'Fraction Rod Playground',
+        exact: true,
+        includeHidden: true,
+      })
+
+      const leaderId = await leader.getAttribute('data-piece-id')
+      const followerId = await follower.getAttribute('data-piece-id')
+
+      const retainedLeader = hiddenPanel.locator(
+        `[data-piece-id="${leaderId}"]`,
+      )
+      const retainedFollower = hiddenPanel.locator(
+        `[data-piece-id="${followerId}"]`,
+      )
+
+      const assertRestored = async () => {
+        await expect.poll(() => p.geometry(retainedLeader))
+          .toEqual(beforeLeader)
+        await expect.poll(() => p.geometry(retainedFollower))
+          .toEqual(beforeFollower)
+
+        await expect.poll(() => previewOffset(retainedLeader))
+          .toBeLessThan(0.05)
+        await expect.poll(() => previewOffset(retainedFollower))
+          .toBeLessThan(0.05)
+      }
+
+      const face = await leader.locator('.face.top').boundingBox()
+      const destinationTab = await arrayTab.boundingBox()
+      if (!face || !destinationTab) {
+        throw new Error('Missing rod face or destination tab')
+      }
+
+      const origin = await p.boardClient('Fraction', { x: 0, y: 0 })
+      const fourCells = await p.boardClient('Fraction', { x: 4, y: 0 })
+
+      const start = {
+        x: face.x + face.width / 2,
+        y: face.y + face.height / 2,
+      }
+
+      await page.mouse.move(start.x, start.y)
+      await page.mouse.down()
+
+      try {
+        await page.mouse.move(
+          start.x + fourCells.x - origin.x,
+          start.y + fourCells.y - origin.y,
+          { steps: 8 },
+        )
+
+        // Ensure the test actually started movement.
+        await expect.poll(() => previewOffset(leader))
+          .toBeGreaterThan(0.05)
+
+        await expect.poll(() => previewOffset(follower))
+          .toBeGreaterThan(0.05)
+
+        if (scenario.inertia) {
+          await page.mouse.up()
+
+          // A nonzero transform alone could be a stationary preview.
+          // Require movement across animation frames after release.
+          const motion = await leader.evaluate(async el => {
+            const position = () => {
+              const matrix = new DOMMatrixReadOnly(
+                getComputedStyle(el).transform,
+              )
+              return { x: matrix.m41, y: matrix.m42 }
+            }
+
+            const before = position()
+            await new Promise<void>(resolve =>
+              requestAnimationFrame(() => resolve()),
+            )
+            await new Promise<void>(resolve =>
+              requestAnimationFrame(() => resolve()),
+            )
+            const after = position()
+
+            return Math.hypot(
+              after.x - before.x,
+              after.y - before.y,
+            )
+          })
+
+          expect(motion, 'Inertia must be running before cancellation')
+            .toBeGreaterThan(0.05)
+        }
+
+        if (scenario.pointer) {
+          await page.mouse.move(
+            destinationTab.x + destinationTab.width / 2,
+            destinationTab.y + destinationTab.height / 2,
+          )
+          await page.mouse.down()
+
+          // Cancellation must happen before this pointer is released.
+          await assertRestored()
+        } else {
+          await arrayTab.focus()
+          await page.keyboard.press('Enter')
+          await expect(arrayTab).toHaveAttribute(
+            'aria-selected',
+            'true',
+          )
+
+          await assertRestored()
+        }
+      } finally {
+        await page.mouse.up()
+      }
+
+      await expect(arrayTab).toHaveAttribute('aria-selected', 'true')
+      await fractionTab.click()
+
+      // Returning must not resurrect or settle the cancelled movement.
+      await assertRestored()
+      await expect(p.panel('Fraction').locator('[data-piece-id]'))
+        .toHaveCount(2)
+      await expect(leader).toHaveClass(/--selected/)
+      await expect(follower).toHaveClass(/--selected/)
+      expect(await readouts.allTextContents()).toEqual(beforeReadouts)
+
+      // The restored selection must still be editable.
+      await leader.focus()
+      await page.keyboard.press('ArrowRight')
+
+      await expect.poll(() => p.geometry(leader)).toMatchObject({
+        x: beforeLeader.x + 1,
+        y: beforeLeader.y,
+        offset: 0,
+      })
+      await expect.poll(() => p.geometry(follower)).toMatchObject({
+        x: beforeFollower.x + 1,
+        y: beforeFollower.y,
+        offset: 0,
+      })
+    })
+  }
+})
+
 test('bar train renders each part and both parts remain interactive', async ({ playground: p }) => {
   await p.show('Bar')
   const first = await p.add('Bar', 'three')
