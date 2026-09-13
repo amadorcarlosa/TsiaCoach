@@ -5,7 +5,10 @@ export default defineConfig({
   ...unitConfig,
   test: {
     ...unitConfig.test,
-    include: ['app/components/rod/*.integration.test.ts'],
+    include: [
+      'app/components/rod/**/*.integration.test.ts',
+      'app/components/basetenblocks/**/*.integration.test.ts',
+    ],
     exclude: ['node_modules/**', 'tests/e2e/**'],
     hookTimeout: 10_000,
   },
