@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { useLevelFiles } from '~/composables/useLevelFiles'
-import LevelFileControls from './files/LevelFileControls.vue'
-import BoardGoalEditor from './goals/BoardGoalEditor.vue'
 import { createFractionGoalAdapter } from './goals/board-goal-adapters'
 import FractionRodTabla from '~/components/tabla/FractionRodTabla.vue'
 import { getFractionTablaGeometry } from '~/components/tabla/fraction-tabla.geometry'
@@ -10,15 +7,12 @@ import type { Point } from '~/components/grid/gridPointer'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
-import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
-import { useAuthoringControls } from '~/composables/useAuthoringControls'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
-import SceneRod from '~/components/rod/scene/SceneRod.vue'
+import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
-import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import TablaPlaygroundShell from '~/components/playground/TablaPlaygroundShell.vue'
-import PlaygroundAuthoringControls from '~/components/playground/PlaygroundAuthoringControls.vue'
+import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { trainView } from '~/components/rod/scene/train-view'
 
@@ -147,18 +141,7 @@ function onBoardClick(point: Point): void {
   activateTrack(Math.floor(point.y))
 }
 
-const {
-  menu,
-  interaction,
-  marquee,
-  blocked,
-  highlightedIds,
-  checkSelected,
-  applySelected,
-  addendMenuChoice,
-  captureScene,
-  replaceScene,
-} = useRodPlaygroundInteraction({
+const controls = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
   disabled: () => editingDisabled.value,
@@ -166,33 +149,19 @@ const {
   onBoardClick,
 })
 
+const {
+  menu,
+  marquee,
+  blocked,
+  checkSelected,
+  applySelected,
+  addendMenuChoice,
+  captureScene,
+  replaceScene,
+} = controls
+
 const goalAdapter = createFractionGoalAdapter({ columns: fullColumns, pairCount })
-const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
-const authoring = useLevelAuthoring({
-  goals: goalAdapter,
-  beforeChange: () => goalEditor.value?.resolveDraft() ?? true,
-  scene: {
-    read: () => scene.trains.value,
-    capture: captureScene,
-    checkReplacement: scene.checkReplacement,
-    replace: replaceScene,
-  },
-  editable: () => !editingDisabled.value,
-})
-
-const authoringControls = useAuthoringControls(
-  authoring,
-  () => blocked.value,
-)
-const levelFiles = useLevelFiles({
-  adapter: { board: { kind: 'fraction', config: { columns: fullColumns, pairCount } }, goals: goalAdapter, validateSnapshot: scene.validateSnapshot },
-  authoring,
-  editable: () => !editingDisabled.value,
-  hasWorkingRods: () => scene.trains.value.length > 0,
-  resolveDrafts: () => goalEditor.value?.resolveDraft() ?? true,
-  onImported: authoringControls.reset,
-})
-
+const board = { kind: 'fraction', config: { columns: fullColumns, pairCount } } as const
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
@@ -216,18 +185,13 @@ function onRemoveSelectedRod(): void {
 function onChooseRod(value: CuisenaireRodValue): void {
   if (blocked.value) return
 
+  // Deliberately no select-after-create (unlike Array/MathTabla): there is no
+  // orientation to apply, and keeping the selection lets tray rods join a pending train.
   scene.apply([], {
     type: 'create',
     value,
     row: activeRow.value,
   })
-}
-
-function intersectsPreview(
-  piece: ReturnType<typeof trainView>,
-  columns: number,
-): boolean {
-  return piece.x < columns && piece.x + piece.dimensions.width > 0
 }
 </script>
 
@@ -284,32 +248,11 @@ function intersectsPreview(
         embedded
       >
         <template #pieces="{ cellSize: pieceCellSize }">
-          <SceneRod
-            v-for="piece in placedRods"
-            v-show="!phonePortrait || intersectsPreview(piece, visibleColumns)"
-            :id="piece.id"
-            :key="piece.id"
-            :value="piece.value"
-            :parts="piece.parts"
-            :dimensions="piece.dimensions"
-            :x="piece.x"
-            :y="piece.y"
+          <SceneRodLayer
+            :pieces="placedRods"
             :cell-size="pieceCellSize"
-            :selected="highlightedIds.has(piece.id)"
-            :disabled="blocked"
-            :snap-to-grid="true"
-            :begin-move="() => interaction.beginMove(piece.id)"
-            :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
-            :preview-delta="interaction.previewFor(piece.id)"
-            @select="interaction.select(piece.id, $event)"
-            @move-preview="interaction.previewMove(piece.id, $event)"
-            @settled="interaction.settleMove(piece.id, $event)"
-            @move-end="interaction.endMove(piece.id)"
-            @menu-request="menu.open"
-          />
-          <SceneMarqueeOverlay
-            :rectangle="marquee.rectangle.value"
-            :cell-size="pieceCellSize"
+            :controls="controls"
+            :clip-columns="phonePortrait ? visibleColumns : null"
           />
         </template>
       </FractionRodTabla>
@@ -345,34 +288,15 @@ function intersectsPreview(
         </li>
       </ul>
 
-      <PlaygroundAuthoringControls
-        :steps="authoring.steps.value"
-        :active-step-id="authoring.activeStepId.value"
-        :dirty="authoring.dirty.value"
-        :blocked="blocked"
-        :pending-step-id="authoringControls.pendingStepId.value"
-        :pending-delete-id="authoringControls.pendingDeleteId.value"
-        :pending-delete-title="authoringControls.pendingDeleteTitle.value"
-        :deleting-dirty-active="authoringControls.deletingDirtyActive.value"
-        :message="authoringControls.message.value"
-        @capture="authoringControls.capture"
-        @update="authoringControls.update"
-        @select-step="authoringControls.requestStep"
-        @resolve="authoringControls.resolve"
-        @patch="authoringControls.patch"
-        @move="authoringControls.move"
-        @request-delete="authoringControls.requestDelete"
-        @confirm-delete="authoringControls.confirmDelete"
-        @cancel-delete="authoringControls.cancelDelete"
-      >
-        <template #goal-editor="{ stepId, disabled }">
-          <BoardGoalEditor
-ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
-            :goal="authoring.steps.value.find(step => step.id === stepId)?.goal ?? null"
-            @apply="input => authoring.setGoal(stepId, input)" />
-        </template>
-      </PlaygroundAuthoringControls>
-      <LevelFileControls :files="levelFiles" :disabled="editingDisabled" />
+      <RodPlaygroundAuthoring
+        :board="board"
+        :goal-adapter="goalAdapter"
+        :scene="scene"
+        :capture-scene="captureScene"
+        :replace-scene="replaceScene"
+        :blocked="() => blocked"
+        :editing-disabled="() => editingDisabled"
+      />
 
       <p
         class="placement-message"

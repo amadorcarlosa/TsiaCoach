@@ -1,0 +1,13 @@
+.visual {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+
+  /* Raised faces shift slightly right; the base stays on the grid. */
+  transform: matrix3d(
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    var(--raised-piece-x), var(--raised-piece-y), 1, 0,
+    0, 0, 0, 1
+  );
+}

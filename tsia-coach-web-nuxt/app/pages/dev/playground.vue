@@ -3,6 +3,8 @@ import { ref, watch } from 'vue'
 
 import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
 import ArrayRodPlayground from '~/components/playground/ArrayRodPlayground.vue'
+import ArrayBaseTenPlayground from '~/components/playground/ArrayBaseTenPlayground.vue'
+import AlgebraTilePlayground from '~/components/playground/AlgebraTilePlayground.vue'
 import BarRodPlayground from '~/components/playground/BarRodPlayground.vue'
 import FractionPlayground from '~/components/playground/FractionPlayground.vue'
 import MathTablaPlayground from '~/components/playground/MathTablaPlayground.vue'
@@ -46,6 +48,12 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
       :items="tabs"
       :unmount-on-hide="false"
     >
+      <template #baseTenPlayground>
+        <ArrayBaseTenPlayground :active="activeTab === 'baseTenPlayground'" :cancel-version="readCancelVersion" />
+      </template>
+      <template #algebraTilePlayground>
+        <AlgebraTilePlayground :active="activeTab === 'algebraTilePlayground'" :cancel-version="readCancelVersion" />
+      </template>
       <template #arrayModelPlayground>
         <ArrayRodPlayground
           :active="activeTab === 'arrayModelPlayground'"

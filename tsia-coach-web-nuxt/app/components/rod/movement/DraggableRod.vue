@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 
 import CuisenaireRod from '~/components/rod/cuisenaire/CuisenaireRod.vue'
+import raisedPiece from '~/components/grid/raised-piece.module.css'
+import { raisedPieceStyle } from '~/components/grid/raised-piece'
 import type { Point } from '~/components/grid/gridPointer'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
 import type { DragProps } from '~/components/rod/rod.types.ts'
@@ -148,7 +150,7 @@ defineExpose({
       @pointerdown.capture="onSelectionPointerDown"
       @keydown.capture="onSelectionKeydown"
   >
-    <div class="rod-visual">
+    <div class="rod-visual" :class="raisedPiece.visual" :style="raisedPieceStyle">
       <div
           v-for="(part, index) in visualParts"
           :key="index"
@@ -194,20 +196,6 @@ defineExpose({
 .draggable-rod[aria-disabled="true"] {
   cursor: default;
   touch-action: auto;
-}
-
-.rod-visual {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-
-  /* Raised faces shift slightly right; the base stays on the grid. */
-  transform: matrix3d(
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0.1,-0.1, 1, 0,
-      0, 0, 0, 1
-  );
 }
 
 .train-part {

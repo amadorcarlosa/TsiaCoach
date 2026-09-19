@@ -91,6 +91,7 @@ var api = app.MapGroup("/api");
 api.MapModels();
 api.MapRods();
 api.MapBaseTenBlocks();
+api.MapAlgebraTiles();
 api.MapAgents();
 api.MapSampleQuestions();
 api.MapPracticeItems(app.Services.GetRequiredService<SamplePracticeCatalog>());

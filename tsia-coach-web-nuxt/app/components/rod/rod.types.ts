@@ -2,7 +2,6 @@ import type { UnitDimensions } from "#shared/types/rods.ts"
 import type { DeepReadonly } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type { TrainPart } from './scene/rod.scene.types'
-import type {BaseTenValue}  from "~/components/basetenblocks/base10.types.ts";
 
 export type RodAppearance = {
     fill: string
@@ -18,7 +17,7 @@ export type RodProps = {
 
 export type DragProps = {
     id: string
-    value: CuisenaireRodValue|BaseTenValue
+    value: CuisenaireRodValue
     x: number
     y: number
     cellSize: number

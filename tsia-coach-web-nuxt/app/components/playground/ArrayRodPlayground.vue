@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { useLevelFiles } from '~/composables/useLevelFiles'
-import LevelFileControls from './files/LevelFileControls.vue'
-import BoardGoalEditor from './goals/BoardGoalEditor.vue'
 import { createArrayGoalAdapter } from './goals/board-goal-adapters'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
-import SceneRod from '~/components/rod/scene/SceneRod.vue'
+import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
-import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
-import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
-import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
+import ArrayPlaygroundShell from '~/components/playground/ArrayPlaygroundShell.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import {
   arrayRodOrientations,
@@ -20,11 +15,10 @@ import { trainView } from '~/components/rod/scene/train-view'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
-import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
-import { useAuthoringControls } from '~/composables/useAuthoringControls'
 import { useFactorMenuChoice } from '~/composables/useFactorMenuChoice'
 import { useBoardLayout } from '~/composables/useBoardLayout'
-import PlaygroundAuthoringControls from '~/components/playground/PlaygroundAuthoringControls.vue'
+import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
+import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
 
 const props = withDefaults(defineProps<{
   active?: boolean
@@ -37,8 +31,12 @@ const props = withDefaults(defineProps<{
 const fullColumns = 24
 const boardRows = 12
 
-const boardViewport = ref<HTMLElement | null>(null)
-const workspaceTools = ref<HTMLElement | null>(null)
+const {
+  boardViewport,
+  workspaceTools,
+  setBoardViewport,
+  setWorkspaceTools,
+} = usePlaygroundElementRefs()
 
 const {
   phonePortrait,
@@ -71,51 +69,26 @@ const scene = useRodScene({
   allowFactors: true,
 })
 
-const {
-  menu,
-  interaction,
-  marquee,
-  blocked,
-  highlightedIds,
-  checkSelected,
-  applySelected,
-  addendMenuChoice,
-  captureScene,
-  replaceScene,
-} = useRodPlaygroundInteraction({
+const controls = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
   disabled: () => editingDisabled.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
 
+const {
+  menu,
+  marquee,
+  blocked,
+  checkSelected,
+  applySelected,
+  addendMenuChoice,
+  captureScene,
+  replaceScene,
+} = controls
+
 const goalAdapter = createArrayGoalAdapter({ columns: fullColumns, rows: boardRows })
-const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
-const authoring = useLevelAuthoring({
-  goals: goalAdapter,
-  beforeChange: () => goalEditor.value?.resolveDraft() ?? true,
-  scene: {
-    read: () => scene.trains.value,
-    capture: captureScene,
-    checkReplacement: scene.checkReplacement,
-    replace: replaceScene,
-  },
-  editable: () => !editingDisabled.value,
-})
-
-const authoringControls = useAuthoringControls(
-  authoring,
-  () => blocked.value,
-)
-const levelFiles = useLevelFiles({
-  adapter: { board: { kind: 'array', config: { columns: fullColumns, rows: boardRows } }, goals: goalAdapter, validateSnapshot: scene.validateSnapshot },
-  authoring,
-  editable: () => !editingDisabled.value,
-  hasWorkingRods: () => scene.trains.value.length > 0,
-  resolveDrafts: () => goalEditor.value?.resolveDraft() ?? true,
-  onImported: authoringControls.reset,
-})
-
+const board = { kind: 'array', config: { columns: fullColumns, rows: boardRows } } as const
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 
@@ -136,8 +109,8 @@ const selectedRod = computed(() => {
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
   { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
-  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
   { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
+  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
 
   addendMenuChoice.value,
   factorMenuChoice.value,
@@ -155,6 +128,7 @@ const menuChoices = computed<SceneMenuChoice[]>(() => [
 ])
 
 function onChoose(value: CuisenaireRodValue): void {
+  if (blocked.value) return
   const result = scene.apply([], { type: 'create', value })
 
   if (result.allowed) {
@@ -172,191 +146,70 @@ function onRemove(): void {
 </script>
 
 <template>
-  <div class="array-playground">
-    <p v-if="phonePortrait" role="status">
-      Portrait preview: columns 0–12. Rotate to landscape to edit.
-    </p>
-
-    <div ref="workspaceTools">
-      <div class="array-toolbar" aria-label="Array rod controls">
-        <button
-            type="button"
-            :aria-expanded="trayOpen"
-            aria-controls="array-rod-tray"
-            @click="trayOpen = !trayOpen"
-        >
-          {{ trayOpen ? 'Hide rods' : 'Show rods' }}
-        </button>
-
-        <PlaygroundActionButton
-            v-for="orientation in arrayRodOrientations"
-            :key="orientation"
-            class="orientation-button"
-            :disabled="!checkSelected({
-              type: 'set-orientation',
-              orientation,
-            }).allowed"
-            :pressed="selectedRod?.orientation === orientation"
-            @click="onOrient(orientation)"
-        >
-          {{ orientation }}
-        </PlaygroundActionButton>
-
-        <PlaygroundActionButton
-            :disabled="!checkSelected({ type: 'delete' }).allowed"
-            @click="onRemove"
-        >
-          Remove selected rod
-        </PlaygroundActionButton>
-      </div>
-
-      <div v-show="trayOpen" id="array-rod-tray">
-        <PlaygroundRodTray
-            layout="wrap"
-            :disabled="phonePortrait"
-            @choose="onChoose"
-        />
-      </div>
-    </div>
-
-    <div
-        ref="boardViewport"
-        class="array-viewport"
-        :class="{ 'marquee-enabled': !editingDisabled }"
-        tabindex="-1"
-        @pointerdown.capture="marquee.onPointerDown"
-        @lostpointercapture="marquee.onLostPointerCapture"
-    >
+  <ArrayPlaygroundShell
+    :blocked="blocked"
+    :can-orient="orientation => checkSelected({ type: 'set-orientation', orientation }).allowed"
+    :editing-disabled="editingDisabled"
+    :message="message"
+    :orientations="arrayRodOrientations"
+    :phone-portrait="phonePortrait"
+    :piece-count="renderedPieces.length"
+    preview-notice="Portrait preview: columns 0–12. Rotate to landscape to edit."
+    :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
+    :selected-orientation="selectedRod?.orientation"
+    :set-board-viewport="setBoardViewport"
+    :set-workspace-tools="setWorkspaceTools"
+    toolbar-label="Array rod controls"
+    tray-id="array-rod-tray"
+    :tray-open="trayOpen"
+    viewport-class="array-viewport"
+    @board-lost-pointer-capture="marquee.onLostPointerCapture"
+    @board-pointer-down="marquee.onPointerDown"
+    @choose-rod="onChoose"
+    @orient="onOrient"
+    @remove-selected="onRemove"
+    @update-tray-open="trayOpen = $event"
+  >
+    <template #board>
       <ArrayRodTabla
-          :rows="boardRows"
-          :visible-columns="visibleColumns"
-          :cell-size="cellSize"
-          :viewport-padding="`${boardPaddingY}px 16px`"
+        :rows="boardRows"
+        :visible-columns="visibleColumns"
+        :cell-size="cellSize"
+        :viewport-padding="`${boardPaddingY}px 16px`"
       >
         <template #pieces="{ cellSize: pieceCellSize }">
-          <SceneRod
-              v-for="piece in renderedPieces"
-              v-show="
-      !phonePortrait ||
-      (
-        piece.x < visibleColumns &&
-        piece.x + piece.dimensions.width > 0
-      )
-    "
-               :id="piece.id"
-               :key="piece.id"
-               :value="piece.value"
-               :parts="piece.parts"
-               :x="piece.x"
-               :y="piece.y"
-              :dimensions="piece.dimensions"
-              :cell-size="pieceCellSize"
-              :selected="highlightedIds.has(piece.id)"
-              :disabled="blocked"
-              :snap-to-grid="true"
-              :begin-move="() => interaction.beginMove(piece.id)"
-              :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
-              :preview-delta="interaction.previewFor(piece.id)"
-              @select="interaction.select(piece.id, $event)"
-              @move-preview="interaction.previewMove(piece.id, $event)"
-              @settled="interaction.settleMove(piece.id, $event)"
-              @move-end="interaction.endMove(piece.id)"
-              @menu-request="menu.open"
-          />
-          <SceneMarqueeOverlay
-              :rectangle="marquee.rectangle.value"
-              :cell-size="pieceCellSize"
+          <SceneRodLayer
+            :pieces="renderedPieces"
+            :cell-size="pieceCellSize"
+            :controls="controls"
+            :clip-columns="phonePortrait ? visibleColumns : null"
           />
         </template>
       </ArrayRodTabla>
-    </div>
+    </template>
 
-    <SceneMenu
-      :request="menu.request.value"
-      :selection="menu.selectedIds.value"
-      :choices="menuChoices"
-      :check="scene.check"
-      @action="menu.applyAction"
-      @close="menu.close"
-      @restore-focus="menu.restoreFocus"
-    />
+    <template #menu>
+      <SceneMenu
+        :request="menu.request.value"
+        :selection="menu.selectedIds.value"
+        :choices="menuChoices"
+        :check="scene.check"
+        @action="menu.applyAction"
+        @close="menu.close"
+        @restore-focus="menu.restoreFocus"
+      />
+    </template>
 
-    <PlaygroundAuthoringControls
-      :steps="authoring.steps.value"
-      :active-step-id="authoring.activeStepId.value"
-      :dirty="authoring.dirty.value"
-      :blocked="blocked"
-      :pending-step-id="authoringControls.pendingStepId.value"
-      :pending-delete-id="authoringControls.pendingDeleteId.value"
-      :pending-delete-title="authoringControls.pendingDeleteTitle.value"
-      :deleting-dirty-active="authoringControls.deletingDirtyActive.value"
-      :message="authoringControls.message.value"
-      @capture="authoringControls.capture"
-      @update="authoringControls.update"
-      @select-step="authoringControls.requestStep"
-      @resolve="authoringControls.resolve"
-      @patch="authoringControls.patch"
-      @move="authoringControls.move"
-      @request-delete="authoringControls.requestDelete"
-      @confirm-delete="authoringControls.confirmDelete"
-      @cancel-delete="authoringControls.cancelDelete"
-    >
-        <template #goal-editor="{ stepId, disabled }">
-          <BoardGoalEditor
-ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
-            :goal="authoring.steps.value.find(step => step.id === stepId)?.goal ?? null"
-            @apply="input => authoring.setGoal(stepId, input)" />
-        </template>
-      </PlaygroundAuthoringControls>
-      <LevelFileControls :files="levelFiles" :disabled="editingDisabled" />
-
-    <p role="status" aria-live="polite">{{ message }}</p>
-    <p>{{ renderedPieces.length }} objects on the board</p>
-  </div>
+    <template #after-workspace>
+      <RodPlaygroundAuthoring
+        :board="board"
+        :goal-adapter="goalAdapter"
+        :scene="scene"
+        :capture-scene="captureScene"
+        :replace-scene="replaceScene"
+        :blocked="() => blocked"
+        :editing-disabled="() => editingDisabled"
+      />
+    </template>
+  </ArrayPlaygroundShell>
 </template>
-
-<style scoped>
-.marquee-enabled :deep([data-grid-world]) {
-  touch-action: none;
-  user-select: none;
-}
-
-.array-playground {
-  max-width: 1100px;
-  min-width: 0;
-  margin-inline: auto;
-  padding: 8px;
-}
-
-.array-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-block: 8px;
-}
-
-.array-toolbar > button {
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--mt-border);
-  border-radius: var(--radius-md);
-  color: var(--mt-text);
-  background: var(--mt-bg-elevated);
-  font: inherit;
-  cursor: pointer;
-}
-
-.array-toolbar > button:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
-}
-
-.orientation-button {
-  text-transform: capitalize;
-}
-
-.array-viewport {
-  width: 100%;
-  min-width: 0;
-}
-</style>

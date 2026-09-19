@@ -1,4 +1,6 @@
 export const playgroundTabs = [
+  { id: 'baseTenPlayground', label: 'Base ten' },
+  { id: 'algebraTilePlayground', label: 'Algebra tiles' },
   { id: 'barModelPlayground', label: 'Bar Rod Playground' },
   { id: 'arrayModelPlayground', label: 'Array Rod Playground' },
   {

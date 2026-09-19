@@ -120,6 +120,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/algebra-tiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAlgebraTileCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent": {
         parameters: {
             query?: never;
@@ -364,6 +380,26 @@ export interface components {
         };
         /** @enum {unknown} */
         AgentRole: "user" | "assistant";
+        AlgebraTileDefinitionResponse: {
+            term: components["schemas"]["AlgebraTileTerm"];
+            sign: components["schemas"]["AlgebraTileSign"];
+            /** Format: int32 */
+            coefficient: number | string;
+            shape: components["schemas"]["AlgebraTileShape"];
+            dimensions: components["schemas"]["AlgebraTileDimensionsResponse"];
+        };
+        AlgebraTileDimensionsResponse: {
+            width: components["schemas"]["AlgebraTileSide"];
+            height: components["schemas"]["AlgebraTileSide"];
+        };
+        /** @enum {unknown} */
+        AlgebraTileShape: "square" | "rectangle";
+        /** @enum {unknown} */
+        AlgebraTileSide: "one" | "x" | "y";
+        /** @enum {unknown} */
+        AlgebraTileSign: "positive" | "negative";
+        /** @enum {unknown} */
+        AlgebraTileTerm: "one" | "x" | "y" | "xSquared" | "ySquared" | "xy";
         AnswerChoiceResponse: {
             id: string;
             labelSpan: components["schemas"]["TokenSpanResponse"];
@@ -1127,6 +1163,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseTenBlockDefinitionResponse"][];
+                };
+            };
+        };
+    };
+    GetAlgebraTileCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgebraTileDefinitionResponse"][];
                 };
             };
         };

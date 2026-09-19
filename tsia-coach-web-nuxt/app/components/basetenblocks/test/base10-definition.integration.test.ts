@@ -4,7 +4,7 @@ import {
   BaseTenBlockDefinitionSchema,
   type BaseTenBlockDefinition,
 } from '#server/schemas/base10-definition'
-import { BaseTenValues } from '~/components/basetenblocks/base10.types'
+import { BaseTenValues, baseTenCatalog } from '~/components/basetenblocks/base10.types'
 
 // Calls the real C# API. No frontend fixture or mock can establish domain agreement.
 // PowerShell: $env:BASE10_API_URL = 'http://localhost:<api-port>'; pnpm test:base10:contract
@@ -53,6 +53,8 @@ describe('frontend base-ten catalog agrees with the C# domain', () => {
 
   it('provides consistent unit dimensions whose volume equals the block value', () => {
     for (const block of catalog) {
+      const frontend = baseTenCatalog[block.denomination]
+      expect({ value: frontend.value, shape: frontend.shape, dimensions: frontend.dimensions }).toEqual(expected[block.denomination])
       expect(block.dimensions, `Dimension drift for ${block.denomination}`)
         .toEqual(expected[block.denomination].dimensions)
       const { width, depth, height } = block.dimensions

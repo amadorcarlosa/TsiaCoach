@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { useLevelFiles } from '~/composables/useLevelFiles'
-import LevelFileControls from './files/LevelFileControls.vue'
-import BoardGoalEditor from './goals/BoardGoalEditor.vue'
 import { createMathTablaGoalAdapter } from './goals/board-goal-adapters'
 import { computed, ref } from 'vue'
 import MathTablaBoard from '~/components/tabla/MathTablaBoard.vue'
-import SceneRod from '~/components/rod/scene/SceneRod.vue'
+import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
-import SceneMarqueeOverlay from '~/components/rod/scene/SceneMarqueeOverlay.vue'
 import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
-import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
+import ArrayPlaygroundShell from '~/components/playground/ArrayPlaygroundShell.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import type { ArrayRodOrientation } from '~/components/rod/array/array-rod.types'
 import { getMathTablaGeometry } from '~/components/tabla/mathtabla.geometry'
@@ -20,11 +16,10 @@ import { trainView } from '~/components/rod/scene/train-view'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
-import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
-import { useAuthoringControls } from '~/composables/useAuthoringControls'
 import { useFactorMenuChoice } from '~/composables/useFactorMenuChoice'
 import { useBoardLayout } from '~/composables/useBoardLayout'
-import PlaygroundAuthoringControls from '~/components/playground/PlaygroundAuthoringControls.vue'
+import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
+import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
 
 const props = withDefaults(defineProps<{
   active?: boolean
@@ -50,8 +45,12 @@ const destinations = [
   { id: 'array', label: 'Central array' },
 ]
 
-const boardViewport = ref<HTMLElement | null>(null)
-const workspaceTools = ref<HTMLElement | null>(null)
+const {
+  boardViewport,
+  workspaceTools,
+  setBoardViewport,
+  setWorkspaceTools,
+} = usePlaygroundElementRefs()
 
 const {
   phonePortrait,
@@ -84,18 +83,7 @@ const scene = useRodScene({
   allowFactors: true,
 })
 
-const {
-  menu,
-  interaction,
-  marquee,
-  blocked,
-  highlightedIds,
-  checkSelected,
-  applySelected,
-  addendMenuChoice,
-  captureScene,
-  replaceScene,
-} = useRodPlaygroundInteraction({
+const controls = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
   disabled: () => editingDisabled.value,
@@ -103,33 +91,19 @@ const {
   onBoardClick,
 })
 
+const {
+  menu,
+  marquee,
+  blocked,
+  checkSelected,
+  applySelected,
+  addendMenuChoice,
+  captureScene,
+  replaceScene,
+} = controls
+
 const goalAdapter = createMathTablaGoalAdapter({ centralColumns, centralRows })
-const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
-const authoring = useLevelAuthoring({
-  goals: goalAdapter,
-  beforeChange: () => goalEditor.value?.resolveDraft() ?? true,
-  scene: {
-    read: () => scene.trains.value,
-    capture: captureScene,
-    checkReplacement: scene.checkReplacement,
-    replace: replaceScene,
-  },
-  editable: () => !editingDisabled.value,
-})
-
-const authoringControls = useAuthoringControls(
-  authoring,
-  () => blocked.value,
-)
-const levelFiles = useLevelFiles({
-  adapter: { board: { kind: 'mathtabla', config: { centralColumns, centralRows } }, goals: goalAdapter, validateSnapshot: scene.validateSnapshot },
-  authoring,
-  editable: () => !editingDisabled.value,
-  hasWorkingRods: () => scene.trains.value.length > 0,
-  resolveDrafts: () => goalEditor.value?.resolveDraft() ?? true,
-  onImported: authoringControls.reset,
-})
-
+const board = { kind: 'mathtabla', config: { centralColumns, centralRows } } as const
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 
@@ -151,8 +125,8 @@ const selectedRod = computed(() => {
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
   { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
-  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
   { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
+  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
 
   addendMenuChoice.value,
   factorMenuChoice.value,
@@ -197,12 +171,32 @@ function onRemove(): void {
 </script>
 
 <template>
-  <div class="math-playground" :class="{ 'math-playground--preview': phonePortrait }">
-    <p v-if="phonePortrait" role="status">
-      Portrait preview: two reference columns and the first 12 central-grid columns. Rotate to landscape to edit.
-    </p>
-
-    <div ref="workspaceTools">
+  <ArrayPlaygroundShell
+    :blocked="blocked"
+    :can-orient="orientation => checkSelected({ type: 'set-orientation', orientation }).allowed"
+    :editing-disabled="editingDisabled"
+    :message="message"
+    :orientations="orientations"
+    :phone-portrait="phonePortrait"
+    :piece-count="renderedPieces.length"
+    preview-notice="Portrait preview: two reference columns and the first 12 central-grid columns. Rotate to landscape to edit."
+    :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
+    scrollable
+    :selected-orientation="selectedRod?.orientation"
+    :set-board-viewport="setBoardViewport"
+    :set-workspace-tools="setWorkspaceTools"
+    toolbar-label="MathTabla rod controls"
+    tray-id="mathtabla-rod-tray"
+    :tray-open="trayOpen"
+    viewport-class="math-viewport"
+    @board-lost-pointer-capture="marquee.onLostPointerCapture"
+    @board-pointer-down="marquee.onPointerDown"
+    @choose-rod="onChoose"
+    @orient="onOrient"
+    @remove-selected="onRemove"
+    @update-tray-open="trayOpen = $event"
+  >
+    <template #tools-start>
       <div class="math-destinations" role="group" aria-label="Rod destination">
         <PlaygroundActionButton
           v-for="destination in destinations"
@@ -214,157 +208,68 @@ function onRemove(): void {
           {{ destination.label }}
         </PlaygroundActionButton>
       </div>
-      <div class="math-toolbar" aria-label="MathTabla rod controls">
-        <button
-            type="button"
-            :aria-expanded="trayOpen"
-            aria-controls="mathtabla-rod-tray"
-            @click="trayOpen = !trayOpen"
-        >
-          {{ trayOpen ? 'Hide rods' : 'Show rods' }}
-        </button>
+    </template>
 
-        <PlaygroundActionButton
-            v-for="orientation in orientations"
-            :key="orientation"
-            class="orientation-button"
-            :disabled="!checkSelected({
-              type: 'set-orientation',
-              orientation,
-            }).allowed"
-            :pressed="selectedRod?.orientation === orientation"
-            @click="onOrient(orientation)"
-        >
-          {{ orientation }}
-        </PlaygroundActionButton>
-
-        <PlaygroundActionButton
-            :disabled="!checkSelected({ type: 'delete' }).allowed"
-            @click="onRemove"
-        >
-          Remove selected rod
-        </PlaygroundActionButton>
+    <template #before-board>
+      <div class="math-readouts" role="group" aria-label="MathTabla reference readouts">
+        <p>Horizontal reference: N {{ readouts.horizontal.numerator }}, D {{ readouts.horizontal.denominator }}</p>
+        <p>Vertical reference: N {{ readouts.vertical.numerator }}, D {{ readouts.vertical.denominator }}</p>
+        <label>
+          <input v-model="showGuide" type="checkbox" :disabled="!readouts.guide">
+          Show denominator guide
+        </label>
+        <template v-if="showGuide && readouts.guide">
+          <p>Denominator guide: {{ readouts.guide.width }} × {{ readouts.guide.depth }} = {{ readouts.guideCells }} cells</p>
+          <p>Occupied inside guide: {{ readouts.occupiedCells }} of {{ readouts.guideCells }} cells</p>
+        </template>
+        <p v-else-if="!readouts.guide">Add rods to both D tracks to define the guide.</p>
       </div>
+    </template>
 
-      <div v-show="trayOpen" id="mathtabla-rod-tray">
-        <PlaygroundRodTray
-            layout="wrap"
-            :disabled="blocked"
-            @choose="onChoose"
-        />
-      </div>
-    </div>
-
-    <div class="math-readouts" role="group" aria-label="MathTabla reference readouts">
-      <p>Horizontal reference: N {{ readouts.horizontal.numerator }}, D {{ readouts.horizontal.denominator }}</p>
-      <p>Vertical reference: N {{ readouts.vertical.numerator }}, D {{ readouts.vertical.denominator }}</p>
-      <label>
-        <input v-model="showGuide" type="checkbox" :disabled="!readouts.guide">
-        Show denominator guide
-      </label>
-      <template v-if="showGuide && readouts.guide">
-        <p>Denominator guide: {{ readouts.guide.width }} × {{ readouts.guide.depth }} = {{ readouts.guideCells }} cells</p>
-        <p>Occupied inside guide: {{ readouts.occupiedCells }} of {{ readouts.guideCells }} cells</p>
-      </template>
-      <p v-else-if="!readouts.guide">Add rods to both D tracks to define the guide.</p>
-    </div>
-
-    <div
-        ref="boardViewport"
-        class="math-viewport"
-        :class="{ 'marquee-enabled': !editingDisabled }"
-        tabindex="-1"
-        @pointerdown.capture="marquee.onPointerDown"
-        @lostpointercapture="marquee.onLostPointerCapture"
-    >
+    <template #board>
       <MathTablaBoard
-          :rows="centralRows"
-          :columns="centralColumns"
-          :cell-size="cellSize"
-          viewport-padding="16px"
-          :active-region="activeRegion"
-          :guide="showGuide ? readouts.guide : null"
+        :rows="centralRows"
+        :columns="centralColumns"
+        :cell-size="cellSize"
+        viewport-padding="16px"
+        :active-region="activeRegion"
+        :guide="showGuide ? readouts.guide : null"
       >
         <template #pieces="{ cellSize: pieceCellSize }">
-          <SceneRod
-              v-for="piece in renderedPieces"
-              v-show="
-      !phonePortrait ||
-      (
-        piece.x < visibleColumns &&
-        piece.x + piece.dimensions.width > 0
-      )
-    "
-               :id="piece.id"
-               :key="piece.id"
-               :value="piece.value"
-               :parts="piece.parts"
-               :x="piece.x"
-               :y="piece.y"
-              :dimensions="piece.dimensions"
-              :cell-size="pieceCellSize"
-              :selected="highlightedIds.has(piece.id)"
-              :disabled="blocked"
-              :snap-to-grid="true"
-              :begin-move="() => interaction.beginMove(piece.id)"
-              :constrain-position="(position, direction) => interaction.constrainPosition(piece.id, position, direction)"
-              :preview-delta="interaction.previewFor(piece.id)"
-              @select="interaction.select(piece.id, $event)"
-              @move-preview="interaction.previewMove(piece.id, $event)"
-              @settled="interaction.settleMove(piece.id, $event)"
-              @move-end="interaction.endMove(piece.id)"
-              @menu-request="menu.open"
-          />
-          <SceneMarqueeOverlay
-              :rectangle="marquee.rectangle.value"
-              :cell-size="pieceCellSize"
+          <SceneRodLayer
+            :pieces="renderedPieces"
+            :cell-size="pieceCellSize"
+            :controls="controls"
+            :clip-columns="phonePortrait ? visibleColumns : null"
           />
         </template>
       </MathTablaBoard>
-    </div>
+    </template>
 
-    <SceneMenu
-      :request="menu.request.value"
-      :selection="menu.selectedIds.value"
-      :choices="menuChoices"
-      :check="scene.check"
-      @action="menu.applyAction"
-      @close="menu.close"
-      @restore-focus="menu.restoreFocus"
-    />
+    <template #menu>
+      <SceneMenu
+        :request="menu.request.value"
+        :selection="menu.selectedIds.value"
+        :choices="menuChoices"
+        :check="scene.check"
+        @action="menu.applyAction"
+        @close="menu.close"
+        @restore-focus="menu.restoreFocus"
+      />
+    </template>
 
-    <PlaygroundAuthoringControls
-      :steps="authoring.steps.value"
-      :active-step-id="authoring.activeStepId.value"
-      :dirty="authoring.dirty.value"
-      :blocked="blocked"
-      :pending-step-id="authoringControls.pendingStepId.value"
-      :pending-delete-id="authoringControls.pendingDeleteId.value"
-      :pending-delete-title="authoringControls.pendingDeleteTitle.value"
-      :deleting-dirty-active="authoringControls.deletingDirtyActive.value"
-      :message="authoringControls.message.value"
-      @capture="authoringControls.capture"
-      @update="authoringControls.update"
-      @select-step="authoringControls.requestStep"
-      @resolve="authoringControls.resolve"
-      @patch="authoringControls.patch"
-      @move="authoringControls.move"
-      @request-delete="authoringControls.requestDelete"
-      @confirm-delete="authoringControls.confirmDelete"
-      @cancel-delete="authoringControls.cancelDelete"
-    >
-        <template #goal-editor="{ stepId, disabled }">
-          <BoardGoalEditor
-ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
-            :goal="authoring.steps.value.find(step => step.id === stepId)?.goal ?? null"
-            @apply="input => authoring.setGoal(stepId, input)" />
-        </template>
-      </PlaygroundAuthoringControls>
-      <LevelFileControls :files="levelFiles" :disabled="editingDisabled" />
-
-    <p role="status" aria-live="polite">{{ message }}</p>
-    <p>{{ renderedPieces.length }} objects on the board</p>
-  </div>
+    <template #after-workspace>
+      <RodPlaygroundAuthoring
+        :board="board"
+        :goal-adapter="goalAdapter"
+        :scene="scene"
+        :capture-scene="captureScene"
+        :replace-scene="replaceScene"
+        :blocked="() => blocked"
+        :editing-disabled="() => editingDisabled"
+      />
+    </template>
+  </ArrayPlaygroundShell>
 </template>
 
 <style scoped>
@@ -394,54 +299,4 @@ ref="goalEditor" :step-id="stepId" :adapter="goalAdapter" :disabled="disabled"
   gap: 8px;
   min-height: 44px;
 }
-
-.marquee-enabled :deep([data-grid-world]) {
-  touch-action: none;
-  user-select: none;
-}
-
-.math-playground {
-  max-width: 1100px;
-  min-width: 0;
-  margin-inline: auto;
-  padding: 8px;
-}
-
-.math-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-block: 8px;
-}
-
-.math-toolbar > button {
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--mt-border);
-  border-radius: var(--radius-md);
-  color: var(--mt-text);
-  background: var(--mt-bg-elevated);
-  font: inherit;
-  cursor: pointer;
-}
-
-.math-toolbar > button:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
-}
-
-.orientation-button {
-  text-transform: capitalize;
-}
-
-.math-viewport {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.math-playground--preview .math-viewport {
-  overflow-x: hidden;
-}
 </style>
-
