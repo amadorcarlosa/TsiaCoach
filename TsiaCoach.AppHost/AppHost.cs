@@ -2,8 +2,11 @@
 
 var builder = DistributedApplication.CreateBuilder(args);
 
+var openRouterKey = builder.AddParameter("openrouter-api-key", secret: true);
+
 var api =
     builder.AddProject<Projects.TsiaCoach_WebApi>("api")
+        .WithEnvironment("OpenRouter__ApiKey", openRouterKey)
         .WithHttpHealthCheck("/health");
 
 

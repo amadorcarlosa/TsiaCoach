@@ -3,6 +3,7 @@ import { readonly, ref } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type {
     AddendChoice,
+    AreaGroupingChoice,
     FactorChoice,
     RodTrain,
     SceneAction,
@@ -14,6 +15,13 @@ import type {
 import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
+import {
+    areaGroupParts,
+    areaGroupReading,
+    areaGroupReadings,
+    areaGroupingOf,
+    tiledRectangle,
+} from '~/components/tabla/area-grouping'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
@@ -552,6 +560,61 @@ export function useRodScene(policy: ScenePolicy) {
                     : reject(`Cannot arrange these factors. ${result.reason}`)
             }
 
+            case 'regroup-area': {
+                if (!policy.allowAreaRegroup) {
+                    return reject('Area grouping is available in MathTabla.')
+                }
+
+                if (selected.length !== 1) {
+                    return reject(
+                        'Select one filled rectangle to regroup its area.',
+                    )
+                }
+
+                const train = selected[0]!
+
+                if (train.parts.some(part => part.orientation === 'tower')) {
+                    return reject(
+                        'Lay the tower horizontally or vertically before regrouping.',
+                    )
+                }
+
+                // A bounding box or a total would accept holes, L shapes and
+                // overlaps; regrouping must preserve the exact cell set.
+                const rectangle = tiledRectangle(train)
+
+                if (!rectangle) {
+                    return reject(
+                        'Select one object that completely fills a rectangle, ' +
+                        'with no gaps and no overlaps.',
+                    )
+                }
+
+                const reading = areaGroupReading(rectangle, action.grouping)
+
+                if (!reading) {
+                    return reject('This area cannot be grouped.')
+                }
+
+                const parts = areaGroupParts(rectangle, action.grouping)
+
+                if (!parts) {
+                    return reject(
+                        `A group of ${reading.unitsPerGroup} square units needs ` +
+                        `a ${reading.unitsPerGroup}-rod, and rods are valued 1–10. ` +
+                        'Group the whole instead to show these parts flat.',
+                    )
+                }
+
+                train.parts = parts
+
+                const result = validate(current)
+
+                return result.allowed
+                    ? result
+                    : reject(`Cannot regroup this area. ${result.reason}`)
+            }
+
             case 'ungroup': {
                 if (selected.some(train => train.parts.length < 2)) {
                     return reject('Select only trains with multiple parts.')
@@ -678,6 +741,29 @@ export function useRodScene(policy: ScenePolicy) {
         }))
     }
 
+    /**
+     * Derived from the selected rectangle's own dimensions, never from a
+     * denominator: a numerator rectangle may fill only part of a larger whole.
+     */
+    function getAreaGroupingChoices(id: string): AreaGroupingChoice[] {
+        const train = trains.value.find(train => train.id === id)
+        if (!train) return []
+
+        const rectangle = tiledRectangle(train)
+        if (!rectangle) return []
+
+        const current = areaGroupingOf(train)
+
+        return areaGroupReadings(rectangle).map(reading => ({
+            reading,
+            result: check([id], {
+                type: 'regroup-area',
+                grouping: reading.grouping,
+            }),
+            active: current === reading.grouping,
+        }))
+    }
+
     function select(ids: readonly string[]): void {
         const existingIds = new Set(trains.value.map(train => train.id))
         selection.value = new Set(ids.filter(id => existingIds.has(id)))
@@ -757,5 +843,6 @@ export function useRodScene(policy: ScenePolicy) {
         constrainMove,
         getAddendChoices,
         getFactorChoices,
+        getAreaGroupingChoices,
     }
 }

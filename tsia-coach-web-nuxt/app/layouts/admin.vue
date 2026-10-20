@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
+const isPlayground = computed(() => route.path.startsWith('/admin/chat'))
 
 const navigation = computed(() => [{
   label: 'Overview',
@@ -7,7 +8,7 @@ const navigation = computed(() => [{
   to: '/admin',
   active: route.path === '/admin'
 }, {
-  label: 'Coach chat',
+  label: 'Coach playground',
   icon: 'i-lucide-message-square-text',
   to: '/admin/chat',
   active: route.path.startsWith('/admin/chat')
@@ -63,15 +64,15 @@ const navigation = computed(() => [{
       </UContainer>
     </header>
 
-    <UContainer class="grid gap-8 py-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:py-8">
-      <aside class="lg:sticky lg:top-24 lg:self-start">
+    <UContainer class="grid gap-6 py-6 lg:py-8" :class="isPlayground ? 'max-w-[1700px]' : 'lg:grid-cols-[220px_minmax(0,1fr)]'">
+      <aside :class="isPlayground ? '' : 'lg:sticky lg:top-24 lg:self-start'">
         <p class="mt-eyebrow mb-3 px-2">
           Workspace
         </p>
 
         <UNavigationMenu
           :items="navigation"
-          orientation="vertical"
+          :orientation="isPlayground ? 'horizontal' : 'vertical'"
           variant="link"
           class="-mx-2 lg:mx-0"
         />

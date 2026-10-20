@@ -23,4 +23,37 @@ describe('CuisenaireRod', () => {
 
         expect(wrapper.text()).toContain('five units')
     })
+
+    it('extrudes six faces and keeps its height when raised', () => {
+        const wrapper = mount(CuisenaireRod, { props })
+        const rod = wrapper.get('.rod')
+
+        expect(rod.attributes('data-rod-presentation')).toBe('raised')
+        expect(wrapper.findAll('.face')).toHaveLength(6)
+        expect(rod.attributes('style')).toContain('--h: 54px')
+        expect(wrapper.get('[data-rod-surface]').classes()).toEqual(['face', 'top'])
+    })
+
+    it('keeps colour, label, footprint and hit target but drops every face when flat', () => {
+        const wrapper = mount(CuisenaireRod, {
+            props: { ...props, presentation: 'flat' },
+        })
+
+        const rod = wrapper.get('.rod')
+        const style = rod.attributes('style') ?? ''
+
+        expect(rod.attributes('data-rod-presentation')).toBe('flat')
+        expect(wrapper.findAll('.face')).toHaveLength(0)
+
+        // No extrusion to project: zero height, so no upward offset either.
+        expect(style).toContain('--h: 0px')
+        expect(style).toContain('--w: 90px')
+        expect(style).toContain('--d: 36px')
+        expect(style).toContain('--fill: #f2c94c')
+        expect(rod.attributes('data-width-px')).toBe('90')
+
+        const surface = wrapper.get('[data-rod-surface]')
+        expect(wrapper.findAll('[data-rod-surface]')).toHaveLength(1)
+        expect(surface.text()).toBe('five units')
+    })
 })

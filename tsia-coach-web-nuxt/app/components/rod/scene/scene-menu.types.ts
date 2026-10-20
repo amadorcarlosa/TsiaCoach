@@ -10,7 +10,8 @@ export type SceneMenuAction = Extract<
             'ungroup' |
             'regroup-ones' |
             'regroup-addends' |
-            'regroup-factors'
+            'regroup-factors' |
+            'regroup-area'
     }
 >
 

@@ -12,6 +12,11 @@ const props = defineProps<{
   controls: ReturnType<typeof useRodPlaygroundInteraction>
   // Portrait preview: hide pieces wholly outside the first N columns. Null shows all.
   clipColumns?: number | null
+  /**
+   * Pieces a board wants drawn on the board plane instead of raised. Boards that
+   * pass nothing keep every piece raised, so only MathTabla changes.
+   */
+  flatIds?: ReadonlySet<string> | null
 }>()
 
 function visible(piece: Piece): boolean {
@@ -34,6 +39,7 @@ function visible(piece: Piece): boolean {
     :x="piece.x"
     :y="piece.y"
     :cell-size="cellSize"
+    :presentation="flatIds?.has(piece.id) ? 'flat' : 'raised'"
     :selected="controls.highlightedIds.value.has(piece.id)"
     :disabled="controls.blocked.value"
     :snap-to-grid="true"

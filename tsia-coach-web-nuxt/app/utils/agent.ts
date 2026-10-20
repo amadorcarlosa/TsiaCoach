@@ -103,11 +103,13 @@ export function toHistory(turns: ChatTurn[]): TurnDto[] {
 }
 
 export async function requestAgentTurn(
-  request: AgentTurnRequest
+  request: AgentTurnRequest,
+  signal?: AbortSignal
 ): Promise<AgentTurnResult> {
   try {
     const response = await $fetch<AgentTurnResult>('/api/agent', {
       method: 'POST',
+      signal,
       body: request
     })
 

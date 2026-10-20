@@ -16,9 +16,11 @@ import { trainView } from '~/components/rod/scene/train-view'
 
 const props = withDefaults(defineProps<{
   active?: boolean
+  showAuthoring?: boolean
   cancelVersion?: () => number
 }>(), {
   active: true,
+  showAuthoring: true,
   cancelVersion: undefined,
 })
 
@@ -118,6 +120,8 @@ const {
 const goalAdapter = createBarGoalAdapter({ columns: fullColumns, targetCount })
 const board = { kind: 'bar', config: { columns: fullColumns, targetCount } } as const
 
+defineExpose({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
+
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   { kind: 'action', label: 'Clone', action: { type: 'clone' } },
   { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
@@ -201,6 +205,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
 
     <template #after-workspace>
       <RodPlaygroundAuthoring
+        v-if="showAuthoring"
         :board="board"
         :goal-adapter="goalAdapter"
         :scene="scene"

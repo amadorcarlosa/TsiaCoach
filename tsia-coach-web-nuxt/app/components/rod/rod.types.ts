@@ -8,11 +8,19 @@ export type RodAppearance = {
     ink: string
 }
 
+/**
+ * How a piece sits on the board. 'raised' extrudes it above the surface;
+ * 'flat' keeps it on the board plane with no sides and no height offset.
+ * This is presentation only: values, footprints and dimensions are unchanged.
+ */
+export type RodPresentation = 'raised' | 'flat'
+
 export type RodProps = {
     dimensions: UnitDimensions
     unitSize: number
     appearance: RodAppearance
     label: string
+    presentation?: RodPresentation
 }
 
 export type DragProps = {
@@ -29,6 +37,7 @@ export type DragProps = {
     beginMove?: () => boolean
     constrainPosition?: (position: Point, direction?: Point) => Point
     previewDelta?: Point
+    presentation?: RodPresentation
 }
 
 export const CuisenaireRodNumbers = {

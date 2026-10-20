@@ -152,6 +152,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RunJevDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/attempts/{attemptId}/coach": {
         parameters: {
             query?: never;
@@ -582,6 +598,10 @@ export interface components {
             semanticEntityId: string;
             /** Format: int32 */
             value: number | string;
+        };
+        JevRequest: {
+            state: components["schemas"]["JsonElement"];
+            instructions: string;
         };
         JsonElement: unknown;
         LatentMathProvenanceResponse: {
@@ -1097,7 +1117,7 @@ export interface components {
             role: components["schemas"]["AgentRole"];
         };
         /** @enum {unknown} */
-        VendorName: "anthropic" | "openAI" | "deepSeek";
+        VendorName: "anthropic" | "openAI" | "deepSeek" | "openRouter";
     };
     responses: never;
     parameters: never;
@@ -1217,6 +1237,28 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
+            };
+        };
+    };
+    RunJevDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JevRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

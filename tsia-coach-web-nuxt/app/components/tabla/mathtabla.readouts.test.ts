@@ -16,7 +16,7 @@ describe('MathTabla reference readouts and occupied area', () => {
     const beside = getMathTablaReadouts([...references, first, second], geometry)
     expect(beside).toEqual({
       horizontal: { numerator: 3, denominator: 4 }, vertical: { numerator: 2, denominator: 3 },
-      guide: { x: 2, y: 2, width: 4, depth: 3 }, guideCells: 12, occupiedCells: 4,
+      state: 'ready', guide: { x: 2, y: 2, width: 4, depth: 3 }, guideCells: 12, occupiedCells: 4,
     })
     second.anchor = { x: 2, y: 3 }
     const rectangle = getMathTablaReadouts([...references, first, second], geometry)
@@ -42,7 +42,35 @@ describe('MathTabla reference readouts and occupied area', () => {
 
   it('has no guide until both denominator directions contain rods', () => {
     for (const trains of [[], references.slice(1), references.filter(train => train.id !== 'vd')]) {
-      expect(getMathTablaReadouts(trains, geometry)).toMatchObject({ guide: null, guideCells: 0, occupiedCells: 0 })
+      expect(getMathTablaReadouts(trains, geometry)).toMatchObject({
+        state: 'incomplete', guide: null, guideCells: 0, occupiedCells: 0,
+      })
     }
+  })
+
+  it('leaves the whole unchanged when numerator tracks change', () => {
+    const base = getMathTablaReadouts(references, geometry)
+    const extra = [...references, rod('hn2', 6, 1, 5), rod('vn2', 1, 5, 4, 'vertical')]
+    const changed = getMathTablaReadouts(extra, geometry)
+    expect(changed.horizontal.numerator).toBe(8)
+    expect(changed.vertical.numerator).toBe(6)
+    expect(changed.guide).toEqual(base.guide)
+    expect(changed.guideCells).toBe(base.guideCells)
+  })
+
+  it('reports an explicit bounds state instead of clipping an oversized whole', () => {
+    const small = getMathTablaGeometry(4, 3)
+    // Totals are summed, so overlapping references can describe a whole larger
+    // than the central grid even though the scene would not place them that way.
+    const wide = [rod('hd', 2, 0, 3), rod('hd2', 2, 0, 3), rod('vd', 0, 2, 3, 'vertical'), rod('central', 2, 2, 3)]
+    expect(getMathTablaReadouts(wide, small)).toMatchObject({
+      state: 'exceeds-board', guide: null, guideCells: 0, occupiedCells: 0,
+    })
+    const tall = [rod('hd', 2, 0, 4), rod('vd', 0, 2, 2, 'vertical'), rod('vd2', 0, 2, 3, 'vertical')]
+    expect(getMathTablaReadouts(tall, small)).toMatchObject({ state: 'exceeds-board', guide: null })
+    const exact = [rod('hd', 2, 0, 4), rod('vd', 0, 2, 3, 'vertical')]
+    expect(getMathTablaReadouts(exact, small)).toMatchObject({
+      state: 'ready', guide: { x: 2, y: 2, width: 4, depth: 3 }, guideCells: 12,
+    })
   })
 })

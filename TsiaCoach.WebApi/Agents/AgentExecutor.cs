@@ -20,7 +20,9 @@ public sealed class AgentExecutor : IAgentExecutor
     public AgentExecutor(IConfiguration configuration)
     {
         _openAiEndpoint =
-            configuration["endpoint"] ?? string.Empty;
+            string.Equals(configuration["AgentProvider"], "OpenRouter", StringComparison.OrdinalIgnoreCase)
+                ? AgentProviderRegistration.OpenRouterEndpoint
+                : configuration["endpoint"] ?? string.Empty;
 
         _foundryResource =
             configuration["foundryResource"] ?? string.Empty;

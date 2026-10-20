@@ -15,6 +15,7 @@ const props = withDefaults(defineProps<DragProps>(), {
   snapToGrid: true,
   disabled: false,
   selected: false,
+  presentation: 'raised',
 })
 
 const emit = defineEmits<{
@@ -133,6 +134,7 @@ defineExpose({
       class="draggable-rod"
       :class="{ 'draggable-rod--selected': selected }"
       :data-piece-id="id"
+      :data-presentation="presentation"
       :tabindex="disabled ? -1 : 0"
       role="button"
       :aria-roledescription="visualParts.length > 1 ? 'movable train' : 'movable rod'"
@@ -168,6 +170,7 @@ defineExpose({
             :unit-size="cellSize"
             :appearance="cuisenaireRodPalette[part.value]"
             :label="String(part.value)"
+            :presentation="presentation"
         />
       </div>
     </div>

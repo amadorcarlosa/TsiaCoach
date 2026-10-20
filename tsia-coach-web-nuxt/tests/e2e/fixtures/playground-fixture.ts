@@ -89,7 +89,7 @@ export class Playground {
       await rod.focus()
       await rod.press('Shift+F10')
     } else {
-      await rod.locator('.face.top').click({ button: 'right' })
+      await rod.locator('[data-rod-surface]').click({ button: 'right' })
     }
     const menu = this.page.getByRole('menu')
     await expect(menu).toBeVisible()
@@ -97,7 +97,7 @@ export class Playground {
   }
 
   async menuByTouch(rod: Locator) {
-    const face = rod.locator('.face.top')
+    const face = rod.locator('[data-rod-surface]')
     const box = await face.boundingBox()
     if (!box) throw new Error('Missing rod face')
     const x = box.x + box.width / 2, y = box.y + box.height / 2
@@ -175,7 +175,7 @@ export class Playground {
       const o = rect('origin'), x = rect('x'), y = rect('y')
       return { xx: x.x - o.x, xy: x.y - o.y, yx: y.x - o.x, yy: y.y - o.y }
     })
-    const face = await rod.locator('.face.top').boundingBox()
+    const face = await rod.locator('[data-rod-surface]').boundingBox()
     if (!face) throw new Error('Missing rod face')
     const x = face.x + face.width / 2, y = face.y + face.height / 2
     await this.page.mouse.move(x, y)

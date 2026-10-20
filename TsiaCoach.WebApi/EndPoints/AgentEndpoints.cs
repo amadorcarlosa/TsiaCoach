@@ -208,7 +208,7 @@ public static class AgentEndpoints
             DeploymentNotFound deployment =>
                 TypedResults.Problem(
                     statusCode: StatusCodes.Status502BadGateway,
-                    title: "Foundry deployment was not found",
+                    title: "Model deployment was not found",
                     detail:
                         $"Deployment '{deployment.Deployment}' was not found."),
 

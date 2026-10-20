@@ -1,25 +1,46 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from 'vue'
 import {type RodProps, rodStyle} from "~/components/rod/rod.types.ts";
 
 
-const props = defineProps<RodProps>()
+const props = withDefaults(defineProps<RodProps>(), {
+  presentation: 'raised',
+})
+
+const flat = computed(() => props.presentation === 'flat')
 
 const style = computed(() => ({
-  ...rodStyle(props.dimensions, props.unitSize),
+  // A flat piece has no extrusion to project, so its height resolves to zero
+  // and the shared raised-piece lean becomes the identity for it.
+  ...rodStyle(
+    flat.value ? { ...props.dimensions, height: 0 } : props.dimensions,
+    props.unitSize,
+  ),
   '--fill': props.appearance.fill,
   '--ink': props.appearance.ink,
 }))
 </script>
 
 <template>
-  <div class="rod" :style="style" :data-width-px="dimensions.width * unitSize">
-    <span class="face bottom" />
-    <span class="face front" />
-    <span class="face back" />
-    <span class="face left" />
-    <span class="face right" />
-    <span class="face top">{{ label }}</span>
+  <div
+    class="rod"
+    :class="{ 'rod--flat': flat }"
+    :style="style"
+    :data-rod-presentation="presentation"
+    :data-width-px="dimensions.width * unitSize"
+  >
+    <template v-if="!flat">
+      <span class="face bottom" />
+      <span class="face front" />
+      <span class="face back" />
+      <span class="face left" />
+      <span class="face right" />
+    </template>
+    <!-- The one surface both presentations share: label, hit target, measurement. -->
+    <span
+      :class="flat ? 'strip' : 'face top'"
+      data-rod-surface
+    >{{ label }}</span>
   </div>
 </template>
 <style scoped>
@@ -39,7 +60,8 @@ const style = computed(() => ({
   line-height: 1;
 }
 
-.face {
+.face,
+.strip {
   position: absolute;
   top: 0;
   left: 0;
@@ -50,16 +72,26 @@ const style = computed(() => ({
 }
 
 .bottom,
-.top {
+.top,
+.strip {
   width: var(--w);
   height: var(--d);
 }
 
-.top {
-  transform: translateZ(var(--h));
+.top,
+.strip {
   display: grid;
   place-items: center;
   color: var(--ink);
+}
+
+.top {
+  transform: translateZ(var(--h));
+}
+
+/* No translateZ at all: the strip is part of the board plane, not above it. */
+.strip {
+  transform: none;
 }
 
 .front,

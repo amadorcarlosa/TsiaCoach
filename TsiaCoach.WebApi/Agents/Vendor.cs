@@ -8,7 +8,8 @@ public enum VendorName
 {
     Anthropic,
     OpenAI,
-    DeepSeek
+    DeepSeek,
+    OpenRouter
 }
 
 public sealed record OpenAIVendor;

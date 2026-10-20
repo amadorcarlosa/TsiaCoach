@@ -1,4 +1,5 @@
 import type { Point } from '~/components/grid/gridPointer'
+import type { AreaGrouping, AreaGroupReading } from '~/components/tabla/area-grouping'
 import type { CuisenaireRodValue } from '../rod.types'
 
 export type TrainPart = {
@@ -42,6 +43,13 @@ export type FactorChoice = {
   result: SceneResult
 }
 
+export type AreaGroupingChoice = {
+  reading: AreaGroupReading
+  result: SceneResult
+  /** The selected rectangle already shows this grouping. */
+  active: boolean
+}
+
 export type SceneAction =
     | {
       type: 'create'
@@ -56,6 +64,9 @@ export type SceneAction =
     | { type: 'regroup-ones' }
     | { type: 'regroup-addends'; pair?: AddendPair }
     | { type: 'regroup-factors'; shape?: FactorShape }
+    // Repartitions a filled rectangle in place. Unlike regroup-factors it
+    // cannot change the footprint, only how the same cells are grouped.
+    | { type: 'regroup-area'; grouping: AreaGrouping }
     | { type: 'ungroup' }
     | {
   type: 'set-orientation'
@@ -71,6 +82,8 @@ export type ScenePolicy = {
   editable: () => boolean
   allowOrientation: boolean
   allowFactors?: boolean
+  /** Opt in to regroup-area; Bar and Fraction scenes have no area to group. */
+  allowAreaRegroup?: boolean
   /** Every part must be horizontal and share the train's anchor row. */
   requireHorizontalAnchorRow?: boolean
 }

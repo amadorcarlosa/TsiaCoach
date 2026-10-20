@@ -43,6 +43,8 @@ describe('RodTray', () => {
             unitSize: 24,
             appearance: cuisenaireRodPalette[5],
             label: '5',
+            // The tray is not a reference track, so its samples stay raised.
+            presentation: 'raised',
         })
     })
 

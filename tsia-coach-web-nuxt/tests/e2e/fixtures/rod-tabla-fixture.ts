@@ -95,7 +95,7 @@ export const test = base.extend<{ tabla: TablaFixture }>({
                 await rod.scrollIntoViewIfNeeded()
 
                 const frame = await axes()
-                const face = await rod.locator('.face.top').boundingBox()
+                const face = await rod.locator('[data-rod-surface]').boundingBox()
                 if (!face) throw new Error('Rod top face is not visible')
 
                 const start = {

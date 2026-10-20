@@ -16,7 +16,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: external ? undefined : {
-    command: 'pnpm dev --host 127.0.0.1 --port 3117',
+    // nuxt dev directly: `pnpm dev` first runs test:sync, whose contract tests
+    // need API environment settings this browser-only suite does not provide.
+    command: 'pnpm exec nuxt dev --host 127.0.0.1 --port 3117',
     url: `${baseURL}/dev/playground`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

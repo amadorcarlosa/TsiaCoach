@@ -1,11 +1,49 @@
 ﻿namespace TsiaCoach.WebApi.Agents;
 
-public sealed class AgentFactory(ModelClient clients)
+using Microsoft.Agents.AI;
+using OpenAI;
+using OpenAI.Chat;
+using TsiaCoach.WebApi.Response;
+
+public sealed class AgentFactory
 {
+    private readonly ModelClient? _foundryClients;
+    private readonly OpenAIClient? _openRouterClient;
+
+    public IReadOnlyList<FoundryDeploymentResponse> AvailableModels { get; }
+
+    public AgentFactory(ModelClient clients)
+    {
+        _foundryClients = clients;
+        AvailableModels = FoundryDeployments.All;
+    }
+
+    public AgentFactory(OpenAIClient client, IReadOnlyList<FoundryDeploymentResponse> models)
+    {
+        _openRouterClient = client;
+        AvailableModels = models.ToArray();
+    }
+
     public AgentCreation Create(
         string model,
         string instructions)
     {
+        if (_openRouterClient is not null)
+        {
+            if (!AvailableModels.Any(candidate => candidate.Name == model))
+                return new AgentCreation(new AgentError(new UnknownModel(model)));
+
+            var routerAgent = _openRouterClient.GetChatClient(model)
+                .AsAIAgent(instructions: instructions, name: "assistant")
+                .AsBuilder()
+                .UseOpenTelemetry(
+                    sourceName: AgentTelemetry.SourceName,
+                    configure: telemetry => telemetry.EnableSensitiveData = false)
+                .Build();
+
+            return new AgentCreation(new MyAgent(routerAgent));
+        }
+
         ModelDescriptor? descriptor = ModelCatalog.Find(model);
 
         if (descriptor is null)
@@ -17,7 +55,7 @@ public sealed class AgentFactory(ModelClient clients)
         }
 
         var agent = descriptor.Vendor.CreateAgent(
-            clients,
+            _foundryClients!,
             descriptor.Name,
             instructions);
 

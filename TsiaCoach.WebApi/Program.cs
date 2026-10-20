@@ -6,42 +6,11 @@ using TsiaCoach.WebApi.EndPoints;
 using TsiaCoach.WebApi.Attempts;
 using TsiaCoach.WebApi.CoachingAgents;
 using TsiaCoach.WebApi.ScaffoldSessions;
-using Azure.Core;
-using Azure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
-string? endpoint = builder.Configuration["endpoint"];
-if (string.IsNullOrWhiteSpace(endpoint))
-{
-    throw new InvalidOperationException("Endpoint is not configured.");
-}
-string? foundryResource = builder.Configuration["foundryResource"];
-if (string.IsNullOrWhiteSpace(foundryResource))
-{
-    throw new InvalidOperationException("Foundry resource is not configured.");
-}
-string? tenantId = builder.Configuration["tenantId"];
-builder.Services.AddSingleton<TokenCredential>(new ChainedTokenCredential(
-    new AzureCliCredential(new AzureCliCredentialOptions { TenantId = tenantId }),
-    new EnvironmentCredential()));
-builder.Services.AddSingleton(sp =>
-    new FoundryTokenCredential(sp.GetRequiredService<TokenCredential>(), foundryResource));
-
-builder.Services.AddSingleton<ModelClient>(sp =>
-{
-    var config = new ModelConfig(
-        new AzureOpenAIConfig(new Uri(endpoint), sp.GetRequiredService<TokenCredential>()),
-        new AzureAnthropicModelConfig(sp.GetRequiredService<FoundryTokenCredential>()));
-
-    return config.CreateModelClient() switch
-    {
-        ModelClient created => created,
-        AgentError error => throw new InvalidOperationException(
-            $"Failed to create model clients: {error}")
-    };
-});
-builder.Services.AddSingleton<AgentFactory>();
+builder.Services.AddAgentProvider(builder.Configuration);
+builder.Services.AddHttpClient<JevDecisionClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<IAgentExecutor, AgentExecutor>();
 builder.Services.AddOptions<CoachingAgentOptions>()
     .Bind(builder.Configuration.GetSection("CoachingAgent"));
@@ -93,6 +62,7 @@ api.MapRods();
 api.MapBaseTenBlocks();
 api.MapAlgebraTiles();
 api.MapAgents();
+api.MapJev();
 api.MapSampleQuestions();
 api.MapPracticeItems(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapAttempts(

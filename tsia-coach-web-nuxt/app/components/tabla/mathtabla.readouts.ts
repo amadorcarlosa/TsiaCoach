@@ -5,6 +5,11 @@ import type { getMathTablaGeometry } from './mathtabla.geometry'
 
 export type MathTablaGuide = Pick<SceneRegion, 'x' | 'y' | 'width' | 'depth'>
 
+// 'incomplete': at least one D track is empty, so no whole is defined yet.
+// 'exceeds-board': both D totals are positive but the rectangle does not fit the
+// central grid. A clipped rectangle would misrepresent the whole, so none is drawn.
+export type MathTablaWholeState = 'incomplete' | 'ready' | 'exceeds-board'
+
 export function getMathTablaReadouts(
   trains: SceneSnapshot,
   geometry: ReturnType<typeof getMathTablaGeometry>,
@@ -16,8 +21,15 @@ export function getMathTablaReadouts(
   }
   const horizontal = { numerator: total('horizontal-n'), denominator: total('horizontal-d') }
   const vertical = { numerator: total('vertical-n'), denominator: total('vertical-d') }
-  const guide: MathTablaGuide | null = horizontal.denominator > 0 && vertical.denominator > 0
-    ? { x: geometry.array.x, y: geometry.array.y, width: horizontal.denominator, depth: vertical.denominator }
+  const width = horizontal.denominator
+  const depth = vertical.denominator
+  const state: MathTablaWholeState = width < 1 || depth < 1
+    ? 'incomplete'
+    : width > geometry.array.width || depth > geometry.array.depth
+      ? 'exceeds-board'
+      : 'ready'
+  const guide: MathTablaGuide | null = state === 'ready'
+    ? { x: geometry.array.x, y: geometry.array.y, width, depth }
     : null
 
   // Count physical central cells, clipped to the guide. Reference totals never
@@ -40,5 +52,5 @@ export function getMathTablaReadouts(
     }
   }
 
-  return { horizontal, vertical, guide, occupiedCells: occupied.size, guideCells: guide ? guide.width * guide.depth : 0 }
+  return { horizontal, vertical, state, guide, occupiedCells: occupied.size, guideCells: guide ? guide.width * guide.depth : 0 }
 }
