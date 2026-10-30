@@ -13,14 +13,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Anthropic.Foundry" Version="0.7.1" />
+    <PackageReference Include="Anthropic.Foundry" Version="1.0.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.19.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.19.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.19.0-preview.260822.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.19.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-preview.7.26381.103" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.26.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.26.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.26.0" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.26.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-rc.3.26522.148" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.24.2-preview.1" />
     
   </ItemGroup>

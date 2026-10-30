@@ -233,7 +233,9 @@ function onChooseRod(value: CuisenaireRodValue): void {
           @click="activateTrack(track.row)"
         >
           {{ track.label }}
-          <span v-if="track.total > 0">: {{ track.total }}</span>
+          <span v-if="track.total > 0">
+            : {{ track.total }}
+          </span>
         </button>
       </div>
     </template>
@@ -284,7 +286,9 @@ function onChooseRod(value: CuisenaireRodValue): void {
           <span v-if="readout.complete">
             {{ readout.numerator }}/{{ readout.denominator }}
           </span>
-          <span v-else>incomplete</span>
+          <span v-else>
+            incomplete
+          </span>
         </li>
       </ul>
 

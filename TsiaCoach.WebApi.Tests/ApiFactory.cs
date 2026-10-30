@@ -12,6 +12,8 @@ public sealed class ApiFactory
         configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
+                ["AI:Enabled"] = "true",
+                ["AgentProvider"] = "Foundry",
                 ["endpoint"] = "https://example.invalid",
                 ["foundryResource"] = "test-resource"
             });

@@ -17,6 +17,7 @@ public sealed class OpenRouterApiFactory : TestWebApplicationFactory<Program>
     {
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
+            ["AI:Enabled"] = "true",
             ["AgentProvider"] = "OpenRouter",
             ["OpenRouter:ApiKey"] = "test-key",
             ["OpenRouter:Models:0"] = "openai/test-model",

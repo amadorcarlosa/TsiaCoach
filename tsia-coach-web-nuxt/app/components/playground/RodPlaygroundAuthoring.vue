@@ -87,5 +87,8 @@ const levelFiles = useLevelFiles({
       />
     </template>
   </PlaygroundAuthoringControls>
-  <LevelFileControls :files="levelFiles" :disabled="editingDisabled()" />
+  <LevelFileControls
+    :files="levelFiles"
+    :disabled="editingDisabled()"
+  />
 </template>

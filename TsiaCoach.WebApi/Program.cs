@@ -9,15 +9,19 @@ using TsiaCoach.WebApi.ScaffoldSessions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddAgentProvider(builder.Configuration);
+bool aiEnabled = builder.Configuration.GetValue("AI:Enabled", true);
+if (aiEnabled)
+{
+    builder.Services.AddAgentProvider(builder.Configuration);
+    builder.Services.AddSingleton<ICoachingAgentRunner, CoachingAgentRunner>();
+    builder.Services.AddSingleton<CoachingTurnService>();
+}
 builder.Services.AddHttpClient<JevDecisionClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<IAgentExecutor, AgentExecutor>();
 builder.Services.AddOptions<CoachingAgentOptions>()
     .Bind(builder.Configuration.GetSection("CoachingAgent"));
 builder.Services.AddSingleton<CoachingAgentDefinitionFactory>();
-builder.Services.AddSingleton<ICoachingAgentRunner, CoachingAgentRunner>();
 builder.Services.AddSingleton<ICoachingMoveRecorder, InMemoryCoachingMoveRecorder>();
-builder.Services.AddSingleton<CoachingTurnService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<SamplePracticeCatalog>();
@@ -57,21 +61,37 @@ else
 app.MapGet("/", () => "Hello World!");
 app.MapGet("/health", () => Results.Ok("healthy"));
 var api = app.MapGroup("/api");
-api.MapModels();
+if (aiEnabled)
+{
+    api.MapModels();
+    api.MapAgents();
+    api.MapJev();
+    api.MapCoaching();
+}
+else
+{
+    app.Logger.LogWarning("AI is disabled by AI:Enabled configuration.");
+    api.MapGet("/models", () => TypedResults.Ok(Array.Empty<TsiaCoach.WebApi.Response.FoundryDeploymentResponse>()));
+    api.MapPost("/agent", AiDisabled);
+    api.MapPost("/decisions", AiDisabled);
+    api.MapPost("/attempts/{attemptId}/coach", AiDisabled);
+}
 api.MapRods();
 api.MapBaseTenBlocks();
 api.MapAlgebraTiles();
-api.MapAgents();
-api.MapJev();
 api.MapSampleQuestions();
 api.MapPracticeItems(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapAttempts(
     app.Services.GetRequiredService<SamplePracticeCatalog>(),
     app.Services.GetRequiredService<InMemoryAttemptStore>());
-api.MapCoaching();
 api.MapScaffolds(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapScaffoldSessions(app.Services.GetRequiredService<ScaffoldSessionService>());
 app.Run();
+
+static IResult AiDisabled() => Results.Problem(
+    statusCode: StatusCodes.Status503ServiceUnavailable,
+    title: "AI is disabled",
+    detail: "Set AI:Enabled to true and configure an agent provider to enable AI calls.");
 
 namespace TsiaCoach.WebApi
 {

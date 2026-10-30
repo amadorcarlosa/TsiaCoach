@@ -17,7 +17,10 @@ const viewport = ref<HTMLElement | null>(null)
 const trayOpen = ref(true)
 let cancelBoard = () => {}
 const projection = ref(baseTenProjectionExtent({ width: 1, depth: 1, height: 1 }))
-const layout = useBaseTenViewport(viewport, () => { cancelBoard(); layout.endPan() }, projection)
+const layout = useBaseTenViewport(viewport, () => {
+  cancelBoard()
+  layout.endPan()
+}, projection)
 const editingDisabled = computed(() => !props.active || layout.phonePortrait.value)
 const scene = useBaseTenScene({ editable: () => !editingDisabled.value })
 const interaction = useBaseTenInteraction({ scene, viewport, disabled: () => editingDisabled.value || layout.panMode.value, cancelVersion: () => props.cancelVersion?.() ?? 0 })
@@ -38,51 +41,156 @@ const actions: { label: string; action: BaseTenAction }[] = [
   { label: 'Delete', action: { type: 'delete' } },
 ]
 const { choices, closeMenu } = useManipulativeMenu({ actions, scene, interaction, viewport, idAttribute: 'data-base-ten-id', exists: id => scene.blocks.value.some(block => block.id === id) })
-function down(event: PointerEvent) { layout.pointerDown(event); interaction.pointerDown(event) }
-function move(event: PointerEvent) { layout.pointerMove(event); interaction.pointerMove(event) }
-function up(event: PointerEvent) { layout.endPan(); interaction.pointerUp(event) }
-function cancel() { interaction.cancel(); layout.endPan() }
-function lostCapture(event: PointerEvent) { if (event.target === viewport.value) cancel() }
+function down(event: PointerEvent) {
+  layout.pointerDown(event)
+  interaction.pointerDown(event)
+}
+function move(event: PointerEvent) {
+  layout.pointerMove(event)
+  interaction.pointerMove(event)
+}
+function up(event: PointerEvent) {
+  layout.endPan()
+  interaction.pointerUp(event)
+}
+function cancel() {
+  interaction.cancel()
+  layout.endPan()
+}
+function lostCapture(event: PointerEvent) {
+  if (event.target === viewport.value) cancel()
+}
 watch(() => [props.active, props.cancelVersion?.()], () => layout.endPan(), { flush: 'sync' })
 </script>
 
 <template>
-  <section class="base-ten-playground" aria-label="Array base-ten playground">
-    <p v-if="layout.phonePortrait.value" role="status">Portrait preview. Rotate to landscape to edit.</p>
-    <div class="toolbar" aria-label="Base-ten controls">
-      <PlaygroundActionButton :pressed="trayOpen" @click="trayOpen = !trayOpen">{{ trayOpen ? 'Hide blocks' : 'Show blocks' }}</PlaygroundActionButton>
+  <section
+    class="base-ten-playground"
+    aria-label="Array base-ten playground"
+  >
+    <p
+      v-if="layout.phonePortrait.value"
+      role="status"
+    >
+      Portrait preview. Rotate to landscape to edit.
+    </p>
+    <div
+      class="toolbar"
+      role="toolbar"
+      aria-label="Base-ten controls"
+    >
       <PlaygroundActionButton
-v-for="choice in choices" :key="choice.label" :disabled="!choice.result.allowed || interaction.rectangle.value !== null"
-        :title="choice.result.allowed ? choice.label : choice.result.reason" @click="interaction.apply(choice.action)">{{ choice.label }}</PlaygroundActionButton>
+        :pressed="trayOpen"
+        @click="trayOpen = !trayOpen"
+      >
+        {{ trayOpen ? 'Hide blocks' : 'Show blocks' }}
+      </PlaygroundActionButton>
+      <PlaygroundActionButton
+        v-for="choice in choices"
+        :key="choice.label"
+        :disabled="!choice.result.allowed || interaction.rectangle.value !== null"
+        :title="choice.result.allowed ? choice.label : choice.result.reason"
+        @click="interaction.apply(choice.action)"
+      >
+        {{ choice.label }}
+      </PlaygroundActionButton>
     </div>
-    <BaseTenTray v-show="trayOpen" :disabled="editingDisabled" @choose="denomination => interaction.apply({ type: 'create', denomination })" />
-    <div class="toolbar" aria-label="Board view">
-      <PlaygroundActionButton @click="layout.zoom(36)">Rod size</PlaygroundActionButton>
-      <PlaygroundActionButton @click="layout.zoom(layout.fitSize.value, true)">Fit board</PlaygroundActionButton>
-      <PlaygroundActionButton :disabled="layout.cellSize.value <= layout.fitSize.value" @click="layout.zoom(layout.cellSize.value / 1.25)">Zoom out</PlaygroundActionButton>
-      <PlaygroundActionButton :disabled="layout.cellSize.value >= 36" @click="layout.zoom(layout.cellSize.value * 1.25)">Zoom in</PlaygroundActionButton>
-      <PlaygroundActionButton :pressed="layout.panMode.value" @click="layout.togglePan()">{{ layout.panMode.value ? 'Pan mode' : 'Select mode' }}</PlaygroundActionButton>
+    <BaseTenTray
+      v-show="trayOpen"
+      :disabled="editingDisabled"
+      @choose="denomination => interaction.apply({ type: 'create', denomination })"
+    />
+    <div
+      class="toolbar"
+      role="toolbar"
+      aria-label="Board view"
+    >
+      <PlaygroundActionButton @click="layout.zoom(36)">
+        Rod size
+      </PlaygroundActionButton>
+      <PlaygroundActionButton @click="layout.zoom(layout.fitSize.value, true)">
+        Fit board
+      </PlaygroundActionButton>
+      <PlaygroundActionButton
+        :disabled="layout.cellSize.value <= layout.fitSize.value"
+        @click="layout.zoom(layout.cellSize.value / 1.25)"
+      >
+        Zoom out
+      </PlaygroundActionButton>
+      <PlaygroundActionButton
+        :disabled="layout.cellSize.value >= 36"
+        @click="layout.zoom(layout.cellSize.value * 1.25)"
+      >
+        Zoom in
+      </PlaygroundActionButton>
+      <PlaygroundActionButton
+        :pressed="layout.panMode.value"
+        @click="layout.togglePan()"
+      >
+        {{ layout.panMode.value ? 'Pan mode' : 'Select mode' }}
+      </PlaygroundActionButton>
       <span>{{ Math.round(layout.cellSize.value / 36 * 100) }}% · 120 × 120 units</span>
     </div>
     <div
-ref="viewport" class="base-ten-viewport" :class="{ panning: layout.panMode.value || layout.phonePortrait.value, detailed: layout.cellSize.value >= 6 }"
-      tabindex="0" aria-label="Base-ten board viewport" :style="{ '--ten-cells': layout.cellSize.value * 10 + 'px' }"
-      @pointerdown.capture="down" @pointermove="move" @pointerup="up" @pointercancel="cancel" @lostpointercapture="lostCapture" @scroll="interaction.cancel()" @keydown.esc="cancel">
+      ref="viewport"
+      class="base-ten-viewport"
+      :class="{ panning: layout.panMode.value || layout.phonePortrait.value, detailed: layout.cellSize.value >= 6 }"
+      tabindex="0"
+      aria-label="Base-ten board viewport"
+      :style="{ '--ten-cells': layout.cellSize.value * 10 + 'px' }"
+      @pointerdown.capture="down"
+      @pointermove="move"
+      @pointerup="up"
+      @pointercancel="cancel"
+      @lostpointercapture="lostCapture"
+      @scroll="interaction.cancel()"
+      @keydown.esc="cancel"
+    >
       <GridSurface
-:config="{ columns: 120, rows: 120, cellSize: layout.cellSize.value }" :view="{ tiltDegrees: baseTenTiltDegrees }"
-        :viewport-padding="layout.padding.value" viewport-alignment="start">
+        :config="{ columns: 120, rows: 120, cellSize: layout.cellSize.value }"
+        :view="{ tiltDegrees: baseTenTiltDegrees }"
+        :viewport-padding="layout.padding.value"
+        viewport-alignment="start"
+      >
         <DraggableBaseTenBlock
-v-for="block in scene.blocks.value" :key="block.id" :block="block" :cell-size="layout.cellSize.value"
-          :selected="interaction.highlighted.value.has(block.id)" :disabled="interaction.blocked.value" :preview-delta="interaction.previewFor(block.id)"
-          :begin-move="() => interaction.beginMove(block.id)" :constrain-position="point => interaction.constrain(block.id, point)"
-          @select="mode => interaction.select(block.id, mode)" @preview="point => interaction.preview(block.id, point)"
-          @settled="point => interaction.settle(block.id, point)" @end="interaction.end(block.id)" @menu="point => interaction.openMenu(block.id, point)" />
-        <SceneMarqueeOverlay :rectangle="interaction.rectangle.value" :cell-size="layout.cellSize.value" />
+          v-for="block in scene.blocks.value"
+          :key="block.id"
+          :block="block"
+          :cell-size="layout.cellSize.value"
+          :selected="interaction.highlighted.value.has(block.id)"
+          :disabled="interaction.blocked.value"
+          :preview-delta="interaction.previewFor(block.id)"
+          :begin-move="() => interaction.beginMove(block.id)"
+          :constrain-position="point => interaction.constrain(block.id, point)"
+          @select="mode => interaction.select(block.id, mode)"
+          @preview="point => interaction.preview(block.id, point)"
+          @settled="point => interaction.settle(block.id, point)"
+          @end="interaction.end(block.id)"
+          @menu="point => interaction.openMenu(block.id, point)"
+        />
+        <SceneMarqueeOverlay
+          :rectangle="interaction.rectangle.value"
+          :cell-size="layout.cellSize.value"
+        />
       </GridSurface>
     </div>
-    <BaseTenMenu v-if="interaction.menu.value" :x="interaction.menu.value.x" :y="interaction.menu.value.y" :choices="choices" @action="closeMenu" @close="closeMenu()" />
-    <p role="status" aria-live="polite">{{ scene.message.value }}</p>
-    <p data-testid="base-ten-summary">{{ scene.blocks.value.length }} objects · Total value {{ scene.total.value.toLocaleString('en-US') }}</p>
+    <BaseTenMenu
+      v-if="interaction.menu.value"
+      :x="interaction.menu.value.x"
+      :y="interaction.menu.value.y"
+      :choices="choices"
+      @action="closeMenu"
+      @close="closeMenu()"
+    />
+    <p
+      role="status"
+      aria-live="polite"
+    >
+      {{ scene.message.value }}
+    </p>
+    <p data-testid="base-ten-summary">
+      {{ scene.blocks.value.length }} objects · Total value {{ scene.total.value.toLocaleString('en-US') }}
+    </p>
   </section>
 </template>
 
@@ -100,4 +208,3 @@ v-for="block in scene.blocks.value" :key="block.id" :block="block" :cell-size="l
   background-size: var(--ten-cells) var(--ten-cells), var(--ten-cells) var(--ten-cells), var(--cell-size) var(--cell-size), var(--cell-size) var(--cell-size);
 }
 </style>
-

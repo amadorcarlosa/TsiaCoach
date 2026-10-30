@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="TUnit" Version="1.6*" />
-    <PackageReference Include="TUnit.Aspire" Version="1.65.63" />
+    <PackageReference Include="TUnit.Aspire" Version="1.76.45" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TsiaCoach.AppHost\TsiaCoach.AppHost.csproj" />

@@ -38,14 +38,21 @@ const emit = defineEmits<{
 
 <template>
   <div class="array-shell">
-    <p v-if="phonePortrait" role="status">
+    <p
+      v-if="phonePortrait"
+      role="status"
+    >
       {{ previewNotice }}
     </p>
 
     <div :ref="setWorkspaceTools">
       <slot name="tools-start" />
 
-      <div class="array-shell-toolbar" :aria-label="toolbarLabel">
+      <div
+        class="array-shell-toolbar"
+        role="toolbar"
+        :aria-label="toolbarLabel"
+      >
         <button
           type="button"
           :aria-expanded="trayOpen"
@@ -74,7 +81,10 @@ const emit = defineEmits<{
         </PlaygroundActionButton>
       </div>
 
-      <div v-show="trayOpen" :id="trayId">
+      <div
+        v-show="trayOpen"
+        :id="trayId"
+      >
         <PlaygroundRodTray
           layout="wrap"
           :disabled="blocked"
@@ -104,7 +114,12 @@ const emit = defineEmits<{
 
     <slot name="after-workspace" />
 
-    <p role="status" aria-live="polite">{{ message }}</p>
+    <p
+      role="status"
+      aria-live="polite"
+    >
+      {{ message }}
+    </p>
     <p>{{ pieceCount }} objects on the board</p>
   </div>
 </template>

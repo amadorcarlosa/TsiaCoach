@@ -7,6 +7,18 @@ The Nuxt admin model picker reads the configured models from `/api/models`.
 
 ## Local setup
 
+To run without AI calls or provider credentials:
+
+```powershell
+dotnet user-secrets set "AI:Enabled" "false" --project TsiaCoach.WebApi
+```
+
+In Development, this skips provider setup, returns an empty model list, and makes
+agent, coaching, and decision requests return HTTP 503 with "AI is disabled".
+Other API features remain available. Restart after changing the setting.
+Set `AI:Enabled` to `true` to restore AI (the default); deployed environments can
+use `AI__Enabled=false`.
+
 From the repository root, store these settings in the WebApi's development user
 secrets. Replace the key placeholder locally; never put the key in Nuxt config,
 source control, or a chat message.

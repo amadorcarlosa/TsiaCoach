@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="TUnit" Version="1.6*" />
-    <PackageReference Include="TUnit.AspNetCore" Version="1.65.63" />
+    <PackageReference Include="TUnit.AspNetCore" Version="1.76.45" />
   </ItemGroup>
 
   <ItemGroup>

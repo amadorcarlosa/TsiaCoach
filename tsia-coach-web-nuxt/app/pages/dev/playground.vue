@@ -1,4 +1,4 @@
-<script setup lang="ts">
+how<script setup lang="ts">
 import { ref, watch } from 'vue'
 
 import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
@@ -49,10 +49,16 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
       :unmount-on-hide="false"
     >
       <template #baseTenPlayground>
-        <ArrayBaseTenPlayground :active="activeTab === 'baseTenPlayground'" :cancel-version="readCancelVersion" />
+        <ArrayBaseTenPlayground
+          :active="activeTab === 'baseTenPlayground'"
+          :cancel-version="readCancelVersion"
+        />
       </template>
       <template #algebraTilePlayground>
-        <AlgebraTilePlayground :active="activeTab === 'algebraTilePlayground'" :cancel-version="readCancelVersion" />
+        <AlgebraTilePlayground
+          :active="activeTab === 'algebraTilePlayground'"
+          :cancel-version="readCancelVersion"
+        />
       </template>
       <template #arrayModelPlayground>
         <ArrayRodPlayground
@@ -69,8 +75,8 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
       </template>
       <template #fractionModelPlayground>
         <FractionPlayground
-            :active="activeTab === 'fractionModelPlayground'"
-            :cancel-version="readCancelVersion"
+          :active="activeTab === 'fractionModelPlayground'"
+          :cancel-version="readCancelVersion"
         />
       </template>
       <template #mathTablaPlayground>

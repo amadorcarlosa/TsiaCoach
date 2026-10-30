@@ -23,22 +23,18 @@ import {
     tiledRectangle,
 } from '~/components/tabla/area-grouping'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
-import { trainOrientation } from '~/components/rod/scene/train-orientation'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import {
+    makeLinearTrain,
+    orientTrain,
+    regroupTrainToAddends,
+    regroupTrainToOnes,
+    releaseTrain,
+} from '~/components/rod/scene/linear-train-operations'
 
 
 type Candidate =
     | { allowed: true; trains: RodTrain[] }
-    | { allowed: false; reason: string }
-
-type LinearLayout =
-    | {
-        allowed: true
-        orientation: TrainPart['orientation']
-        vertical: boolean
-        start: Point
-        total: number
-    }
     | { allowed: false; reason: string }
 
 export function useRodScene(policy: ScenePolicy) {
@@ -90,67 +86,6 @@ export function useRodScene(policy: ScenePolicy) {
         message.value = ''
 
         return { allowed: true }
-    }
-
-    function linearLayout(train: RodTrain): LinearLayout {
-        const first = train.parts[0]
-
-        if (!first) {
-            return { allowed: false, reason: 'This train has no parts.' }
-        }
-
-        const orientation = first.orientation
-
-        if (train.parts.some(part => part.orientation === 'tower')) {
-            return {
-                allowed: false,
-                reason: 'Lay the tower horizontally or vertically before decomposing.',
-            }
-        }
-
-        if (train.parts.some(part => part.orientation !== orientation)) {
-            return {
-                allowed: false,
-                reason: 'Arrange each selected train horizontally or vertically first.',
-            }
-        }
-
-        const vertical = orientation === 'vertical'
-
-        const ordered = [...train.parts].sort((a, b) =>
-            vertical
-                ? a.offset.y - b.offset.y
-                : a.offset.x - b.offset.x,
-        )
-
-        const start = { ...ordered[0]!.offset }
-        let total = 0
-
-        // Require a continuous line and preserve its occupied footprint.
-        for (const part of ordered) {
-            const expectedX = start.x + (vertical ? 0 : total)
-            const expectedY = start.y + (vertical ? total : 0)
-
-            if (
-                part.offset.x !== expectedX ||
-                part.offset.y !== expectedY
-            ) {
-                return {
-                    allowed: false,
-                    reason: 'Arrange each selected train in one continuous line first.',
-                }
-            }
-
-            total += part.value
-        }
-
-        return {
-            allowed: true,
-            orientation,
-            vertical,
-            start,
-            total,
-        }
     }
 
     function build(
@@ -264,75 +199,16 @@ export function useRodScene(policy: ScenePolicy) {
                     return reject('This scene does not allow orientation changes.')
                 }
 
-                const orientation = action.orientation
-
-                if (
-                    orientation === 'tower' &&
-                    selected.some(train => train.parts.length > 1)
-                ) {
-                    return reject('Tower is available only for individual rods.')
-                }
-
                 for (const train of selected) {
-                    if (train.parts.length === 1) {
-                        // Preserve existing single-rod behavior:
-                        // change orientation at the current anchor.
-                        train.parts[0]!.orientation = orientation
-                        continue
-                    }
-
-                    if (orientation === 'tower') {
-                        return reject('Tower is available only for individual rods.')
-                    }
-
-                    if (trainOrientation(train) === undefined) {
-                        return reject(
-                            'Choose another factor arrangement to change this rectangle.',
-                        )
-                    }
-
-                    const total = train.parts.reduce(
-                        (sum, part) => sum + part.value,
-                        0,
+                    const transformed = orientTrain(
+                        train,
+                        action.orientation,
+                        policy,
                     )
+                    if (!transformed.allowed) return transformed
 
-                    const width = orientation === 'horizontal' ? total : 1
-                    const depth = orientation === 'vertical' ? total : 1
-
-                    if (width > policy.columns || depth > policy.rows) {
-                        return reject(
-                            `A value-${total} train cannot fit ${orientation}ly ` +
-                            `on this ${policy.columns}-column, ${policy.rows}-row board.`,
-                        )
-                    }
-
-                    // Preserve array order and each part's catalog value.
-                    let cursor = 0
-
-                    train.parts = train.parts.map(part => {
-                        const transformed = {
-                            ...part,
-                            orientation,
-                            offset: orientation === 'horizontal'
-                                ? { x: cursor, y: 0 }
-                                : { x: 0, y: cursor },
-                        }
-
-                        cursor += part.value
-                        return transformed
-                    })
-
-                    // Minimal edge correction; no search for unoccupied space.
-                    train.anchor = {
-                        x: Math.max(
-                            0,
-                            Math.min(train.anchor.x, policy.columns - width),
-                        ),
-                        y: Math.max(
-                            0,
-                            Math.min(train.anchor.y, policy.rows - depth),
-                        ),
-                    }
+                    train.anchor = transformed.value.anchor
+                    train.parts = transformed.value.parts
                 }
 
                 // Validate all transformed destinations together.
@@ -383,78 +259,20 @@ export function useRodScene(policy: ScenePolicy) {
             }
 
             case 'make-train': {
-                if (selected.length < 2) {
-                    return reject('Select at least two trains.')
-                }
-
-                const allFlatAndHorizontal = selected.every(train => {
-                    const first = train.parts[0]
-                    if (!first) return false
-
-                    return train.parts.every(part =>
-                        part.orientation === 'horizontal' &&
-                        part.offset.y === first.offset.y,
-                    )
-                })
-
-                if (!allFlatAndHorizontal) {
-                    return reject('Lay all selected rods horizontally first.')
-                }
-
-                const ordered = [...selected].sort((a, b) =>
-                    a.anchor.y - b.anchor.y ||
-                    a.anchor.x - b.anchor.x ||
-                    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-                )
-
-                const parts: TrainPart[] = []
-                let cursor = 0
-
-                for (const train of ordered) {
-                    const orderedParts = train.parts
-                        .map((part, index) => ({ part, index }))
-                        .sort((a, b) =>
-                            a.part.offset.x - b.part.offset.x ||
-                            a.index - b.index,
-                        )
-
-                    for (const { part } of orderedParts) {
-                        parts.push({
-                            ...part,
-                            offset: { x: cursor, y: 0 },
-                        })
-
-                        cursor += part.value
-                    }
-                }
-
-                const combined: RodTrain = {
-                    id: '',
-                    anchor: { ...ordered[0]!.anchor },
-                    parts,
-                }
+                const combined = makeLinearTrain(selected)
+                if (!combined.allowed) return combined
 
                 return validate([
                     ...current.filter(train => !selectedIds.has(train.id)),
-                    combined,
+                    combined.value,
                 ])
             }
             case 'regroup-ones': {
                 for (const train of selected) {
-                    const layout = linearLayout(train)
-                    if (!layout.allowed) return layout
+                    const regrouped = regroupTrainToOnes(train)
+                    if (!regrouped.allowed) return regrouped
 
-                    train.parts = Array.from(
-                        { length: layout.total },
-                        (_, index): TrainPart => ({
-                            value: 1,
-                            orientation: layout.orientation,
-                            offset: {
-                                x: layout.start.x + (layout.vertical ? 0 : index),
-                                y: layout.start.y + (layout.vertical ? index : 0),
-                            },
-                        }),
-                    )
+                    train.parts = regrouped.value.parts
                 }
 
                 return validate(current)
@@ -462,43 +280,13 @@ export function useRodScene(policy: ScenePolicy) {
 
             case 'regroup-addends': {
                 for (const train of selected) {
-                    const layout = linearLayout(train)
-                    if (!layout.allowed) return layout
+                    const regrouped = regroupTrainToAddends(
+                        train,
+                        action.pair,
+                    )
+                    if (!regrouped.allowed) return regrouped
 
-                    const candidates = addendPairs(layout.total)
-                    const requested = action.pair
-
-                    const pair = requested
-                        ? candidates.find(candidate =>
-                            candidate[0] === requested[0] &&
-                            candidate[1] === requested[1],
-                        )
-                        : candidates[0]
-
-                    if (!pair) {
-                        return reject(
-                            requested
-                                ? 'Choose two rods valued 1–10 that add to this object’s value.'
-                                : `Value ${layout.total} has no two-addend arrangement using rods valued 1–10.`,
-                        )
-                    }
-
-                    let cursor = 0
-
-                    // Preserve the chosen pair's order. Do not sort it.
-                    train.parts = pair.map((value): TrainPart => {
-                        const part: TrainPart = {
-                            value,
-                            orientation: layout.orientation,
-                            offset: {
-                                x: layout.start.x + (layout.vertical ? 0 : cursor),
-                                y: layout.start.y + (layout.vertical ? cursor : 0),
-                            },
-                        }
-
-                        cursor += value
-                        return part
-                    })
+                    train.parts = regrouped.value.parts
                 }
 
                 return validate(current)
@@ -616,23 +404,13 @@ export function useRodScene(policy: ScenePolicy) {
             }
 
             case 'ungroup': {
-                if (selected.some(train => train.parts.length < 2)) {
-                    return reject('Select only trains with multiple parts.')
-                }
+                const released: RodTrain[] = []
 
-                const released: RodTrain[] = selected.flatMap(train =>
-                    train.parts.map(part => ({
-                        id: '', // Assigned only after validation succeeds.
-                        anchor: {
-                            x: train.anchor.x + part.offset.x,
-                            y: train.anchor.y + part.offset.y,
-                        },
-                        parts: [{
-                            ...part,
-                            offset: { x: 0, y: 0 },
-                        }],
-                    })),
-                )
+                for (const train of selected) {
+                    const result = releaseTrain(train)
+                    if (!result.allowed) return result
+                    released.push(...result.value)
+                }
 
                 return validate([
                     ...current.filter(train => !selectedIds.has(train.id)),

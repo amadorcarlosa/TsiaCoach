@@ -268,7 +268,11 @@ function onRemove(): void {
     @update-tray-open="trayOpen = $event"
   >
     <template #tools-start>
-      <div class="math-destinations" role="group" aria-label="Rod destination">
+      <div
+        class="math-destinations"
+        role="group"
+        aria-label="Rod destination"
+      >
         <PlaygroundActionButton
           v-for="destination in destinations"
           :key="destination.id"
@@ -282,7 +286,11 @@ function onRemove(): void {
     </template>
 
     <template #before-board>
-      <div class="math-readouts" role="group" aria-label="MathTabla reference readouts">
+      <div
+        class="math-readouts"
+        role="group"
+        aria-label="MathTabla reference readouts"
+      >
         <p>Horizontal reference: N {{ readouts.horizontal.numerator }}, D {{ readouts.horizontal.denominator }}</p>
         <p>Vertical reference: N {{ readouts.vertical.numerator }}, D {{ readouts.vertical.denominator }}</p>
         <template v-if="readouts.guide">
@@ -293,10 +301,16 @@ function onRemove(): void {
           Whole exceeds this board: {{ readouts.horizontal.denominator }} × {{ readouts.vertical.denominator }}
           does not fit {{ centralColumns }} × {{ centralRows }} cells.
         </p>
-        <p v-else>{{ missingDenominator }}</p>
+        <p v-else>
+          {{ missingDenominator }}
+        </p>
       </div>
 
-      <div class="math-grouping" role="group" aria-label="Group the whole">
+      <div
+        class="math-grouping"
+        role="group"
+        aria-label="Group the whole"
+      >
         <span>Group the whole:</span>
         <PlaygroundActionButton
           :disabled="blocked || !readouts.guide"

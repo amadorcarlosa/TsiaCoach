@@ -45,49 +45,147 @@ function changeType(index: number, event: Event) {
 }
 function apply() {
   const parsed = props.adapter.parse({ type: 'all', conditions: draft.value })
-  if (!parsed.allowed) { error.value = parsed.reason; return }
+  if (!parsed.allowed) {
+    error.value = parsed.reason
+    return
+  }
   emit('apply', parsed.value)
   baseline.value = JSON.stringify(draft.value)
   error.value = ''
 }
-function clear() { emit('apply', null); draft.value = []; baseline.value = '[]'; error.value = '' }
+function clear() {
+  emit('apply', null)
+  draft.value = []
+  baseline.value = '[]'
+  error.value = ''
+}
 </script>
 <template>
-  <fieldset class="goal-editor" :disabled="disabled">
+  <fieldset
+    class="goal-editor"
+    :disabled="disabled"
+  >
     <legend>Goal</legend>
-    <p v-if="!draft.length">No goal authored.</p>
-    <fieldset v-for="(condition, index) in draft" :key="index">
+    <p v-if="!draft.length">
+      No goal authored.
+    </p>
+    <fieldset
+      v-for="(condition, index) in draft"
+      :key="index"
+    >
       <legend>Condition {{ index + 1 }}</legend>
       <label>Condition type
-        <select :value="condition.type" @change="changeType(index, $event)">
-          <option v-for="type in adapter.supportedTypes" :key="type" :value="type">{{ labels[type] }}</option>
+        <select
+          :value="condition.type"
+          @change="changeType(index, $event)"
+        >
+          <option
+            v-for="type in adapter.supportedTypes"
+            :key="type"
+            :value="type"
+          >{{ labels[type] }}</option>
         </select>
       </label>
       <label v-if="'pairId' in condition">Pair
-        <select v-model="condition.pairId"><option v-for="target in adapter.pairs" :key="target.id" :value="target.id">{{ target.label }}</option></select>
+        <select v-model="condition.pairId"><option
+          v-for="target in adapter.pairs"
+          :key="target.id"
+          :value="target.id"
+        >{{ target.label }}</option></select>
       </label>
       <label v-else>Region
-        <select v-model="condition.regionId"><option v-for="target in adapter.regions" :key="target.id" :value="target.id">{{ target.label }}</option></select>
+        <select v-model="condition.regionId"><option
+          v-for="target in adapter.regions"
+          :key="target.id"
+          :value="target.id"
+        >{{ target.label }}</option></select>
       </label>
       <template v-if="condition.type === 'fraction-exact'">
-        <label>Numerator<input v-model.number="condition.numerator" type="number" min="0" step="1"></label>
-        <label>Denominator<input v-model.number="condition.denominator" type="number" min="1" step="1"></label>
+        <label>Numerator<input
+          v-model.number="condition.numerator"
+          type="number"
+          min="0"
+          step="1"
+        ></label>
+        <label>Denominator<input
+          v-model.number="condition.denominator"
+          type="number"
+          min="1"
+          step="1"
+        ></label>
       </template>
-      <label v-if="condition.type === 'region-total'">Value<input v-model.number="condition.value" type="number" min="0" step="1"></label>
-      <label v-if="condition.type === 'occupied-area'">Cells<input v-model.number="condition.cells" type="number" min="0" step="1"></label>
+      <label v-if="condition.type === 'region-total'">Value<input
+        v-model.number="condition.value"
+        type="number"
+        min="0"
+        step="1"
+      ></label>
+      <label v-if="condition.type === 'occupied-area'">Cells<input
+        v-model.number="condition.cells"
+        type="number"
+        min="0"
+        step="1"
+      ></label>
       <template v-if="condition.type === 'filled-rectangle'">
-        <label>X<input v-model.number="condition.x" type="number" min="0" step="1"></label>
-        <label>Y<input v-model.number="condition.y" type="number" min="0" step="1"></label>
-        <label>Columns<input v-model.number="condition.columns" type="number" min="1" step="1"></label>
-        <label>Rows<input v-model.number="condition.rows" type="number" min="1" step="1"></label>
+        <label>X<input
+          v-model.number="condition.x"
+          type="number"
+          min="0"
+          step="1"
+        ></label>
+        <label>Y<input
+          v-model.number="condition.y"
+          type="number"
+          min="0"
+          step="1"
+        ></label>
+        <label>Columns<input
+          v-model.number="condition.columns"
+          type="number"
+          min="1"
+          step="1"
+        ></label>
+        <label>Rows<input
+          v-model.number="condition.rows"
+          type="number"
+          min="1"
+          step="1"
+        ></label>
       </template>
-      <button type="button" @click="draft.splice(index, 1)">Remove condition</button>
+      <button
+        type="button"
+        @click="draft.splice(index, 1)"
+      >
+        Remove condition
+      </button>
     </fieldset>
-    <button type="button" @click="draft.push(make(adapter.supportedTypes[0]!))">Add condition</button>
-    <button type="button" @click="apply">Apply goal</button>
-    <button type="button" @click="clear">Clear goal</button>
-    <span v-if="dirty">Unapplied goal draft</span>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <button
+      type="button"
+      @click="draft.push(make(adapter.supportedTypes[0]!))"
+    >
+      Add condition
+    </button>
+    <button
+      type="button"
+      @click="apply"
+    >
+      Apply goal
+    </button>
+    <button
+      type="button"
+      @click="clear"
+    >
+      Clear goal
+    </button>
+    <span v-if="dirty">
+      Unapplied goal draft
+    </span>
+    <p
+      v-if="error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
   </fieldset>
 </template>
 <style scoped>

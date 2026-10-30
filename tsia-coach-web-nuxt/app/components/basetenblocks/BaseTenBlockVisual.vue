@@ -35,7 +35,7 @@ const style = computed(() => {
   '--d': `${(depth + extraDepth) * props.unitSize}px`,
   '--x-unit': `${(1 + extraWidth) * props.unitSize}px`,
   '--y-unit': `${(1 + extraDepth) * props.unitSize}px`,
-  '--h': `${props.dimensions.height * props.unitSize}px`,
+  '--h': `${height * props.unitSize}px`,
   '--unit': `${props.unitSize}px`,
   '--fill': props.appearance.fill,
   '--ink': props.appearance.ink,

@@ -95,7 +95,11 @@ function cancelDelete(): void {
 </script>
 
 <template>
-  <div class="authoring-controls" role="group" aria-label="Authoring steps">
+  <div
+    class="authoring-controls"
+    role="group"
+    aria-label="Authoring steps"
+  >
     <PlaygroundActionButton
       ref="captureRef"
       :disabled="locked"
@@ -178,7 +182,12 @@ function cancelDelete(): void {
       />
     </label>
 
-    <slot v-if="active" name="goal-editor" :step-id="active.id" :disabled="locked" />
+    <slot
+      v-if="active"
+      name="goal-editor"
+      :step-id="active.id"
+      :disabled="locked"
+    />
 
     <div class="authoring-controls">
       <PlaygroundActionButton
@@ -232,7 +241,10 @@ function cancelDelete(): void {
     </PlaygroundActionButton>
   </div>
 
-  <p class="authoring-message" role="status">
+  <p
+    class="authoring-message"
+    role="status"
+  >
     {{ message }}
   </p>
 </template>

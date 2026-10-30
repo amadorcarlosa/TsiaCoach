@@ -8,7 +8,8 @@ defineEmits<{ choose: [term: AlgebraTileTerm, sign: AlgebraTileSign] }>()
 <template>
   <div :class="[styles.tray, styles.embedded, styles.wrap]" aria-label="Algebra tiles">
     <div v-for="term in algebraTileTerms" :key="term" class="term-pair">
-      <button v-for="sign in algebraTileSigns" :key="sign" :class="styles.choice" type="button" :disabled="disabled"
+      <button
+        v-for="sign in algebraTileSigns" :key="sign" :class="styles.choice" type="button" :disabled="disabled"
         :aria-label="'Add ' + algebraTileLabel({ term, sign })"
         :title="'Add ' + algebraTileLabel({ term, sign })"
         @click="$emit('choose', term, sign)">

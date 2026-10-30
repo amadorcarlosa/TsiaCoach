@@ -32,7 +32,9 @@ const notice = ref('')
 const confirmingClear = ref(false)
 let nextId = 1
 let controller: AbortController | undefined
-watch(boardKind, () => { confirmingClear.value = false })
+watch(boardKind, () => {
+  confirmingClear.value = false
+})
 onBeforeUnmount(() => controller?.abort())
 
 function describeError(error: unknown): string {
@@ -87,71 +89,304 @@ function clearBoard() {
   <div class="coach-lab">
     <header class="lab-heading">
       <div><h1>Coach playground</h1><p>Build something. Test a response. See what the coach sees.</p></div>
-      <span class="lab-status">{{ modelsStatus === 'pending' || modelsStatus === 'idle' ? 'Loading models' : modelsError ? 'Models unavailable' : `${models.length} models available` }}</span>
+      <span class="lab-status">
+        {{ modelsStatus === 'pending' || modelsStatus === 'idle' ? 'Loading models' : modelsError ? 'Models unavailable' : `${models.length} models available` }}
+      </span>
     </header>
     <div class="lab-workspace">
-      <section class="lab-board" aria-label="Math workspace">
+      <section
+        class="lab-board"
+        aria-label="Math workspace"
+      >
         <div class="board-toolbar">
-          <div class="board-switch" role="group" aria-label="Board type">
-            <button :aria-pressed="boardKind === 'bar'" @click="boardKind = 'bar'">Bar rods</button>
-            <button :aria-pressed="boardKind === 'mathtabla'" @click="boardKind = 'mathtabla'">MathTabla</button>
+          <div
+            class="board-switch"
+            role="group"
+            aria-label="Board type"
+          >
+            <button
+              :aria-pressed="boardKind === 'bar'"
+              @click="boardKind = 'bar'"
+            >
+              Bar rods
+            </button>
+            <button
+              :aria-pressed="boardKind === 'mathtabla'"
+              @click="boardKind = 'mathtabla'"
+            >
+              MathTabla
+            </button>
           </div>
-          <button v-if="!confirmingClear" class="quiet-button" @click="confirmingClear = true">Clear board</button>
-          <div v-else class="clear-confirm"><span>Remove all pieces?</span><button class="quiet-button" @click="clearBoard">Confirm clear</button><button class="quiet-button" @click="confirmingClear = false">Keep pieces</button></div>
+          <button
+            v-if="!confirmingClear"
+            class="quiet-button"
+            @click="confirmingClear = true"
+          >
+            Clear board
+          </button>
+          <div
+            v-else
+            class="clear-confirm"
+          >
+            <span>Remove all pieces?</span><button
+              class="quiet-button"
+              @click="clearBoard"
+            >
+              Confirm clear
+            </button><button
+              class="quiet-button"
+              @click="confirmingClear = false"
+            >
+              Keep pieces
+            </button>
+          </div>
         </div>
-        <div class="task-strip"><label for="lab-task">Task to explore</label><textarea id="lab-task" v-model="task" rows="2" maxlength="2000" /></div>
+        <div class="task-strip">
+          <label for="lab-task">
+            Task to explore
+          </label><textarea
+            id="lab-task"
+            v-model="task"
+            rows="2"
+            maxlength="2000"
+          />
+        </div>
         <ClientOnly>
-          <BarRodPlayground v-show="boardKind === 'bar'" ref="barBoard" :active="boardKind === 'bar'" :show-authoring="false" />
-          <MathTablaPlayground v-show="boardKind === 'mathtabla'" ref="mathBoard" :active="boardKind === 'mathtabla'" :show-authoring="false" />
-          <template #fallback><p class="board-help">Loading the math board…</p></template>
+          <BarRodPlayground
+            v-show="boardKind === 'bar'"
+            ref="barBoard"
+            :active="boardKind === 'bar'"
+            :show-authoring="false"
+          />
+          <MathTablaPlayground
+            v-show="boardKind === 'mathtabla'"
+            ref="mathBoard"
+            :active="boardKind === 'mathtabla'"
+            :show-authoring="false"
+          />
+          <template #fallback>
+            <p class="board-help">
+              Loading the math board…
+            </p>
+          </template>
         </ClientOnly>
-        <p class="board-help">Choose rods from the tray, then move and combine them on the board. Each run captures the current arrangement.</p>
+        <p class="board-help">
+          Choose rods from the tray, then move and combine them on the board. Each run captures the current arrangement.
+        </p>
       </section>
-      <aside class="lab-controls" aria-label="AI experiment controls">
+      <aside
+        class="lab-controls"
+        aria-label="AI experiment controls"
+      >
         <h2>Test the coach</h2>
-        <p class="control-intro">One board snapshot per run. Change the model or prompt to compare responses.</p>
-        <div v-if="modelsError" role="alert" class="lab-error">Could not load models. Check the API connection. <button @click="refreshModels()">Retry models</button></div>
-        <p v-else-if="modelsStatus === 'success' && !models.length" role="status">No models configured. Add a model in the API settings.</p>
-        <p v-if="mode === 'decision'" class="mode-help"><strong>Jev 1.13 · OpenRouter Decisions API</strong><br>Returns a typed choice and probabilities, not generated prose.</p><label v-if="mode === 'coach'" for="lab-model">Chat model</label>
-        <select v-if="mode === 'coach'" id="lab-model" v-model="model" :disabled="sending || !models.length"><option v-for="item in models" :key="item.name" :value="item.name">{{ item.displayName }}</option></select>
-        <fieldset :disabled="sending" class="mode-options">
+        <p class="control-intro">
+          One board snapshot per run. Change the model or prompt to compare responses.
+        </p>
+        <div
+          v-if="modelsError"
+          role="alert"
+          class="lab-error"
+        >
+          Could not load models. Check the API connection. <button @click="refreshModels()">
+            Retry models
+          </button>
+        </div>
+        <p
+          v-else-if="modelsStatus === 'success' && !models.length"
+          role="status"
+        >
+          No models configured. Add a model in the API settings.
+        </p>
+        <p
+          v-if="mode === 'decision'"
+          class="mode-help"
+        >
+          <strong>Jev 1.13 · OpenRouter Decisions API</strong><br>Returns a typed choice and probabilities, not generated prose.
+        </p><label
+          v-if="mode === 'coach'"
+          for="lab-model"
+        >Chat model</label>
+        <select
+          v-if="mode === 'coach'"
+          id="lab-model"
+          v-model="model"
+          :disabled="sending || !models.length"
+        >
+          <option
+            v-for="item in models"
+            :key="item.name"
+            :value="item.name"
+          >
+            {{ item.displayName }}
+          </option>
+        </select>
+        <fieldset
+          :disabled="sending"
+          class="mode-options"
+        >
           <legend>Response mode</legend>
-          <label><input v-model="mode" type="radio" value="decision"> Structured decision</label>
-          <label><input v-model="mode" type="radio" value="coach"> Coaching response</label>
+          <label><input
+            v-model="mode"
+            type="radio"
+            value="decision"
+          > Structured decision</label>
+          <label><input
+            v-model="mode"
+            type="radio"
+            value="coach"
+          > Coaching response</label>
         </fieldset>
-        <p class="mode-help">{{ mode === 'decision' ? 'Choose: observe, ask, hint, or demonstrate. Suggestions are never executed.' : 'Ask for a short response a student could read beside the board.' }}</p>
-        <label for="lab-student">Student message</label>
-        <textarea id="lab-student" v-model="studentMessage" rows="3" maxlength="2000" placeholder="What might the student say?" />
-        <details class="prompt-editor"><summary>Coach instructions</summary><label for="lab-instructions">System prompt</label><textarea id="lab-instructions" v-model="instructions" rows="7" maxlength="8000" /><button class="quiet-button" @click="instructions = defaultInstructions">Restore default prompt</button></details>
-        <button v-if="!sending" class="run-button" :disabled="(mode === 'coach' && !model) || !task.trim() || !instructions.trim() || !currentBoard" @click="runExperiment">Capture board &amp; run</button>
-        <button v-else class="run-button stop-button" @click="controller?.abort()">Cancel run</button>
-        <p class="session-note">Runs stay in this page session. Reloading clears them. Decisions use Jev. Coaching responses use your selected chat model.</p>
+        <p class="mode-help">
+          {{ mode === 'decision' ? 'Choose: observe, ask, hint, or demonstrate. Suggestions are never executed.' : 'Ask for a short response a student could read beside the board.' }}
+        </p>
+        <label for="lab-student">
+          Student message
+        </label>
+        <textarea
+          id="lab-student"
+          v-model="studentMessage"
+          rows="3"
+          maxlength="2000"
+          placeholder="What might the student say?"
+        />
+        <details class="prompt-editor">
+          <summary>Coach instructions</summary><label for="lab-instructions">
+            System prompt
+          </label><textarea
+            id="lab-instructions"
+            v-model="instructions"
+            rows="7"
+            maxlength="8000"
+          /><button
+            class="quiet-button"
+            @click="instructions = defaultInstructions"
+          >
+            Restore default prompt
+          </button>
+        </details>
+        <button
+          v-if="!sending"
+          class="run-button"
+          :disabled="(mode === 'coach' && !model) || !task.trim() || !instructions.trim() || !currentBoard"
+          @click="runExperiment"
+        >
+          Capture board &amp; run
+        </button>
+        <button
+          v-else
+          class="run-button stop-button"
+          @click="controller?.abort()"
+        >
+          Cancel run
+        </button>
+        <p class="session-note">
+          Runs stay in this page session. Reloading clears them. Decisions use Jev. Coaching responses use your selected chat model.
+        </p>
       </aside>
     </div>
-    <p class="run-status" role="status" aria-live="polite">{{ notice }}</p>
-    <section class="lab-inspector" aria-label="Run inspector">
-      <div class="inspector-heading"><h2>Run inspector</h2><span>{{ runs.length }} / 20 retained runs</span></div>
-      <div v-if="!runs.length" class="inspector-empty"><h3>Your board is the test case.</h3><p>Add a few rods and run the coach. Inspect the response, exact input, model, timing, and token usage here.</p></div>
-      <div v-else class="inspector-content">
-        <nav class="run-list" aria-label="Past runs"><button v-for="run in runs" :key="run.id" :aria-current="selectedId === run.id ? 'true' : undefined" @click="selectedId = run.id"><strong>Run {{ run.id }} <span>{{ run.error ? 'Failed' : run.result ? 'Complete' : 'Running' }}</span></strong><small>{{ run.request.model }}</small></button></nav>
-        <article v-if="selectedRun" class="run-detail">
-          <div class="run-meta"><span>{{ selectedRun.mode === 'decision' ? 'Structured decision' : 'Coaching response' }}</span><span>{{ selectedRun.elapsed }} ms</span><span v-if="selectedRun.result">{{ selectedRun.result.inputTokens }} input / {{ selectedRun.result.outputTokens }} output tokens</span></div>
-          <p v-if="selectedRun.error" role="alert" class="lab-error">{{ selectedRun.error }} Edit your settings or try another run.</p>
+    <p
+      class="run-status"
+      role="status"
+      aria-live="polite"
+    >
+      {{ notice }}
+    </p>
+    <section
+      class="lab-inspector"
+      aria-label="Run inspector"
+    >
+      <div class="inspector-heading">
+        <h2>Run inspector</h2><span>{{ runs.length }} / 20 retained runs</span>
+      </div>
+      <div
+        v-if="!runs.length"
+        class="inspector-empty"
+      >
+        <h3>Your board is the test case.</h3><p>Add a few rods and run the coach. Inspect the response, exact input, model, timing, and token usage here.</p>
+      </div>
+      <div
+        v-else
+        class="inspector-content"
+      >
+        <nav
+          class="run-list"
+          aria-label="Past runs"
+        >
+          <button
+            v-for="run in runs"
+            :key="run.id"
+            :aria-current="selectedId === run.id ? 'true' : undefined"
+            @click="selectedId = run.id"
+          >
+            <strong>Run {{ run.id }} <span>{{ run.error ? 'Failed' : run.result ? 'Complete' : 'Running' }}</span></strong><small>{{ run.request.model }}</small>
+          </button>
+        </nav>
+        <article
+          v-if="selectedRun"
+          class="run-detail"
+        >
+          <div class="run-meta">
+            <span>{{ selectedRun.mode === 'decision' ? 'Structured decision' : 'Coaching response' }}</span><span>{{ selectedRun.elapsed }} ms</span><span v-if="selectedRun.result">
+              {{ selectedRun.result.inputTokens }} input / {{ selectedRun.result.outputTokens }} output tokens
+            </span>
+          </div>
+          <p
+            v-if="selectedRun.error"
+            role="alert"
+            class="lab-error"
+          >
+            {{ selectedRun.error }} Edit your settings or try another run.
+          </p>
           <template v-else-if="selectedRun.result">
-            <div v-if="selectedRun.jev" class="decision-result">
-              <span class="decision-action">{{ selectedRun.jev.action }}</span>
+            <div
+              v-if="selectedRun.jev"
+              class="decision-result"
+            >
+              <span class="decision-action">
+                {{ selectedRun.jev.action }}
+              </span>
               <p>Jev selected this intervention. No board action was executed.</p>
               <p>Confidence: {{ selectedRun.jev.confidence === null ? 'Not supplied' : `${(selectedRun.jev.confidence * 100).toFixed(1)}%` }}</p>
-              <table v-if="selectedRun.jev.probabilities"><caption>Probability by action</caption><tbody><tr v-for="(probability, action) in selectedRun.jev.probabilities" :key="action"><th scope="row">{{ action }}</th><td>{{ (probability * 100).toFixed(1) }}%</td></tr></tbody></table>
+              <table v-if="selectedRun.jev.probabilities">
+                <caption>Probability by action</caption><tbody>
+                  <tr
+                    v-for="(probability, action) in selectedRun.jev.probabilities"
+                    :key="action"
+                  >
+                    <th scope="row">
+                      {{ action }}
+                    </th><td>{{ (probability * 100).toFixed(1) }}%</td>
+                  </tr>
+                </tbody>
+              </table>
               <small>Confidence is model-reported, not verified accuracy. This explanation is app-authored.</small>
               <details><summary>Exact Jev request</summary><pre>{{ JSON.stringify(selectedRun.jev.request, null, 2) }}</pre></details>
             </div>
-            <div v-else-if="decision" class="decision-result"><span class="decision-action">{{ decision.action }}</span><p>{{ decision.message }}</p><small>Valid decision format. Mathematical accuracy has not been verified.</small></div>
-            <p v-else-if="selectedRun.mode === 'decision'" class="lab-error">The model did not return the expected decision format. Inspect the raw response below.</p>
-            <p v-else class="coach-response">{{ selectedRun.result.text }}</p>
+            <div
+              v-else-if="decision"
+              class="decision-result"
+            >
+              <span class="decision-action">
+                {{ decision.action }}
+              </span><p>{{ decision.message }}</p><small>Valid decision format. Mathematical accuracy has not been verified.</small>
+            </div>
+            <p
+              v-else-if="selectedRun.mode === 'decision'"
+              class="lab-error"
+            >
+              The model did not return the expected decision format. Inspect the raw response below.
+            </p>
+            <p
+              v-else
+              class="coach-response"
+            >
+              {{ selectedRun.result.text }}
+            </p>
             <details><summary>Raw response</summary><pre>{{ selectedRun.result.text }}</pre></details>
           </template>
-          <p v-else>Waiting for the model…</p>
+          <p v-else>
+            Waiting for the model…
+          </p>
           <details><summary>Captured board and student input</summary><pre>{{ selectedRun.request.prompt }}</pre></details>
           <details><summary>Instructions sent</summary><pre>{{ selectedRun.request.instructions }}</pre></details>
         </article>
