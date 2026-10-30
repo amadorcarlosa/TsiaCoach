@@ -468,6 +468,69 @@ test('array can orient a composed train vertically', async ({ playground: p }) =
   })
 })
 
+test('array keeps a composed train whole through rod-like transformations', async ({
+  page,
+  playground: p,
+}) => {
+  await p.show('Array')
+
+  const first = await p.add('Array', 'three')
+  const second = await p.add('Array', 'five')
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  let menu = await p.menu(first)
+  await menu.getByRole('menuitem', { name: 'Make a train' }).click()
+
+  const train = p.panel('Array').locator('[data-piece-id]')
+  const id = await train.getAttribute('data-piece-id')
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitemcheckbox', {
+    name: 'Vertical',
+    exact: true,
+  }).click()
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitem', {
+    name: 'Regroup to addends',
+    exact: true,
+  }).hover()
+  await page.getByRole('menuitem', {
+    name: '2 + 6',
+    exact: true,
+  }).click()
+
+  await expect(train).toHaveAttribute('data-piece-id', id!)
+  await expect(train.locator('.train-part')).toHaveCount(2)
+  await expect(train.locator('.train-part').nth(0))
+    .toHaveAttribute('data-part-value', '2')
+  await expect(train.locator('.train-part').nth(1))
+    .toHaveAttribute('data-part-value', '6')
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    width: 1,
+    depth: 8,
+  })
+
+  menu = await p.menu(train.locator('.train-part').first())
+  await menu.getByRole('menuitem', {
+    name: 'Regroup to factors',
+    exact: true,
+  }).hover()
+  await page.getByRole('menuitem', {
+    name: '2 rows of 4',
+    exact: true,
+  }).click()
+
+  await expect(train).toHaveAttribute('data-piece-id', id!)
+  await expect(train.locator('.train-part')).toHaveCount(2)
+  await expect.poll(() => p.geometry(train)).toMatchObject({
+    width: 4,
+    depth: 2,
+  })
+})
+
 test('array regroups a vertical train into eight ones', async ({
   playground: p,
 }) => {
