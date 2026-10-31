@@ -3,7 +3,7 @@
 Run from `tsia-coach-web-nuxt`:
 
 ```powershell
-pnpm exec vitest run app/components/rod/rod.placement.test.ts app/composables/useRodBoard.test.ts app/composables/useArrayRodBoard.test.ts
+pnpm exec vitest run app/composables/useRodBoard.test.ts
 pnpm exec playwright test --config playwright.playground.config.ts
 ```
 

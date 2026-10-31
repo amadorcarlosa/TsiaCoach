@@ -16,7 +16,11 @@ const props = withDefaults(defineProps<DragProps>(), {
   disabled: false,
   selected: false,
   presentation: 'raised',
+  layerInert: false,
 })
+
+// An inert piece is not editable here, whatever the board's own state.
+const inactive = computed(() => props.disabled || props.layerInert)
 
 const emit = defineEmits<{
   select: [intent: SelectionIntent]
@@ -32,6 +36,17 @@ const dimensions = computed(() =>
     height: 1,
   },
 )
+
+// Group outlines span the constituent rods without changing the train footprint.
+const addendGroups = computed(() => [0, 1].flatMap(group => {
+  const parts = props.parts?.filter(part => part.addendGroup === group) ?? []
+  if (!parts.length) return []
+  const x = Math.min(...parts.map(part => part.offset.x))
+  const y = Math.min(...parts.map(part => part.offset.y))
+  const right = Math.max(...parts.map(part => part.offset.x + arrayRodDimensions(part.value, part.orientation).width))
+  const bottom = Math.max(...parts.map(part => part.offset.y + arrayRodDimensions(part.value, part.orientation).depth))
+  return [{ group, x, y, width: right - x, depth: bottom - y, total: parts.reduce((sum, part) => sum + part.value, 0) }]
+}))
 
 const visualParts = computed(() => {
   if (props.parts) {
@@ -56,17 +71,32 @@ const totalValue = computed(() =>
   visualParts.value.reduce((sum, part) => sum + part.value, 0),
 )
 
-const objectName = computed(() =>
-  visualParts.value.length === 1
+// A unit-divided piece shows its ones but is still one group, so the wrapper
+// carries the whole description and every cell inside it stays decorative.
+const objectName = computed(() => {
+  if (addendGroups.value.length === 2) {
+    return `Train, value ${totalValue.value}, addends ${addendGroups.value.map(group => group.total).join(' + ')}`
+  }
+  const parts = visualParts.value.length
+
+  if (props.presentation === 'flat-units') {
+    return parts === 1
+      ? `Group of ${totalValue.value} unit squares`
+      : `Train, value ${totalValue.value}, ${parts} groups of unit squares`
+  }
+
+  return parts === 1
     ? `${totalValue.value}-rod`
-    : `Train, value ${totalValue.value}, ${visualParts.value.length} parts`,
-)
+    : `Train, value ${totalValue.value}, ${parts} parts`
+})
 
 const accessibleLabel = computed(() =>
   `${objectName.value} at column ${props.x}, row ${props.y}. ` +
-  (props.disabled
-    ? 'Editing unavailable.'
-    : `${props.selected ? 'Selected. ' : ''}Use arrow keys to move.`),
+  (props.layerInert
+    ? 'On the other layer. Switch layer to edit it.'
+    : props.disabled
+      ? 'Editing unavailable.'
+      : `${props.selected ? 'Selected. ' : ''}Use arrow keys to move.`),
 )
 
 const element = ref<HTMLElement | null>(null)
@@ -77,7 +107,7 @@ const drag = useInertialBoardDrag({
   cellSize: () => props.cellSize,
   snapToGrid: () => props.snapToGrid,
   constrainPosition: props.constrainPosition,
-  enabled: () => !props.disabled,
+  enabled: () => !inactive.value,
   onSettled: position => emit('settled', position),
   onStart: () => props.beginMove?.() ?? true,
   onPreview: position => emit('move-preview', position),
@@ -95,7 +125,7 @@ watch(
 )
 
 function onSelectionPointerDown(event: PointerEvent): void {
-  if (props.disabled || event.button !== 0 || !event.isPrimary) return
+  if (inactive.value || event.button !== 0 || !event.isPrimary) return
 
   const toggle = event.shiftKey || event.ctrlKey || event.metaKey
 
@@ -112,7 +142,7 @@ function onSelectionPointerDown(event: PointerEvent): void {
 }
 
 function onSelectionKeydown(event: KeyboardEvent): void {
-  if (props.disabled) return
+  if (inactive.value) return
   if (event.key !== 'Enter' && event.key !== ' ') return
 
   event.preventDefault()
@@ -132,13 +162,14 @@ defineExpose({
   <div
       ref="element"
       class="draggable-rod"
-      :class="{ 'draggable-rod--selected': selected }"
+      :class="{ 'draggable-rod--selected': selected, 'draggable-rod--inert': layerInert }"
       :data-piece-id="id"
       :data-presentation="presentation"
-      :tabindex="disabled ? -1 : 0"
+      :data-layer-inert="layerInert ? 'true' : undefined"
+      :tabindex="inactive ? -1 : 0"
       role="button"
       :aria-roledescription="visualParts.length > 1 ? 'movable train' : 'movable rod'"
-      :aria-disabled="disabled"
+      :aria-disabled="inactive"
       :aria-label="accessibleLabel"
       :style="{
         left: `${x * cellSize}px`,
@@ -153,6 +184,20 @@ defineExpose({
       @keydown.capture="onSelectionKeydown"
   >
     <div class="rod-visual" :class="raisedPiece.visual" :style="raisedPieceStyle">
+      <div
+        v-for="group in addendGroups"
+        :key="`addend-${group.group}`"
+        :data-addend-group="group.group"
+        :data-addend-value="group.total"
+        aria-hidden="true"
+        :style="{
+          position: 'absolute', pointerEvents: 'none', zIndex: 2,
+          transform: `translateZ(${presentation === 'raised' ? cellSize + 1 : 1}px)`,
+          left: `${group.x * cellSize + 2}px`, top: `${group.y * cellSize + 2}px`,
+          width: `${group.width * cellSize - 4}px`, height: `${group.depth * cellSize - 4}px`,
+          border: '2px solid var(--ui-primary)', borderRadius: '4px',
+        }"
+      />
       <div
           v-for="(part, index) in visualParts"
           :key="index"
@@ -199,6 +244,12 @@ defineExpose({
 .draggable-rod[aria-disabled="true"] {
   cursor: default;
   touch-action: auto;
+}
+
+/* Visible and in place, but transparent to input, so a click reaches the layer
+   being edited — or the board — instead of stopping here. */
+.draggable-rod--inert {
+  pointer-events: none;
 }
 
 .train-part {

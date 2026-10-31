@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { createFractionGoalAdapter } from './goals/board-goal-adapters'
 import FractionRodTabla from '~/components/tabla/FractionRodTabla.vue'
 import { getFractionTablaGeometry } from '~/components/tabla/fraction-tabla.geometry'
@@ -15,24 +16,24 @@ import TablaPlaygroundShell from '~/components/playground/TablaPlaygroundShell.v
 import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import { trainView } from '~/components/rod/scene/train-view'
+import { baseRodMenuChoices, deleteMenuChoice } from '~/components/rod/scene/rod-menu-choices'
+import { useTablaWorkspace } from '~/composables/useTablaWorkspace'
+import { playgroundBoardLayout, type RodPlaygroundExposed } from '~/components/playground/playground.types'
 
 const props = withDefaults(defineProps<{
   active?: boolean
+  showAuthoring?: boolean
   cancelVersion?: () => number
 }>(), {
   active: true,
+  showAuthoring: true,
   cancelVersion: undefined,
 })
 
 const pairCount = 2
 const fullColumns = 24
-const horizontalPadding = 32
 
-const boardDefinition = getFractionTablaGeometry(
-  pairCount,
-  36,
-  fullColumns,
-)
+const boardDefinition = getFractionTablaGeometry(pairCount, playgroundBoardLayout.maximumCellSize, fullColumns)
 
 const trackRows = boardDefinition.targets.flatMap(target => [
   target.numeratorRow,
@@ -56,39 +57,21 @@ const {
   cellSize,
   boardPaddingY,
 } = useBoardLayout({
+  ...playgroundBoardLayout,
   boardViewport,
   workspaceTools,
   fullColumns,
-  portraitColumns: 12,
   totalRows: boardDefinition.config.rows,
-  horizontalPadding,
-  maximumCellSize: 36,
-  minimumLandscapeCellSize: 24,
-  bottomGap: 8,
 })
 
-const geometry = computed(() =>
-  getFractionTablaGeometry(
-    pairCount,
-    cellSize.value,
-    visibleColumns.value,
-  ),
-)
-
-const workspaceStyle = computed(() => ({
-  '--grid-top-inset': `${geometry.value.topInset}px`,
-  '--workspace-padding-y': `${boardPaddingY.value}px`,
-}))
-
-const boardWidth = computed(() =>
-  visibleColumns.value * cellSize.value + horizontalPadding,
-)
-
-const boardAriaLabel = computed(() =>
-  phonePortrait.value
-    ? 'Rod board preview, columns zero to twelve'
-    : 'Rod board, columns zero to twenty-four',
-)
+const { workspaceStyle, boardWidth, boardAriaLabel } = useTablaWorkspace({
+  topInset: () => getFractionTablaGeometry(pairCount, cellSize.value, visibleColumns.value).topInset,
+  cellSize,
+  visibleColumns,
+  boardPaddingY,
+  phonePortrait,
+  horizontalPadding: playgroundBoardLayout.horizontalPadding,
+})
 
 const editingDisabled = computed(
   () => !props.active || phonePortrait.value,
@@ -163,24 +146,14 @@ const {
 const goalAdapter = createFractionGoalAdapter({ columns: fullColumns, pairCount })
 const board = { kind: 'fraction', config: { columns: fullColumns, pairCount } } as const
 
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
+
 const menuChoices = computed<SceneMenuChoice[]>(() => [
-  { kind: 'action', label: 'Clone', action: { type: 'clone' } },
-  { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
-  { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
-  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
-  addendMenuChoice.value,
-  { kind: 'action', label: 'Delete', action: { type: 'delete' } },
+  ...baseRodMenuChoices(addendMenuChoice.value),
+  deleteMenuChoice,
 ])
 
-const placedRods = computed(() =>
-  scene.trains.value.map(trainView),
-)
-
-const placementMessage = scene.message
-
-function onRemoveSelectedRod(): void {
-  applySelected({ type: 'delete' })
-}
+const placedRods = computed(() => scene.trains.value.map(trainView))
 
 function onChooseRod(value: CuisenaireRodValue): void {
   if (blocked.value) return
@@ -202,6 +175,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
     :blocked="blocked"
     :compact-layout="compactLayout"
     :editing-disabled="editingDisabled"
+    :message="scene.message.value"
     :phone-portrait="phonePortrait"
     :piece-count="placedRods.length"
     :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
@@ -214,7 +188,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
     @board-lost-pointer-capture="marquee.onLostPointerCapture"
     @board-pointer-down="marquee.onPointerDown"
     @choose-rod="onChooseRod"
-    @remove-selected="onRemoveSelectedRod"
+    @remove-selected="applySelected({ type: 'delete' })"
     @update-tray-open="trayOpen = $event"
   >
     <template #board-controls>
@@ -293,6 +267,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
       </ul>
 
       <RodPlaygroundAuthoring
+        v-if="showAuthoring"
         :board="board"
         :goal-adapter="goalAdapter"
         :scene="scene"
@@ -301,15 +276,6 @@ function onChooseRod(value: CuisenaireRodValue): void {
         :blocked="() => blocked"
         :editing-disabled="() => editingDisabled"
       />
-
-      <p
-        class="placement-message"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {{ placementMessage }}
-      </p>
     </template>
   </TablaPlaygroundShell>
 </template>
@@ -360,16 +326,5 @@ function onChooseRod(value: CuisenaireRodValue): void {
   padding: 0;
   list-style: none;
   color: var(--mt-text);
-}
-
-.placement-message {
-  max-width: 1100px;
-  margin: 8px auto;
-  color: var(--mt-text);
-  overflow-wrap: anywhere;
-}
-
-.placement-message:empty {
-  margin: 0;
 }
 </style>

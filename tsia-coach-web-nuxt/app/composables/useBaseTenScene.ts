@@ -1,6 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import { baseTenCatalog, baseTenDimensions, defaultBaseTenPose, supportedBaseTenPoses, type BaseTenPose, playableDenominations, type BaseTenBlock, type PlayableDenomination } from '~/components/basetenblocks/base10.types'
 import type { Point } from '~/components/grid/gridPointer'
+import { createTurnMemory, edgeShift, settleTurn, shifted, type TurnedPiece } from '~/components/grid/rotation-fit'
 
 export type BaseTenAction =
   | { type: 'create'; denomination: PlayableDenomination }
@@ -8,7 +9,9 @@ export type BaseTenAction =
   | { type: 'set-pose'; pose: BaseTenPose }
   | { type: 'clone' | 'delete' | 'rotate' | 'exchange-up' | 'exchange-down' }
 export type BaseTenResult = { allowed: true } | { allowed: false; reason: string }
-type Candidate = { allowed: true; blocks: BaseTenBlock[] } | { allowed: false; reason: string }
+type Turn = { id: string; inverse: string; shift: Point }
+type Candidate = { allowed: true; blocks: BaseTenBlock[]; turns?: Turn[] } | { allowed: false; reason: string }
+const blockState = (block: BaseTenBlock) => JSON.stringify([block.anchor, block.rotated, block.pose])
 
 export function useBaseTenScene(options: { editable: () => boolean; columns?: number; rows?: number }) {
   const columns = options.columns ?? 120
@@ -16,6 +19,7 @@ export function useBaseTenScene(options: { editable: () => boolean; columns?: nu
   const blocks = ref<BaseTenBlock[]>([])
   const selection = ref<Set<string>>(new Set())
   const message = ref('')
+  const turnMemory = createTurnMemory()
   let nextId = 1
   const total = computed(() => blocks.value.reduce((sum, block) => sum + baseTenCatalog[block.denomination].value, 0))
   const reject = (reason: string): Candidate => ({ allowed: false, reason })
@@ -45,6 +49,27 @@ export function useBaseTenScene(options: { editable: () => boolean; columns?: nu
     }
     return false
   }
+  /**
+   * Turns blocks about their anchors, sliding each back onto the board when
+   * it would hang off an edge. `change` reshapes one block and returns the
+   * request that would undo it.
+   */
+  function turn(current: BaseTenBlock[], turning: BaseTenBlock[], request: string, change: (block: BaseTenBlock) => string): Candidate {
+    const bounds = { x: 0, y: 0, width: columns, depth: rows }
+    const turned: (TurnedPiece & { inverse: string })[] = []
+    for (const block of turning) {
+      const back = turnMemory.returnShift(block.id, blockState(block), request)
+      const inverse = change(block)
+      const edge = edgeShift({ ...block.anchor, ...baseTenDimensions(block) }, bounds)
+      if (!edge) return reject('This block is too large to turn on this board.')
+      turned.push({ id: block.id, edge, back, inverse })
+    }
+    const { result, shifts } = settleTurn(turned, shifts => validate(current.map(block =>
+      shifts.has(block.id) ? { ...block, anchor: shifted(block.anchor, shifts.get(block.id)) } : block)))
+    return result.allowed
+      ? { ...result, turns: turned.map(item => ({ id: item.id, inverse: item.inverse, shift: shifts.get(item.id)! })) }
+      : reject('Not enough room to turn here. Move the block or clear the space first.')
+  }
   function build(ids: readonly string[], action: BaseTenAction): Candidate {
     if (!options.editable()) return reject('Editing is unavailable.')
     const current = blocks.value.map(block => ({ ...block, anchor: { ...block.anchor } }))
@@ -65,13 +90,13 @@ export function useBaseTenScene(options: { editable: () => boolean; columns?: nu
     if (action.type === 'set-pose') {
       if (selected.some(block => block.denomination !== 'hundreds' || !supportedBaseTenPoses(block.denomination).includes(action.pose))) return reject('Only hundreds can switch between flat and upright.')
       if (selected.every(block => block.pose === action.pose)) return reject('The selection already has this pose.')
-      selected.forEach(block => { block.pose = action.pose })
-      return validate(current)
+      return turn(current, selected, action.pose, block => { const before = block.pose; block.pose = action.pose; return before })
     }
     if (action.type === 'rotate') {
-      if (selected.every(block => { const size = baseTenDimensions(block); return size.width === size.depth })) return reject('These blocks have square footprints.')
-      selected.forEach(block => { block.rotated = !block.rotated })
-      return validate(current)
+      // Square blocks look the same turned, so their flag stays put.
+      const oblong = selected.filter(block => { const size = baseTenDimensions(block); return size.width !== size.depth })
+      if (!oblong.length) return reject('These blocks have square footprints.')
+      return turn(current, oblong, 'rotate', block => { block.rotated = !block.rotated; return 'rotate' })
     }
     if (action.type === 'clone') {
       const offsets: Point[] = []
@@ -105,6 +130,11 @@ export function useBaseTenScene(options: { editable: () => boolean; columns?: nu
     const created: string[] = []
     result.blocks.forEach(block => { if (!block.id) { block.id = `base-ten-${nextId++}`; created.push(block.id) } })
     blocks.value = result.blocks
+    turnMemory.keep(result.blocks.map(block => block.id))
+    for (const item of result.turns ?? []) {
+      const block = result.blocks.find(candidate => candidate.id === item.id)
+      if (block) turnMemory.remember(item.id, { ...item, state: blockState(block) })
+    }
     selection.value = new Set(created.length ? created : [...selection.value].filter(id => result.blocks.some(block => block.id === id)))
     message.value = ''
     return { allowed: true }

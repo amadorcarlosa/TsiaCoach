@@ -659,81 +659,32 @@ describe('regroup-addends', () => {
       const anchor = { ...scene.trains.value[0]!.anchor }
       scene.select([id])
 
-      expect(scene.apply([id], {
-        type: 'regroup-addends',
-        pair: [a, b],
-      })).toEqual({ allowed: true, createdIds: [] })
-
-      expect(scene.trains.value).toHaveLength(1)
-
-      const train = scene.trains.value[0]!
-
-      expect(train.id).toBe(id)
-      expect(train.anchor).toEqual(anchor)
-      expect([...scene.selection.value]).toEqual([id])
-
-      expect(train.parts).toEqual([
-        {
-          value: a,
-          orientation: 'horizontal',
-          offset: { x: 0, y: 0 },
-        },
-        {
-          value: b,
-          orientation: 'horizontal',
-          offset: { x: a, y: 0 },
-        },
-      ])
+      const result = scene.apply([id], { type: 'regroup-addends', pair: [a, b] })
+      expect(result.allowed).toBe(true)
+      expect(scene.trains.value).toHaveLength(2)
+      expect(scene.trains.value.map(train => train.parts.map(part => part.value))).toEqual([[a], [b]])
+      expect(scene.trains.value[0]!.anchor).toEqual(anchor)
+      expect(scene.trains.value[1]!.anchor).toEqual({ x: anchor.x + a, y: anchor.y })
+      expect([...scene.selection.value]).toEqual([scene.trains.value[0]!.id])
     },
   )
 
   it('preserves the chosen order for a vertical train', () => {
     const scene = createScene()
-
     const id = createRod(scene, 5)
-    scene.select([id])
-
-    expect(scene.apply([id], {
-      type: 'set-orientation',
-      orientation: 'vertical',
-    }).allowed).toBe(true)
-
+    scene.apply([id], { type: 'set-orientation', orientation: 'vertical' })
     const anchor = { ...scene.trains.value[0]!.anchor }
-
-    expect(scene.apply([id], {
-      type: 'regroup-addends',
-      pair: [2, 3],
-    })).toEqual({ allowed: true, createdIds: [] })
-
-    const train = scene.trains.value[0]!
-
-    expect(train.id).toBe(id)
-    expect(train.anchor).toEqual(anchor)
-    expect(train.parts).toEqual([
-      {
-        value: 2,
-        orientation: 'vertical',
-        offset: { x: 0, y: 0 },
-      },
-      {
-        value: 3,
-        orientation: 'vertical',
-        offset: { x: 0, y: 2 },
-      },
-    ])
+    expect(scene.apply([id], { type: 'regroup-addends', pair: [2, 3] }).allowed).toBe(true)
+    expect(scene.trains.value.map(train => train.parts.map(part => part.value))).toEqual([[2], [3]])
+    expect(scene.trains.value[1]!.anchor).toEqual({ x: anchor.x, y: anchor.y + 2 })
+    expect(scene.trains.value.every(train => train.parts[0]!.orientation === 'vertical')).toBe(true)
   })
 
   it('defaults to the first candidate pair when none is requested', () => {
     const scene = createScene()
-
     const id = createRod(scene, 5)
-    scene.select([id])
-
-    expect(scene.apply([id], {
-      type: 'regroup-addends',
-    })).toEqual({ allowed: true, createdIds: [] })
-
-    expect(scene.trains.value[0]!.parts.map(part => part.value)).toEqual([1, 4])
+    expect(scene.apply([id], { type: 'regroup-addends' }).allowed).toBe(true)
+    expect(scene.trains.value.map(train => train.parts.map(part => part.value))).toEqual([[1], [4]])
   })
 
   it('rejects a requested pair that does not sum to the object\'s value', () => {
@@ -926,11 +877,9 @@ describe('apply results', () => {
       orientation: 'vertical',
     })).toEqual(empty)
     expect(scene.apply([combined], { type: 'regroup-ones' })).toEqual(empty)
-    expect(scene.apply([combined], {
-      type: 'regroup-addends',
-      pair: [3, 5],
-    })).toEqual(empty)
-    expect(scene.apply([combined], { type: 'delete' })).toEqual(empty)
+    const split = scene.apply([combined], { type: 'regroup-addends', pair: [3, 5] })
+    expect(split.allowed && split.createdIds).toHaveLength(2)
+    expect(scene.apply(scene.trains.value.map(train => train.id), { type: 'delete' })).toEqual(empty)
     expect(scene.trains.value).toHaveLength(0)
   })
 
@@ -1013,13 +962,40 @@ describe('set-orientation', () => {
 
     train = scene.trains.value[0]!
 
+    // Turning straight back undoes the edge slide: the train returns to row 4.
     expect(train.id).toBe(id)
-    expect(train.anchor).toEqual({ x: 0, y: 0 })
+    expect(train.anchor).toEqual({ x: 0, y: 4 })
     expect(train.parts.map(part => part.value)).toEqual([10, 2])
     expect(train.parts.map(part => part.offset)).toEqual([
       { x: 0, y: 0 },
       { x: 10, y: 0 },
     ])
+  })
+
+  it('slides a single rod back onto the board, like a train', () => {
+    const scene = useRodScene({
+      columns: 24, rows: 12, spawnRows: [11], editable: () => true, allowOrientation: true,
+    })
+    const id = createRod(scene, 10)
+
+    expect(scene.apply([id], { type: 'set-orientation', orientation: 'vertical' }).allowed).toBe(true)
+    expect(scene.trains.value[0]!.anchor).toEqual({ x: 0, y: 2 })
+
+    // Turning straight back returns it to the bottom row.
+    expect(scene.apply([id], { type: 'set-orientation', orientation: 'horizontal' }).allowed).toBe(true)
+    expect(scene.trains.value[0]!.anchor).toEqual({ x: 0, y: 11 })
+  })
+
+  it('keeps the edge slide once the rod has been moved', () => {
+    const scene = useRodScene({
+      columns: 24, rows: 12, spawnRows: [11], editable: () => true, allowOrientation: true,
+    })
+    const id = createRod(scene, 10)
+    scene.apply([id], { type: 'set-orientation', orientation: 'vertical' })
+    scene.apply([id], { type: 'move', delta: { x: 3, y: 0 } })
+
+    expect(scene.apply([id], { type: 'set-orientation', orientation: 'horizontal' }).allowed).toBe(true)
+    expect(scene.trains.value[0]!.anchor).toEqual({ x: 3, y: 2 })
   })
 
   it('rejects a value-13 train that cannot fit vertically', () => {

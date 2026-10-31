@@ -11,7 +11,8 @@ export type SceneMenuAction = Extract<
             'regroup-ones' |
             'regroup-addends' |
             'regroup-factors' |
-            'regroup-area'
+            'regroup-area' |
+            'set-material-role'
     }
 >
 

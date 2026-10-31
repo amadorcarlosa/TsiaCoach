@@ -1,17 +1,14 @@
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import type { GoalCondition } from './goal.types'
+import { trainFootprints } from '~/components/rod/scene/part-footprint'
 export type CellKey = `${number},${number}`
 export type GoalRegion = { id: string; label: string; x: number; y: number; width: number; depth: number }
 /** Union actual part footprints, clipped to the region, in region-relative cells. */
 export function occupiedCells(scene: SceneSnapshot, region: GoalRegion): Set<CellKey> {
   const cells = new Set<CellKey>()
-  for (const train of scene) for (const part of train.parts) {
-    const left = train.anchor.x + part.offset.x
-    const top = train.anchor.y + part.offset.y
-    const width = part.orientation === 'horizontal' ? part.value : 1
-    const depth = part.orientation === 'vertical' ? part.value : 1
-    for (let y = Math.max(top, region.y); y < Math.min(top + depth, region.y + region.depth); y++) {
-      for (let x = Math.max(left, region.x); x < Math.min(left + width, region.x + region.width); x++) {
+  for (const train of scene) for (const part of trainFootprints(train)) {
+    for (let y = Math.max(part.y, region.y); y < Math.min(part.y + part.depth, region.y + region.depth); y++) {
+      for (let x = Math.max(part.x, region.x); x < Math.min(part.x + part.width, region.x + region.width); x++) {
         cells.add(`${x - region.x},${y - region.y}`)
       }
     }

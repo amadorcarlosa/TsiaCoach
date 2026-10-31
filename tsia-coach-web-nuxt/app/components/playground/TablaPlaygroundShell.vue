@@ -13,6 +13,8 @@ defineProps<{
   blocked: boolean
   compactLayout: boolean
   editingDisabled: boolean
+  /** The scene's latest refusal or notice, announced politely. */
+  message: string
   phonePortrait: boolean
   pieceCount: number
   removeDisabled: boolean
@@ -119,6 +121,15 @@ const emit = defineEmits<{
     <slot name="after-workspace" />
 
     <p
+      class="placement-message"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ message }}
+    </p>
+
+    <p
       v-if="!shortLandscape"
       class="position-status"
       role="status"
@@ -202,6 +213,17 @@ const emit = defineEmits<{
   max-width: 100%;
   margin-inline: auto;
   clip-path: inset(0 16px);
+}
+
+.placement-message {
+  max-width: 1100px;
+  margin: 8px auto;
+  color: var(--mt-text);
+  overflow-wrap: anywhere;
+}
+
+.placement-message:empty {
+  margin: 0;
 }
 
 .preview-notice,

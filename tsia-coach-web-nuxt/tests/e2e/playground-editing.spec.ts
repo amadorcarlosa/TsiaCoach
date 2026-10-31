@@ -468,7 +468,7 @@ test('array can orient a composed train vertically', async ({ playground: p }) =
   })
 })
 
-test('array keeps a composed train whole through rod-like transformations', async ({
+test('array splits a vertical train into independently factorable addends', async ({
   page,
   playground: p,
 }) => {
@@ -484,7 +484,6 @@ test('array keeps a composed train whole through rod-like transformations', asyn
   await menu.getByRole('menuitem', { name: 'Make a train' }).click()
 
   const train = p.panel('Array').locator('[data-piece-id]')
-  const id = await train.getAttribute('data-piece-id')
 
   menu = await p.menu(train.locator('.train-part').first())
   await menu.getByRole('menuitemcheckbox', {
@@ -502,33 +501,17 @@ test('array keeps a composed train whole through rod-like transformations', asyn
     exact: true,
   }).click()
 
-  await expect(train).toHaveAttribute('data-piece-id', id!)
-  await expect(train.locator('.train-part')).toHaveCount(2)
-  await expect(train.locator('.train-part').nth(0))
-    .toHaveAttribute('data-part-value', '2')
-  await expect(train.locator('.train-part').nth(1))
-    .toHaveAttribute('data-part-value', '6')
-  await expect.poll(() => p.geometry(train)).toMatchObject({
-    width: 1,
-    depth: 8,
-  })
-
-  menu = await p.menu(train.locator('.train-part').first())
-  await menu.getByRole('menuitem', {
-    name: 'Regroup to factors',
-    exact: true,
-  }).hover()
-  await page.getByRole('menuitem', {
-    name: '2 rows of 4',
-    exact: true,
-  }).click()
-
-  await expect(train).toHaveAttribute('data-piece-id', id!)
-  await expect(train.locator('.train-part')).toHaveCount(2)
-  await expect.poll(() => p.geometry(train)).toMatchObject({
-    width: 4,
-    depth: 2,
-  })
+  await expect(train).toHaveCount(2)
+  const six = train.nth(1)
+  await expect(train.nth(0).locator('.train-part')).toHaveAttribute('data-part-value', '2')
+  await expect(six.locator('.train-part')).toHaveAttribute('data-part-value', '6')
+  await expect.poll(() => p.geometry(six)).toMatchObject({ width: 1, depth: 6 })
+  menu = await p.menu(six)
+  await menu.getByRole('menuitem', { name: 'Regroup to factors', exact: true }).hover()
+  await page.getByRole('menuitem', { name: '2 rows of 3', exact: true }).click()
+  await expect(six.locator('.train-part')).toHaveCount(2)
+  await expect.poll(() => p.geometry(six)).toMatchObject({ width: 3, depth: 2 })
+  await expect(train.nth(0).locator('.train-part')).toHaveAttribute('data-part-value', '2')
 })
 
 test('array regroups a vertical train into eight ones', async ({
@@ -1333,7 +1316,6 @@ async function decomposeThroughAddendPairs(
     const secondAddend = 5 - firstAddend
 
     const rod = await p.add('Bar', 'five')
-    const id = await rod.getAttribute('data-piece-id')
     const before = await p.geometry(rod)
 
     const menu = method === 'touch'
@@ -1361,29 +1343,18 @@ async function decomposeThroughAddendPairs(
     }
 
     const pieces = p.panel('Bar').locator('[data-piece-id]')
-    await expect(pieces).toHaveCount(1)
-    await expect(rod).toHaveAttribute('data-piece-id', id!)
-    await expect(rod).toHaveClass(/draggable-rod--selected/)
-
-    await expect.poll(() => p.geometry(rod)).toMatchObject({
-      x: before.x,
-      y: before.y,
-      width: before.width,
-      depth: before.depth,
-      height: before.height,
-    })
-
-    const parts = rod.locator('.train-part')
-    await expect(parts).toHaveCount(2)
-    await expect(parts.nth(0)).toHaveAttribute('data-part-value', String(firstAddend))
-    await expect(parts.nth(1)).toHaveAttribute('data-part-value', String(secondAddend))
-
-    await expect.poll(() => p.geometry(parts.nth(0))).toMatchObject({ x: 0, y: 0 })
-    await expect.poll(() => p.geometry(parts.nth(1))).toMatchObject({ x: firstAddend, y: 0 })
-
-    const cleanupMenu = await p.menu(parts.first())
-    await cleanupMenu.getByRole('menuitem', { name: 'Delete' }).click()
-    await expect(pieces).toHaveCount(0)
+    await expect(pieces).toHaveCount(2)
+    await expect(rod).toHaveCount(0)
+    await expect(pieces.first()).toHaveClass(/draggable-rod--selected/)
+    await expect(pieces.first().locator('.train-part')).toHaveAttribute('data-part-value', String(firstAddend))
+    await expect(pieces.last().locator('.train-part')).toHaveAttribute('data-part-value', String(secondAddend))
+    await expect.poll(() => p.geometry(pieces.first())).toMatchObject({ x: before.x, y: before.y, width: firstAddend })
+    await expect.poll(() => p.geometry(pieces.last())).toMatchObject({ x: before.x + firstAddend, y: before.y, width: secondAddend })
+    for (let remaining = 2; remaining > 0; remaining--) {
+      const cleanupMenu = await p.menu(pieces.first())
+      await cleanupMenu.getByRole('menuitem', { name: 'Delete' }).click()
+      await expect(pieces).toHaveCount(remaining - 1)
+    }
   }
 }
 

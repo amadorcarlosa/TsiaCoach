@@ -48,6 +48,33 @@ describe('algebra tile scene', () => {
     expect(new Set(scene.tiles.value.map(tile => tile.id)).size).toBe(2)
   })
 
+  it('slides a tile turned at an edge back onto the board, and back again on the return turn', () => {
+    const { scene, create } = setup(10, 10)
+    const id = create('x')
+    scene.apply([id], { type: 'move', delta: { x: 0, y: 9 } })
+    expect(scene.apply([id], { type: 'rotate' }).allowed).toBe(true)
+    expect(scene.tiles.value[0]!.anchor).toEqual({ x: 0, y: 4 })
+    expect(scene.apply([id], { type: 'rotate' }).allowed).toBe(true)
+    expect(scene.tiles.value[0]!.anchor).toEqual({ x: 0, y: 9 })
+  })
+
+  it('leaves square tiles unflagged when rotating a mixed selection', () => {
+    const { scene, create } = setup(30, 30)
+    const ids = [create('x'), create('one')]
+    expect(scene.apply(ids, { type: 'rotate' }).allowed).toBe(true)
+    expect(scene.tiles.value.map(tile => [tile.term, tile.rotated])).toEqual([['x', true], ['one', false]])
+  })
+
+  it('names a blocked turn as a lack of room', () => {
+    const { scene, create } = setup(10, 10)
+    const id = create('x')
+    const blocker = create('one')
+    expect(scene.apply([blocker], { type: 'move', delta: { x: -6, y: 1 } }).allowed).toBe(true)
+    expect(scene.apply([id], { type: 'rotate' })).toEqual({
+      allowed: false, reason: 'Not enough room to turn here. Move the tile or clear the space first.',
+    })
+  })
+
   it('rotates symbolic rectangles, and rejects collisions and out-of-bounds changes atomically', () => {
     const { scene, create } = setup(8, 8)
     const id = create('x')

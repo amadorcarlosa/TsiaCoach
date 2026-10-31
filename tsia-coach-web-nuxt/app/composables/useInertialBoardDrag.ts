@@ -6,6 +6,7 @@ import {
     watch,
     type Ref,
 } from 'vue'
+import { measureGridFrame } from '~/components/grid/grid-coordinates'
 import type { Draggable } from 'gsap/Draggable'
 import {
     screenDeltaToGrid,
@@ -84,26 +85,10 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
     function measureAxes(): boolean {
         const world = options.el.value?.closest('[data-grid-world]')
 
-        const read = (name: string) =>
-            world
-                ?.querySelector(`[data-grid-axis="${name}"]`)
-                ?.getBoundingClientRect()
-
-        const origin = read('origin')
-        const x = read('x')
-        const y = read('y')
-
-        if (!origin || !x || !y) return false
-
-        axisX = {
-            x: x.left - origin.left,
-            y: x.top - origin.top,
-        }
-
-        axisY = {
-            x: y.left - origin.left,
-            y: y.top - origin.top,
-        }
+        const frame = world ? measureGridFrame(world) : null
+        if (!frame) return false
+        axisX = frame.axisX
+        axisY = frame.axisY
 
         return screenDeltaToGrid(
             { x: 0, y: 0 },

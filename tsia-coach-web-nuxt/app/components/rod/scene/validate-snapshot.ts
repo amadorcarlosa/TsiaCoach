@@ -1,4 +1,4 @@
-import type { RodTrain, ScenePolicy } from './rod.scene.types'
+import { materialRoles, type RodTrain, type ScenePolicy } from './rod.scene.types'
 import { copyScene, type SceneSnapshot } from './scene-snapshot'
 import { validateScene } from './rod-scene.placement'
 export type SnapshotValidation = { allowed: true; trains: RodTrain[] } | { allowed: false; reason: string }
@@ -23,6 +23,22 @@ export function validateSnapshot(source: SceneSnapshot, policy: ScenePolicy): Sn
 
       if (train.parts.length === 0) {
           return reject('Every train needs at least one part.')
+      }
+
+      if (
+          train.materialRole !== undefined &&
+          !materialRoles.includes(train.materialRole)
+      ) {
+          return reject('Unknown material role.')
+      }
+
+      const groups = train.parts.map(part => part.addendGroup)
+      if (groups.some(group => group !== undefined) && (
+          groups.some(group => group !== 0 && group !== 1) ||
+          !groups.includes(0) || !groups.includes(1) ||
+          groups.some((group, index) => index > 0 && group! < groups[index - 1]!)
+      )) {
+          return reject('Addend groups must partition all parts into two ordered groups.')
       }
 
       for (const part of train.parts) {

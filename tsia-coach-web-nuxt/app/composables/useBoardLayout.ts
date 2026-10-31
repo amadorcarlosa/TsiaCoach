@@ -1,4 +1,4 @@
-
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 
 type BoardLayoutOptions = {
   boardViewport: Ref<HTMLElement | null>
@@ -12,6 +12,42 @@ type BoardLayoutOptions = {
   maximumCellSize: number
   minimumLandscapeCellSize: number
   bottomGap: number
+}
+
+/**
+ * The largest cell that fits the measured board. Width always limits it; in a
+ * short landscape (phone on its side) height limits it too, but never below a
+ * usable minimum, so the board scrolls rather than shrinking to nothing.
+ */
+export function boardCellSize(input: {
+  availableWidth: number
+  availableBoardHeight: number
+  visibleColumns: number
+  boardPaddingY: number
+  shortLandscape: boolean
+  totalRows: number
+  horizontalPadding: number
+  maximumCellSize: number
+  minimumLandscapeCellSize: number
+}): number {
+  // Not measured yet (or collapsed): draw at full size rather than at zero.
+  if (input.availableWidth <= input.horizontalPadding) {
+    return input.maximumCellSize
+  }
+
+  const widthFit = (input.availableWidth - input.horizontalPadding) / input.visibleColumns
+
+  // Grid layout height before the visual tilt.
+  const heightFit = (input.availableBoardHeight - input.boardPaddingY * 2) / input.totalRows
+
+  return Math.max(
+    input.shortLandscape ? input.minimumLandscapeCellSize : 1,
+    Math.min(
+      input.maximumCellSize,
+      widthFit,
+      input.shortLandscape ? heightFit : input.maximumCellSize,
+    ),
+  )
 }
 
 export function useBoardLayout(options: BoardLayoutOptions) {
@@ -39,33 +75,17 @@ export function useBoardLayout(options: BoardLayoutOptions) {
       : options.fullColumns,
   )
 
-  const cellSize = computed(() => {
-    if (availableWidth.value <= options.horizontalPadding) {
-      return options.maximumCellSize
-    }
-
-    const widthFit =
-      (availableWidth.value - options.horizontalPadding) /
-      visibleColumns.value
-
-    // Grid layout height before the visual tilt.
-    const heightFit =
-      (availableBoardHeight.value - boardPaddingY.value * 2) /
-      options.totalRows
-
-    return Math.max(
-      shortLandscape.value
-        ? options.minimumLandscapeCellSize
-        : 1,
-      Math.min(
-        options.maximumCellSize,
-        widthFit,
-        shortLandscape.value
-          ? heightFit
-          : options.maximumCellSize,
-      ),
-    )
-  })
+  const cellSize = computed(() => boardCellSize({
+    availableWidth: availableWidth.value,
+    availableBoardHeight: availableBoardHeight.value,
+    visibleColumns: visibleColumns.value,
+    boardPaddingY: boardPaddingY.value,
+    shortLandscape: shortLandscape.value,
+    totalRows: options.totalRows,
+    horizontalPadding: options.horizontalPadding,
+    maximumCellSize: options.maximumCellSize,
+    minimumLandscapeCellSize: options.minimumLandscapeCellSize,
+  }))
 
   function updateLayout(): void {
     const [compact, portrait, short] = layoutQueries

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { createBarGoalAdapter } from './goals/board-goal-adapters'
 import RodTabla from '~/components/tabla/RodTabla.vue'
 import { getTablaGeometry } from '~/components/tabla/tabla.geometry'
@@ -7,12 +8,15 @@ import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
+import { useTablaWorkspace } from '~/composables/useTablaWorkspace'
 import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
 import TablaPlaygroundShell from '~/components/playground/TablaPlaygroundShell.vue'
 import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
+import { baseRodMenuChoices, deleteMenuChoice } from '~/components/rod/scene/rod-menu-choices'
 import { trainView } from '~/components/rod/scene/train-view'
+import { playgroundBoardLayout, type RodPlaygroundExposed } from '~/components/playground/playground.types'
 
 const props = withDefaults(defineProps<{
   active?: boolean
@@ -26,20 +30,9 @@ const props = withDefaults(defineProps<{
 
 const targetCount = 3
 const fullColumns = 24
-const horizontalPadding = 32
+const boardDefinition = getTablaGeometry(targetCount, playgroundBoardLayout.maximumCellSize, fullColumns)
 
-const boardDefinition = getTablaGeometry(
-  targetCount,
-  36,
-  fullColumns,
-)
-
-const {
-  boardViewport,
-  workspaceTools,
-  setBoardViewport,
-  setWorkspaceTools,
-} = usePlaygroundElementRefs()
+const { boardViewport, workspaceTools, setBoardViewport, setWorkspaceTools } = usePlaygroundElementRefs()
 
 const {
   compactLayout,
@@ -50,43 +43,23 @@ const {
   cellSize,
   boardPaddingY,
 } = useBoardLayout({
+  ...playgroundBoardLayout,
   boardViewport,
   workspaceTools,
   fullColumns,
-  portraitColumns: 12,
   totalRows: boardDefinition.config.rows,
-  horizontalPadding,
-  maximumCellSize: 36,
-  minimumLandscapeCellSize: 24,
-  bottomGap: 8,
 })
 
-const geometry = computed(() =>
-  getTablaGeometry(
-    targetCount,
-    cellSize.value,
-    visibleColumns.value,
-  ),
-)
+const { workspaceStyle, boardWidth, boardAriaLabel } = useTablaWorkspace({
+  topInset: () => getTablaGeometry(targetCount, cellSize.value, visibleColumns.value).topInset,
+  cellSize,
+  visibleColumns,
+  boardPaddingY,
+  phonePortrait,
+  horizontalPadding: playgroundBoardLayout.horizontalPadding,
+})
 
-const workspaceStyle = computed(() => ({
-  '--grid-top-inset': `${geometry.value.topInset}px`,
-  '--workspace-padding-y': `${boardPaddingY.value}px`,
-}))
-
-const boardWidth = computed(() =>
-  visibleColumns.value * cellSize.value + horizontalPadding,
-)
-
-const boardAriaLabel = computed(() =>
-  phonePortrait.value
-    ? 'Rod board preview, columns zero to twelve'
-    : 'Rod board, columns zero to twenty-four',
-)
-
-const editingDisabled = computed(
-  () => !props.active || phonePortrait.value,
-)
+const editingDisabled = computed(() => !props.active || phonePortrait.value)
 
 const scene = useRodScene({
   columns: fullColumns,
@@ -106,40 +79,19 @@ const controls = useRodPlaygroundInteraction({
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
 
-const {
-  menu,
-  marquee,
-  blocked,
-  checkSelected,
-  applySelected,
-  addendMenuChoice,
-  captureScene,
-  replaceScene,
-} = controls
+const { menu, marquee, blocked, checkSelected, applySelected, addendMenuChoice, captureScene, replaceScene } = controls
 
 const goalAdapter = createBarGoalAdapter({ columns: fullColumns, targetCount })
 const board = { kind: 'bar', config: { columns: fullColumns, targetCount } } as const
 
-defineExpose({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
-  { kind: 'action', label: 'Clone', action: { type: 'clone' } },
-  { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
-  { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
-  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
-  addendMenuChoice.value,
-  { kind: 'action', label: 'Delete', action: { type: 'delete' } },
+  ...baseRodMenuChoices(addendMenuChoice.value),
+  deleteMenuChoice,
 ])
 
-const placedRods = computed(() =>
-  scene.trains.value.map(trainView),
-)
-
-const placementMessage = scene.message
-
-function onRemoveSelectedRod(): void {
-  applySelected({ type: 'delete' })
-}
+const placedRods = computed(() => scene.trains.value.map(trainView))
 
 function onChooseRod(value: CuisenaireRodValue): void {
   if (blocked.value) return
@@ -157,6 +109,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
     :blocked="blocked"
     :compact-layout="compactLayout"
     :editing-disabled="editingDisabled"
+    :message="scene.message.value"
     :phone-portrait="phonePortrait"
     :piece-count="placedRods.length"
     :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
@@ -169,7 +122,7 @@ function onChooseRod(value: CuisenaireRodValue): void {
     @board-lost-pointer-capture="marquee.onLostPointerCapture"
     @board-pointer-down="marquee.onPointerDown"
     @choose-rod="onChooseRod"
-    @remove-selected="onRemoveSelectedRod"
+    @remove-selected="applySelected({ type: 'delete' })"
     @update-tray-open="trayOpen = $event"
   >
     <template #board>
@@ -214,28 +167,6 @@ function onChooseRod(value: CuisenaireRodValue): void {
         :blocked="() => blocked"
         :editing-disabled="() => editingDisabled"
       />
-
-      <p
-        class="placement-message"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {{ placementMessage }}
-      </p>
     </template>
   </TablaPlaygroundShell>
 </template>
-
-<style scoped>
-.placement-message {
-  max-width: 1100px;
-  margin: 8px auto;
-  color: var(--mt-text);
-  overflow-wrap: anywhere;
-}
-
-.placement-message:empty {
-  margin: 0;
-}
-</style>

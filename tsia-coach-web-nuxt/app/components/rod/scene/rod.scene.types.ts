@@ -4,14 +4,30 @@ import type { CuisenaireRodValue } from '../rod.types'
 
 export type TrainPart = {
   value: CuisenaireRodValue
+  /** Membership in the two addends of a regrouped train. */
+  addendGroup?: 0 | 1
   offset: Point
   orientation: 'horizontal' | 'vertical' | 'tower'
 }
+
+/**
+ * What a piece of central material stands for. 'denominator' is the whole or
+ * its partition; 'numerator' is the quantity selected from it. This is scene
+ * data, not styling: collision, readouts and persistence all read it.
+ */
+export type MaterialRole = 'denominator' | 'numerator'
+
+export const materialRoles = ['denominator', 'numerator'] as const satisfies readonly MaterialRole[]
 
 export type RodTrain = {
   id: string
   anchor: Point
   parts: TrainPart[]
+  /**
+   * Absent on reference-track pieces and on every ordinary scene. A role alone
+   * never authorises overlap: the layered policy must be active as well.
+   */
+  materialRole?: MaterialRole
 }
 
 export type SceneRegion = {
@@ -23,10 +39,7 @@ export type SceneRegion = {
   orientations: readonly TrainPart['orientation'][]
 }
 
-export type AddendPair = readonly [
-  CuisenaireRodValue,
-  CuisenaireRodValue,
-]
+export type AddendPair = readonly [number, number]
 
 export type AddendChoice = {
   pair: AddendPair
@@ -56,7 +69,11 @@ export type SceneAction =
       value: CuisenaireRodValue
       row?: number
       regionId?: string
+      /** Creation intent. Never inferred from the destination afterwards. */
+      materialRole?: MaterialRole
     }
+    // Deliberate role conversion. Moving a piece must never do this silently.
+    | { type: 'set-material-role'; materialRole: MaterialRole }
     | { type: 'move'; delta: Point }
     | { type: 'clone' }
     | { type: 'delete' }
@@ -73,6 +90,30 @@ export type SceneAction =
   orientation: TrainPart['orientation']
 }
 
+export type Rectangle = {
+  x: number
+  y: number
+  width: number
+  depth: number
+}
+
+/**
+ * Fraction-multiplication layering. A board supplies this only while that
+ * activity is active, and every caller reads `enabled()` rather than inferring
+ * the mode from roles, colours, reference values or board identity.
+ */
+export type LayeredRolesPolicy = {
+  enabled: () => boolean
+  /** Only material contained in this region layers; references never do. */
+  regionId: string
+  /**
+   * The whole, derived from the *candidate* scene's D references, so moving a
+   * reference is validated against the numerator rods already placed. Null
+   * when the whole is not defined yet.
+   */
+  wholeOf: (trains: readonly RodTrain[]) => Rectangle | null
+}
+
 export type ScenePolicy = {
   columns: number
   rows: number
@@ -86,6 +127,8 @@ export type ScenePolicy = {
   allowAreaRegroup?: boolean
   /** Every part must be horizontal and share the train's anchor row. */
   requireHorizontalAnchorRow?: boolean
+  /** Absent in every ordinary scene, which keeps the plain no-overlap rule. */
+  layeredRoles?: LayeredRolesPolicy
 }
 
 export type SceneResult =

@@ -27,6 +27,11 @@ type Options = {
   /** Reactive getter; incrementing its source cancels synchronously. */
   cancelVersion: () => number
   onBoardClick?: (point: Point) => void
+  /**
+   * Which pieces the active layer accepts input from. Omitted on every board
+   * without layers, where every piece stays eligible.
+   */
+  eligible?: (id: string) => boolean
 }
 
 export function useRodPlaygroundInteraction(options: Options) {
@@ -45,6 +50,7 @@ export function useRodPlaygroundInteraction(options: Options) {
   const interaction = useSceneInteraction({
     scene,
     blocked: () => baseBlocked.value || marquee.active.value,
+    eligible: options.eligible,
   })
 
   // Keep the same injection key, scoped to this playground.
@@ -64,6 +70,7 @@ export function useRodPlaygroundInteraction(options: Options) {
     disabled: () => baseBlocked.value,
     beforeStart: cancelMovement,
     onBoardClick: point => options.onBoardClick?.(point),
+    eligible: options.eligible,
   })
 
   const blocked = computed(
@@ -131,6 +138,7 @@ export function useRodPlaygroundInteraction(options: Options) {
     selectedIds,
     checkSelected,
     applySelected,
+    cancelGestures,
     captureScene,
     replaceScene,
     addendMenuChoice: useAddendMenuChoice(scene),

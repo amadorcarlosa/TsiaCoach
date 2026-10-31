@@ -2,6 +2,7 @@ import type { DeepReadonly } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import { CuisenaireRodValues, type CuisenaireRodValue } from '~/components/rod/rod.types'
 import type { RodTrain, TrainPart } from '~/components/rod/scene/rod.scene.types'
+import { partFootprint } from '~/components/rod/scene/part-footprint'
 
 /**
  * How a rectangle is partitioned. It never changes the rectangle's size.
@@ -166,11 +167,10 @@ export function tiledRectangle(
       !Number.isInteger(part.offset.y)
     ) return null
 
-    const width = part.orientation === 'horizontal' ? part.value : 1
-    const depth = part.orientation === 'vertical' ? part.value : 1
+    const cellsOfPart = partFootprint(part)
 
-    for (let y = part.offset.y; y < part.offset.y + depth; y++) {
-      for (let x = part.offset.x; x < part.offset.x + width; x++) {
+    for (let y = cellsOfPart.y; y < cellsOfPart.y + cellsOfPart.depth; y++) {
+      for (let x = cellsOfPart.x; x < cellsOfPart.x + cellsOfPart.width; x++) {
         const key = `${x},${y}`
         if (cells.has(key)) return null
         cells.add(key)

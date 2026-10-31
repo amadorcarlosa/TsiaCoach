@@ -1,4 +1,5 @@
 import type { DeepReadonly } from 'vue'
+import type { CuisenaireRodValue } from '../rod.types'
 import { addendPairs } from './addend-groupings'
 import type {
   AddendPair,
@@ -6,6 +7,7 @@ import type {
   TrainPart,
 } from './rod.scene.types'
 import { trainShape } from './train-shape'
+import { partFootprint } from './part-footprint'
 
 type OperationResult<T> =
   | { allowed: true, value: T }
@@ -181,8 +183,8 @@ export function orientTrain(
     (sum, part) => sum + part.value,
     0,
   )
-  const width = orientation === 'horizontal' ? total : 1
-  const depth = orientation === 'vertical' ? total : 1
+  // A straight train covers the same cells as one rod of its total length.
+  const { width, depth } = partFootprint({ value: total, offset: { x: 0, y: 0 }, orientation })
 
   if (width > bounds.columns || depth > bounds.rows) {
     return reject(
@@ -194,7 +196,7 @@ export function orientTrain(
   let cursor = 0
   const parts = train.parts.map((part): TrainPart => {
     const transformed = {
-      value: part.value,
+      ...part,
       orientation,
       offset: orientation === 'horizontal'
         ? { x: cursor, y: 0 }
@@ -205,18 +207,11 @@ export function orientTrain(
     return transformed
   })
 
+  // Turns about the anchor cell. The scene slides the result back inside
+  // its region, so single rods and trains share one edge rule.
   return allow({
     id: train.id,
-    anchor: {
-      x: Math.max(
-        0,
-        Math.min(train.anchor.x, bounds.columns - width),
-      ),
-      y: Math.max(
-        0,
-        Math.min(train.anchor.y, bounds.rows - depth),
-      ),
-    },
+    anchor: { ...train.anchor },
     parts,
   })
 }
@@ -246,7 +241,7 @@ export function regroupTrainToOnes(
 export function regroupTrainToAddends(
   train: DeepReadonly<RodTrain>,
   requested?: AddendPair,
-): OperationResult<RodTrain> {
+): OperationResult<RodTrain[]> {
   const layout = linearLayout(train)
   if (!layout.allowed) return layout
 
@@ -267,21 +262,32 @@ export function regroupTrainToAddends(
   }
 
   let cursor = 0
-  const parts = pair.map((value): TrainPart => {
-    const part: TrainPart = {
-      value,
-      orientation: layout.orientation,
-      offset: {
-        x: layout.start.x + (layout.vertical ? 0 : cursor),
-        y: layout.start.y + (layout.vertical ? cursor : 0),
-      },
+  const addends = pair.map((addend): RodTrain => {
+    const anchor = {
+      x: train.anchor.x + layout.start.x + (layout.vertical ? 0 : cursor),
+      y: train.anchor.y + layout.start.y + (layout.vertical ? cursor : 0),
     }
-
-    cursor += value
-    return part
+    let remaining = addend
+    let offset = 0
+    const parts: TrainPart[] = []
+    while (remaining > 0) {
+      const value = Math.min(10, remaining) as CuisenaireRodValue
+      parts.push({
+        value,
+        orientation: layout.orientation,
+        offset: { x: layout.vertical ? 0 : offset, y: layout.vertical ? offset : 0 },
+      })
+      remaining -= value
+      offset += value
+    }
+    cursor += addend
+    return {
+      id: '', anchor, parts,
+      ...(train.materialRole ? { materialRole: train.materialRole } : {}),
+    }
   })
 
-  return allow(copyTrain(train, parts))
+  return allow(addends)
 }
 
 export function releaseTrain(

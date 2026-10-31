@@ -12,7 +12,7 @@ import type {
     SceneResult,
     TrainPart
 } from '~/components/rod/scene/rod.scene.types'
-import {validateScene} from "~/components/rod/scene/rod-scene.placement.ts";
+import { layeredRoleOf, validateScene } from '~/components/rod/scene/rod-scene.placement'
 import { addendPairs } from '~/components/rod/scene/addend-groupings'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
 import {
@@ -23,7 +23,16 @@ import {
     tiledRectangle,
 } from '~/components/tabla/area-grouping'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
-import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import { trainOrientation } from '~/components/rod/scene/train-orientation'
+import { contains, partFootprint, trainBounds, trainFootprints } from '~/components/rod/scene/part-footprint'
+import {
+    createTurnMemory,
+    edgeShift,
+    settleTurn,
+    shifted,
+    type TurnedPiece,
+} from '~/components/grid/rotation-fit'
 import {
     makeLinearTrain,
     orientTrain,
@@ -33,14 +42,20 @@ import {
 } from '~/components/rod/scene/linear-train-operations'
 
 
+type Turn = { id: string; inverse: string; shift: Point }
+
 type Candidate =
-    | { allowed: true; trains: RodTrain[] }
+    | { allowed: true; trains: RodTrain[]; turns?: Turn[] }
     | { allowed: false; reason: string }
+
+/** Identifies a train's exact placement, for the turn memory. */
+const trainState = (train: RodTrain) => JSON.stringify([train.anchor, train.parts])
 
 export function useRodScene(policy: ScenePolicy) {
     const trains = ref<RodTrain[]>([])
     const selection = ref<Set<string>>(new Set())
     const message = ref('')
+    const turnMemory = createTurnMemory()
     let nextId = 1
 
     function reject(reason: string): Candidate {
@@ -53,6 +68,13 @@ export function useRodScene(policy: ScenePolicy) {
         return result.allowed
             ? { allowed: true, trains: candidate }
             : result
+    }
+
+    const layeredActive = () => policy.layeredRoles?.enabled() === true
+
+    /** The role a train plays now: its layered role, else its stored one. */
+    function effectiveRole(train: RodTrain) {
+        return layeredRoleOf(train, policy) ?? train.materialRole ?? null
     }
 
     function buildReplacement(source: SceneSnapshot): Candidate {
@@ -107,6 +129,15 @@ export function useRodScene(policy: ScenePolicy) {
         }))
 
         if (action.type === 'create') {
+            if (action.materialRole !== undefined && !layeredActive()) {
+                return reject('Material roles are available in fraction multiplication.')
+            }
+
+            // Creation intent travels with the train; it is never inferred later.
+            const role = action.materialRole
+                ? { materialRole: action.materialRole }
+                : {}
+
             if (action.regionId !== undefined) {
                 if (action.row !== undefined) {
                     return reject('Choose a region or a row, not both.')
@@ -121,6 +152,7 @@ export function useRodScene(policy: ScenePolicy) {
                         const train: RodTrain = {
                             id: '', anchor: { x, y },
                             parts: [{ value: action.value, offset: { x: 0, y: 0 }, orientation }],
+                            ...role,
                         }
                         if (!trainFitsRegion(train, region)) continue
                         const result = validate([...current, train])
@@ -159,6 +191,7 @@ export function useRodScene(policy: ScenePolicy) {
                                 offset: { x: 0, y: 0 },
                                 orientation: 'horizontal',
                             }],
+                            ...role,
                         },
                     ])
 
@@ -199,6 +232,8 @@ export function useRodScene(policy: ScenePolicy) {
                     return reject('This scene does not allow orientation changes.')
                 }
 
+                const turned: (TurnedPiece & { inverse: string })[] = []
+
                 for (const train of selected) {
                     const transformed = orientTrain(
                         train,
@@ -207,15 +242,39 @@ export function useRodScene(policy: ScenePolicy) {
                     )
                     if (!transformed.allowed) return transformed
 
+                    // Slide back inside the region the train started in, or
+                    // the board when the scene has no regions.
+                    const region = policy.regions && regionAt(policy.regions, train.anchor)
+                    const bounds = region ?? { x: 0, y: 0, width: policy.columns, depth: policy.rows }
+                    const edge = edgeShift(trainBounds(transformed.value), bounds)
+                    if (!edge) return reject('Cannot change orientation. The train does not fit in its area.')
+
+                    turned.push({
+                        id: train.id,
+                        edge,
+                        back: turnMemory.returnShift(train.id, trainState(train), action.orientation),
+                        inverse: trainOrientation(train) ?? '',
+                    })
                     train.anchor = transformed.value.anchor
                     train.parts = transformed.value.parts
                 }
 
                 // Validate all transformed destinations together.
-                const result = validate(current)
+                const { result, shifts } = settleTurn(turned, shifts => validate(
+                    current.map(train => shifts.has(train.id)
+                        ? { ...train, anchor: shifted(train.anchor, shifts.get(train.id)) }
+                        : train),
+                ))
 
                 return result.allowed
-                    ? result
+                    ? {
+                        ...result,
+                        turns: turned.map(turn => ({
+                            id: turn.id,
+                            inverse: turn.inverse,
+                            shift: shifts.get(turn.id)!,
+                        })),
+                    }
                     : reject(`Cannot change orientation. ${result.reason}`)
             }
 
@@ -258,9 +317,33 @@ export function useRodScene(policy: ScenePolicy) {
                 return reject('No room to clone the selection.')
             }
 
+            case 'set-material-role': {
+                if (!layeredActive()) {
+                    return reject('Material roles are available in fraction multiplication.')
+                }
+
+                // The only way a role changes; moving a piece never does this.
+                for (const train of selected) {
+                    train.materialRole = action.materialRole
+                }
+
+                return validate(current)
+            }
+
             case 'make-train': {
+                if (new Set(selected.map(effectiveRole)).size > 1) {
+                    return reject(
+                        'Select material of one kind: denominator tiles and numerator rods cannot join one train.',
+                    )
+                }
+
                 const combined = makeLinearTrain(selected)
                 if (!combined.allowed) return combined
+
+                const storedRole = selected[0]!.materialRole
+                if (storedRole && selected.every(train => train.materialRole === storedRole)) {
+                    combined.value.materialRole = storedRole
+                }
 
                 return validate([
                     ...current.filter(train => !selectedIds.has(train.id)),
@@ -279,17 +362,16 @@ export function useRodScene(policy: ScenePolicy) {
             }
 
             case 'regroup-addends': {
+                const addends: RodTrain[] = []
                 for (const train of selected) {
-                    const regrouped = regroupTrainToAddends(
-                        train,
-                        action.pair,
-                    )
+                    const regrouped = regroupTrainToAddends(train, action.pair)
                     if (!regrouped.allowed) return regrouped
-
-                    train.parts = regrouped.value.parts
+                    addends.push(...regrouped.value)
                 }
-
-                return validate(current)
+                return validate([
+                    ...current.filter(train => !selectedIds.has(train.id)),
+                    ...addends,
+                ])
             }
 
             case 'regroup-factors': {
@@ -409,7 +491,11 @@ export function useRodScene(policy: ScenePolicy) {
                 for (const train of selected) {
                     const result = releaseTrain(train)
                     if (!result.allowed) return result
-                    released.push(...result.value)
+                    released.push(...result.value.map(piece =>
+                        train.materialRole
+                            ? { ...piece, materialRole: train.materialRole }
+                            : piece,
+                    ))
                 }
 
                 return validate([
@@ -470,7 +556,9 @@ export function useRodScene(policy: ScenePolicy) {
             action.type === 'make-train' ||
             action.type === 'ungroup'
 
-        const nextSelection = selectsCreatedTrains
+        const nextSelection = action.type === 'regroup-addends'
+            ? new Set(createdIds.slice(0, 1))
+            : selectsCreatedTrains
             ? new Set(createdIds)
             : new Set(
                 [...selection.value].filter(id => existingIds.has(id)),
@@ -478,6 +566,12 @@ export function useRodScene(policy: ScenePolicy) {
 
         trains.value = committed
         selection.value = nextSelection
+
+        turnMemory.keep(existingIds)
+        for (const turn of result.turns ?? []) {
+            const train = committed.find(item => item.id === turn.id)
+            if (train) turnMemory.remember(turn.id, { ...turn, state: trainState(train) })
+        }
 
         message.value = ''
         return { allowed: true, createdIds }
@@ -549,12 +643,7 @@ export function useRodScene(policy: ScenePolicy) {
 
     function constrainMove(ids: readonly string[], delta: Point, direction?: Point): Point {
         const parts = trains.value.filter(train => ids.includes(train.id))
-            .flatMap(train => train.parts.map(part => ({
-                x: train.anchor.x + part.offset.x,
-                y: train.anchor.y + part.offset.y,
-                width: part.orientation === 'horizontal' ? part.value : 1,
-                depth: part.orientation === 'vertical' ? part.value : 1,
-            })))
+            .flatMap(trainFootprints)
         if (!parts.length) return { x: 0, y: 0 }
         const minX = -Math.min(...parts.map(part => part.x))
         const maxX = policy.columns - Math.max(...parts.map(part => part.x + part.width))
@@ -568,16 +657,40 @@ export function useRodScene(policy: ScenePolicy) {
             let bestDistance = Number.POSITIVE_INFINITY
             let bestTravel = Number.POSITIVE_INFINITY
 
+            // Mirror the layered rules so a preview never offers a destination
+            // that settling would refuse.
+            const layered = layeredActive() ? policy.layeredRoles! : null
+            const layeredRegion = layered
+                ? policy.regions.find(region => region.id === layered.regionId)
+                : undefined
+            const movesNumerator = layered !== null &&
+                selected.some(train => layeredRoleOf(train, policy) === 'numerator')
+
             for (let y = Math.ceil(minY); y <= Math.floor(maxY); y++) {
                 for (let x = Math.ceil(minX); x <= Math.floor(maxX); x++) {
-                    const fits = selected.every(train => {
-                        const proposed = {
-                            ...train,
-                            anchor: { x: train.anchor.x + x, y: train.anchor.y + y },
-                        }
-                        return policy.regions!.some(region => trainFitsRegion(proposed, region))
-                    })
+                    const moved = selected.map(train => ({
+                        ...train,
+                        anchor: { x: train.anchor.x + x, y: train.anchor.y + y },
+                    }))
+                    const fits = moved.every(proposed =>
+                        policy.regions!.some(region => trainFitsRegion(proposed, region)) &&
+                        (!layeredRegion || proposed.materialRole === undefined ||
+                            trainFitsRegion(proposed, layeredRegion)),
+                    )
                     if (!fits) continue
+
+                    if (movesNumerator) {
+                        const candidate = trains.value.map(train =>
+                            moved.find(item => item.id === train.id) ?? train,
+                        )
+                        const whole = layered!.wholeOf(candidate)
+                        const inside = whole !== null && moved
+                            .filter(train => layeredRoleOf(train, policy) === 'numerator')
+                            .every(train => train.parts.every(part =>
+                                contains(whole, partFootprint(part, train.anchor)),
+                            ))
+                        if (!inside) continue
+                    }
                     const distance = (x - delta.x) ** 2 + (y - delta.y) ** 2
                     const travel = x * x + y * y
                     if (distance < bestDistance || (distance === bestDistance && travel < bestTravel)) {

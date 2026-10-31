@@ -7,6 +7,7 @@ import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { authoringGoalSchema } from './goal.schema'
 import type { BoardGoalAdapter, GoalCondition, GoalTarget } from './goal.types'
 import { occupiedCells, matchesRectangle, matchesExactFraction, type GoalRegion } from './goal-occupancy'
+import { contains, partFootprint } from '~/components/rod/scene/part-footprint'
 
 type Pair = GoalTarget & { numeratorCapacity: number; denominatorCapacity: number; read: (scene: SceneSnapshot) => { numerator: number; denominator: number } }
 const regionTypes = ['empty-region', 'region-total', 'occupied-area', 'filled-rectangle'] as const
@@ -57,11 +58,7 @@ function createAdapter(regions: GoalRegion[], pairs: Pair[] = []): BoardGoalAdap
             case 'region-total': {
               let total = 0
               for (const train of scene) for (const part of train.parts) {
-                const x = train.anchor.x + part.offset.x
-                const y = train.anchor.y + part.offset.y
-                const width = part.orientation === 'horizontal' ? part.value : 1
-                const depth = part.orientation === 'vertical' ? part.value : 1
-                if (x >= region.x && y >= region.y && x + width <= region.x + region.width && y + depth <= region.y + region.depth) total += part.value
+                if (contains(region, partFootprint(part, train.anchor))) total += part.value
               }
               satisfied = total === condition.value
             }

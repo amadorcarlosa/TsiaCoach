@@ -10,10 +10,12 @@ export type RodAppearance = {
 
 /**
  * How a piece sits on the board. 'raised' extrudes it above the surface;
- * 'flat' keeps it on the board plane with no sides and no height offset.
+ * 'flat' keeps it on the board plane with no sides and no height offset;
+ * 'flat-units' is flat and additionally divides the footprint into its
+ * constituent ones, so a four reads as four unit squares in one group.
  * This is presentation only: values, footprints and dimensions are unchanged.
  */
-export type RodPresentation = 'raised' | 'flat'
+export type RodPresentation = 'raised' | 'flat' | 'flat-units'
 
 export type RodProps = {
     dimensions: UnitDimensions
@@ -38,6 +40,12 @@ export type DragProps = {
     constrainPosition?: (position: Point, direction?: Point) => Point
     previewDelta?: Point
     presentation?: RodPresentation
+    /**
+     * On a layered board, this piece is not on the layer being edited. It stays
+     * visible and keeps its place in the scene, but takes no pointer, focus or
+     * marquee input, so the active layer is reachable through it.
+     */
+    layerInert?: boolean
 }
 
 export const CuisenaireRodNumbers = {

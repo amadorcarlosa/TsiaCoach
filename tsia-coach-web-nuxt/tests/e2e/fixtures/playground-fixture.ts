@@ -77,10 +77,15 @@ export class Playground {
       await panel.getByRole('button', { name: /show rods/i }).click()
     }
     const pieces = panel.locator('[data-piece-id]')
-    const count = await pieces.count()
+    const ids = () => pieces.evaluateAll(elements =>
+      elements.map(el => (el as HTMLElement).dataset.pieceId!))
+    // Identify the new piece by diffing IDs: a board may paint its layers in
+    // an order of its own, so the newest piece is not always the last node.
+    const before = new Set(await ids())
     await choice.click()
-    await expect(pieces).toHaveCount(count + 1)
-    const id = await pieces.last().getAttribute('data-piece-id')
+    await expect(pieces).toHaveCount(before.size + 1)
+    const id = (await ids()).find(value => !before.has(value))
+    if (!id) throw new Error('No new piece appeared')
     return panel.locator(`[data-piece-id="${id}"]`)
   }
 
@@ -175,7 +180,8 @@ export class Playground {
       const o = rect('origin'), x = rect('x'), y = rect('y')
       return { xx: x.x - o.x, xy: x.y - o.y, yx: y.x - o.x, yy: y.y - o.y }
     })
-    const face = await rod.locator('[data-rod-surface]').boundingBox()
+    // A train has one surface per part; any of them drags the whole piece.
+    const face = await rod.locator('[data-rod-surface]').first().boundingBox()
     if (!face) throw new Error('Missing rod face')
     const x = face.x + face.width / 2, y = face.y + face.height / 2
     await this.page.mouse.move(x, y)

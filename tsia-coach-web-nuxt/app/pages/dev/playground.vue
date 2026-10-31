@@ -1,4 +1,4 @@
-how<script setup lang="ts">
+<script setup lang="ts">
 import { ref, watch } from 'vue'
 
 import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
@@ -15,7 +15,7 @@ const tabs = playgroundTabs.map(({ id, label }) => ({
   slot: id,
 }))
 
-const activeTab = ref<PlaygroundId>('barModelPlayground')
+const activeTab = ref<PlaygroundId>(playgroundTabs[0].id)
 const cancellationVersion = ref(0)
 const readCancelVersion = () => cancellationVersion.value
 

@@ -30,7 +30,7 @@ test('large towers preserve the camera and fit their exposed tops', async ({ pag
   await board.getByRole('button', { name: 'Exchange down', exact: true }).click()
   await expect(board.locator('[data-denomination="tenThousands"][data-pose="tower"]')).toHaveCount(10)
   await board.getByRole('button', { name: 'Exchange up', exact: true }).click()
-  await expect(board.getByTestId('base-ten-summary')).toHaveText('1 objects · Total value 100,000')
+  await expect(board.getByTestId('base-ten-summary')).toHaveText('1 object · Total value 100,000')
 })
 
 test('hundred stands upright and drags from its elevated top face', async ({ page }) => {

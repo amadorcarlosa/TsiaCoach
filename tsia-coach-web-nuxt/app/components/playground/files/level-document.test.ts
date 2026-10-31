@@ -108,3 +108,89 @@ describe('complete document validation', () => {
     expect(validateSnapshot([train], { ...policy, regions: getMathTablaGeometry().regions }).allowed).toBe(false)
   })
 })
+
+describe('material roles and the fraction-multiplication activity', () => {
+  const geometry = getMathTablaGeometry(24, 12)
+
+  /** A MathTabla adapter for one activity, including its collision rules. */
+  function mathTablaAdapter(activity?: 'fraction-multiplication'): LevelDocumentAdapter {
+    return {
+      board: { kind: 'mathtabla', config: { centralColumns: 24, centralRows: 12, ...(activity ? { activity } : {}) } },
+      goals: createMathTablaGoalAdapter({ centralColumns: 24, centralRows: 12 }),
+      validateSnapshot: scene => validateSnapshot(scene, {
+        columns: geometry.config.columns, rows: geometry.config.rows,
+        spawnRows: [2], regions: geometry.regions, allowOrientation: true, editable: () => false,
+        layeredRoles: {
+          enabled: () => activity === 'fraction-multiplication',
+          regionId: 'array',
+          wholeOf: () => ({ x: 2, y: 2, width: 4, depth: 6 }),
+        },
+      }),
+    }
+  }
+
+  /** The acceptance arrangement: a numerator rod over a denominator tile. */
+  function layeredDocument(activity?: 'fraction-multiplication') {
+    return {
+      version: 1 as const,
+      board: { kind: 'mathtabla' as const, config: { centralColumns: 24, centralRows: 12, ...(activity ? { activity } : {}) } },
+      steps: [{
+        id: 'step-1', title: 'Stacked', prompt: '', goal: null,
+        trains: [
+          { id: 'h-d', anchor: { x: 2, y: 0 }, parts: [{ value: 4 as const, offset: { x: 0, y: 0 }, orientation: 'horizontal' as const }] },
+          { id: 'v-d', anchor: { x: 0, y: 2 }, parts: [{ value: 6 as const, offset: { x: 0, y: 0 }, orientation: 'vertical' as const }] },
+          { id: 'tile', anchor: { x: 2, y: 2 }, materialRole: 'denominator' as const, parts: [{ value: 4 as const, offset: { x: 0, y: 0 }, orientation: 'horizontal' as const }] },
+          { id: 'rod', anchor: { x: 2, y: 2 }, materialRole: 'numerator' as const, parts: [{ value: 4 as const, offset: { x: 0, y: 0 }, orientation: 'horizontal' as const }] },
+        ],
+      }],
+    }
+  }
+
+  it('accepts the role field and rejects values outside the two roles', () => {
+    const train = documentFixture().steps[0]!.trains[0]!
+
+    expect(trainSchema.safeParse({ ...train, materialRole: 'denominator' }).success).toBe(true)
+    expect(trainSchema.safeParse({ ...train, materialRole: 'numerator' }).success).toBe(true)
+    // Optional, so every level written before roles existed still parses.
+    expect(trainSchema.safeParse(train).success).toBe(true)
+    expect(trainSchema.parse(train).materialRole).toBeUndefined()
+
+    for (const role of ['whole', '', null, 1]) {
+      expect(trainSchema.safeParse({ ...train, materialRole: role }).success).toBe(false)
+    }
+  })
+
+  it('treats the activity as optional on the board and part of its identity', () => {
+    const descriptor = { kind: 'mathtabla', config: { centralColumns: 24, centralRows: 12 } }
+
+    expect(boardDescriptorSchema.safeParse(descriptor).success).toBe(true)
+    expect(boardDescriptorSchema.safeParse({ ...descriptor, config: { ...descriptor.config, activity: 'fraction-multiplication' } }).success).toBe(true)
+    expect(boardDescriptorSchema.safeParse({ ...descriptor, config: { ...descriptor.config, activity: 'area' } }).success).toBe(false)
+  })
+
+  it('validates a layered document under the activity that authored it', () => {
+    const result = validateLevelDocument(layeredDocument('fraction-multiplication'), mathTablaAdapter('fraction-multiplication'))
+
+    expect(result.allowed).toBe(true)
+    expect(result.allowed && result.value.steps[0]!.trains.map(train => train.materialRole))
+      .toEqual([undefined, undefined, 'denominator', 'numerator'])
+  })
+
+  it('refuses to load a fraction-multiplication level into the area activity', () => {
+    const result = validateLevelDocument(layeredDocument('fraction-multiplication'), mathTablaAdapter())
+
+    expect(result.allowed).toBe(false)
+    expect(result.allowed === false && result.reason)
+      .toContain('authored for the fraction-multiplication activity')
+  })
+
+  it('applies ordinary collision rules to roles carried without that activity', () => {
+    // Same stacked trains, but the document claims the area activity: the
+    // roles grant nothing and the overlap is rejected as it always was.
+    const result = validateLevelDocument(layeredDocument(), mathTablaAdapter())
+
+    expect(result.allowed).toBe(false)
+    expect(result.allowed === false && result.reason)
+      .toContain('That arrangement overlaps another part.')
+  })
+})

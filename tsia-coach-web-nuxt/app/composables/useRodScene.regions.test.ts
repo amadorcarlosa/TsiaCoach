@@ -68,6 +68,15 @@ describe('region placement and previews', () => {
     expect(scene.check(['interior'], { type: 'set-orientation', orientation: 'vertical' }).allowed).toBe(true)
   })
 
+  it('slides a turned rod back inside its own region rather than the whole board', () => {
+    const scene = useRodScene(policy)
+    const bottom = board.array.y + board.array.depth - 1
+    expect(scene.replace([rod('low', board.array.x + 1, bottom)]).allowed).toBe(true)
+    expect(scene.apply(['low'], { type: 'set-orientation', orientation: 'vertical' }).allowed).toBe(true)
+    expect(scene.trains.value[0]!.anchor).toEqual({ x: board.array.x + 1, y: bottom - 2 })
+    expect(trainFitsRegion(scene.trains.value[0]!, board.array)).toBe(true)
+  })
+
   it('constrains the whole selection to one nearest displacement and keeps collisions atomic', () => {
     const scene = useRodScene(policy)
     const initial = [rod('h', 2, 0), rod('v', 0, 2, 'vertical'), rod('obstacle', 3, 3)]

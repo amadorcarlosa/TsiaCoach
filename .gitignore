@@ -33,3 +33,6 @@
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Screenshots and other images
+*.png

@@ -17,6 +17,9 @@ describe('MathTabla reference readouts and occupied area', () => {
     expect(beside).toEqual({
       horizontal: { numerator: 3, denominator: 4 }, vertical: { numerator: 2, denominator: 3 },
       state: 'ready', guide: { x: 2, y: 2, width: 4, depth: 3 }, guideCells: 12, occupiedCells: 4,
+      // Without the fraction activity nothing carries a role, so neither
+      // layered count applies and occupiedCells remains the only coverage.
+      numeratorCells: 0, denominatorCells: 0,
     })
     second.anchor = { x: 2, y: 3 }
     const rectangle = getMathTablaReadouts([...references, first, second], geometry)

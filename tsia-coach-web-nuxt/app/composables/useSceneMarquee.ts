@@ -6,10 +6,8 @@ import {
   watch,
   type Ref,
 } from 'vue'
-import {
-  screenDeltaToGrid,
-  type Point,
-} from '~/components/grid/gridPointer'
+import type { Point } from '~/components/grid/gridPointer'
+import { clientPointToGrid, measureGridFrame } from '~/components/grid/grid-coordinates'
 import {
   marqueeHits,
   marqueeRect,
@@ -25,6 +23,8 @@ type Options = {
   disabled: () => boolean
   beforeStart: () => void
   onBoardClick?: (point: Point) => void
+  /** False for pieces on a layer that is not being edited. */
+  eligible?: (id: string) => boolean
 }
 
 type Session = {
@@ -42,31 +42,8 @@ function boardPoint(
   world: HTMLElement,
   event: PointerEvent,
 ): Point | null {
-  const marker = (name: string) =>
-    world.querySelector<HTMLElement>(
-      `[data-grid-axis="${name}"]`,
-    )?.getBoundingClientRect()
-
-  const origin = marker('origin')
-  const x = marker('x')
-  const y = marker('y')
-
-  if (!origin || !x || !y) return null
-
-  return screenDeltaToGrid(
-    {
-      x: event.clientX - origin.left,
-      y: event.clientY - origin.top,
-    },
-    {
-      x: x.left - origin.left,
-      y: x.top - origin.top,
-    },
-    {
-      x: y.left - origin.left,
-      y: y.top - origin.top,
-    },
-  )
+  const frame = measureGridFrame(world)
+  return frame ? clientPointToGrid({ x: event.clientX, y: event.clientY }, frame) : null
 }
 
 function clampToBoard(world: HTMLElement, point: Point): Point {
@@ -211,7 +188,12 @@ export function useSceneMarquee(options: Options) {
 
     previewIds.value = marqueeSelection(
       current.initial,
-      marqueeHits(options.scene.trains.value, rectangle.value),
+      marqueeHits(
+        options.eligible
+          ? options.scene.trains.value.filter(train => options.eligible!(train.id))
+          : options.scene.trains.value,
+        rectangle.value,
+      ),
       current.mode,
     )
 

@@ -1,13 +1,16 @@
 import { computed, readonly, ref } from 'vue'
 import { algebraTileDefinition, algebraTileDimensions, algebraTileTerms, algebraTileLabels, type AlgebraTile, type AlgebraTileTerm, type AlgebraTileSign } from '~/components/algebratiles/algebra-tile.types'
 import type { Point } from '~/components/grid/gridPointer'
+import { createTurnMemory, edgeShift, settleTurn, shifted, type TurnedPiece } from '~/components/grid/rotation-fit'
 
 export type AlgebraTileAction =
   | { type: 'create'; term: AlgebraTileTerm; sign: AlgebraTileSign }
   | { type: 'move'; delta: Point }
   | { type: 'clone' | 'delete' | 'rotate' | 'flip-sign' | 'remove-zero-pairs' }
 export type AlgebraTileResult = { allowed: true } | { allowed: false; reason: string }
-type Candidate = { allowed: true; tiles: AlgebraTile[] } | { allowed: false; reason: string }
+type Turn = { id: string; inverse: string; shift: Point }
+type Candidate = { allowed: true; tiles: AlgebraTile[]; turns?: Turn[] } | { allowed: false; reason: string }
+const tileState = (tile: AlgebraTile) => JSON.stringify([tile.anchor, tile.rotated])
 
 export function useAlgebraTileScene(options: { editable: () => boolean; columns?: number; rows?: number }) {
   const columns = options.columns ?? 120
@@ -15,6 +18,7 @@ export function useAlgebraTileScene(options: { editable: () => boolean; columns?
   const tiles = ref<AlgebraTile[]>([])
   const selection = ref<Set<string>>(new Set())
   const message = ref('')
+  const turnMemory = createTurnMemory()
   let nextId = 1
   const coefficients = computed(() => Object.fromEntries(algebraTileTerms.map(term => [term, tiles.value.filter(tile => tile.term === term).reduce((sum, tile) => sum + algebraTileDefinition(tile.term, tile.sign).coefficient, 0)])) as Record<AlgebraTileTerm, number>)
   const expression = computed(() => {
@@ -89,9 +93,24 @@ export function useAlgebraTileScene(options: { editable: () => boolean; columns?
         : reject('Select a positive and a negative tile of the same term.')
     }
     if (action.type === 'rotate') {
-      if (selected.every(tile => { const size = algebraTileDimensions(tile); return size.width === size.depth })) return reject('These tiles have square footprints.')
-      selected.forEach(tile => { tile.rotated = !tile.rotated })
-      return validate(current)
+      // Square tiles look the same turned, so their flag stays put.
+      const oblong = selected.filter(tile => { const size = algebraTileDimensions(tile); return size.width !== size.depth })
+      if (!oblong.length) return reject('These tiles have square footprints.')
+      // Turn about each anchor, sliding back onto the board at an edge.
+      const bounds = { x: 0, y: 0, width: columns, depth: rows }
+      const turned: TurnedPiece[] = []
+      for (const tile of oblong) {
+        const back = turnMemory.returnShift(tile.id, tileState(tile), 'rotate')
+        tile.rotated = !tile.rotated
+        const edge = edgeShift({ ...tile.anchor, ...algebraTileDimensions(tile) }, bounds)
+        if (!edge) return reject('This tile is too large to turn on this board.')
+        turned.push({ id: tile.id, edge, back })
+      }
+      const { result, shifts } = settleTurn(turned, shifts => validate(current.map(tile =>
+        shifts.has(tile.id) ? { ...tile, anchor: shifted(tile.anchor, shifts.get(tile.id)) } : tile)))
+      return result.allowed
+        ? { ...result, turns: turned.map(item => ({ id: item.id, inverse: 'rotate', shift: shifts.get(item.id)! })) }
+        : reject('Not enough room to turn here. Move the tile or clear the space first.')
     }
     if (action.type === 'clone') {
       const offsets: Point[] = []
@@ -116,6 +135,11 @@ export function useAlgebraTileScene(options: { editable: () => boolean; columns?
     const created: string[] = []
     result.tiles.forEach(tile => { if (!tile.id) { tile.id = `algebra-tile-${nextId++}`; created.push(tile.id) } })
     tiles.value = result.tiles
+    turnMemory.keep(result.tiles.map(tile => tile.id))
+    for (const item of result.turns ?? []) {
+      const tile = result.tiles.find(candidate => candidate.id === item.id)
+      if (tile) turnMemory.remember(item.id, { ...item, state: tileState(tile) })
+    }
     selection.value = new Set(created.length ? created : [...selection.value].filter(id => result.tiles.some(tile => tile.id === id)))
     message.value = ''
     return { allowed: true }

@@ -6,14 +6,19 @@ import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
 import PlaygroundActionButton from '~/components/playground/PlaygroundActionButton.vue'
 import ArrayPlaygroundShell from '~/components/playground/ArrayPlaygroundShell.vue'
-import type { CuisenaireRodValue } from '~/components/rod/rod.types'
+import type { CuisenaireRodValue, RodPresentation } from '~/components/rod/rod.types'
+import type { MaterialRole, ScenePolicy } from '~/components/rod/scene/rod.scene.types'
+import { layeredRoleOf } from '~/components/rod/scene/rod-scene.placement'
+import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
+import type { BoardDescriptor } from '~/components/playground/files/level-document'
 import type { ArrayRodOrientation } from '~/components/rod/array/array-rod.types'
 import { getMathTablaGeometry } from '~/components/tabla/mathtabla.geometry'
 import { getMathTablaReadouts } from '~/components/tabla/mathtabla.readouts'
 import { areaGroupReadings, type AreaGrouping } from '~/components/tabla/area-grouping'
 import type { Point } from '~/components/grid/gridPointer'
 import { trainView } from '~/components/rod/scene/train-view'
-import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import { trainFootprints } from '~/components/rod/scene/part-footprint'
 
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
@@ -24,6 +29,8 @@ import { useAreaGroupingMenuChoice } from '~/composables/useAreaGroupingMenuChoi
 import { useBoardLayout } from '~/composables/useBoardLayout'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
 import RodPlaygroundAuthoring from '~/components/playground/RodPlaygroundAuthoring.vue'
+import { baseRodMenuChoices, deleteMenuChoice, orientationMenuChoices } from '~/components/rod/scene/rod-menu-choices'
+import { playgroundBoardLayout, type RodPlaygroundExposed } from '~/components/playground/playground.types'
 
 const props = withDefaults(defineProps<{
   active?: boolean
@@ -63,22 +70,39 @@ const {
   visibleColumns,
   cellSize,
 } = useBoardLayout({
+  ...playgroundBoardLayout,
+  // Two reference columns plus the first 12 central columns.
+  portraitColumns: 14,
   boardViewport,
   workspaceTools,
   fullColumns,
-  portraitColumns: 14,
   totalRows: boardRows,
-  horizontalPadding: 32,
-  maximumCellSize: 36,
-  minimumLandscapeCellSize: 24,
-  bottomGap: 8,
 })
 
 const editingDisabled = computed(
   () => !props.active || phonePortrait.value,
 )
 
-const scene = useRodScene({
+// 'area' is the ordinary activity. Fraction multiplication layers numerator
+// rods over denominator tiles inside the whole; the board reads this flag
+// rather than inferring the mode from roles, colours or values.
+type Activity = 'area' | 'fraction-multiplication'
+const activity = ref<Activity>('area')
+const layered = computed(() => activity.value === 'fraction-multiplication')
+// Rods are what a student places first once the whole exists.
+const activeLayer = ref<MaterialRole>('numerator')
+const activityNotice = ref('')
+
+const activities: { id: Activity; label: string }[] = [
+  { id: 'area', label: 'Area' },
+  { id: 'fraction-multiplication', label: 'Fraction multiplication' },
+]
+const layers: { id: MaterialRole; label: string }[] = [
+  { id: 'denominator', label: 'Denominator tiles' },
+  { id: 'numerator', label: 'Numerator rods' },
+]
+
+const policy: ScenePolicy = {
   columns: fullColumns,
   rows: boardRows,
   spawnRows: Array.from({ length: centralRows }, (_, row) => boardDefinition.array.y + row),
@@ -87,6 +111,52 @@ const scene = useRodScene({
   allowOrientation: true,
   allowFactors: true,
   allowAreaRegroup: true,
+  layeredRoles: {
+    enabled: () => layered.value,
+    regionId: 'array',
+    // Derived from the candidate scene, so moving a D reference is checked
+    // against the numerator rods it would strand.
+    wholeOf: trains => getMathTablaReadouts(trains, boardDefinition).guide,
+  },
+}
+
+const scene = useRodScene(policy)
+
+/** Board cells a train covers, as "x,y" keys. */
+function cellsOf(train: (typeof scene.trains.value)[number]): string[] {
+  return trainFootprints(train).flatMap(part => {
+    const cells: string[] = []
+    for (let y = part.y; y < part.y + part.depth; y++) {
+      for (let x = part.x; x < part.x + part.width; x++) {
+        cells.push(`${x},${y}`)
+      }
+    }
+    return cells
+  })
+}
+
+// Material on the other layer steps aside only where it lies under or over the
+// layer being edited: it stays visible but takes no input there, so the active
+// piece is reachable. Uncovered pieces stay editable, and references never
+// step aside. Freezing a whole layer would leave most of the board unusable.
+const inertIds = computed(() => {
+  if (!layered.value) return new Set<string>()
+
+  const active = new Set(
+    scene.trains.value
+      .filter(train => layeredRoleOf(train, policy) === activeLayer.value)
+      .flatMap(cellsOf),
+  )
+
+  return new Set(
+    scene.trains.value
+      .filter(train => {
+        const role = layeredRoleOf(train, policy)
+        return role !== null && role !== activeLayer.value &&
+          cellsOf(train).some(cell => active.has(cell))
+      })
+      .map(train => train.id),
+  )
 })
 
 const controls = useRodPlaygroundInteraction({
@@ -95,6 +165,7 @@ const controls = useRodPlaygroundInteraction({
   disabled: () => editingDisabled.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
   onBoardClick,
+  eligible: id => !inertIds.value.has(id),
 })
 
 const {
@@ -109,7 +180,50 @@ const {
 } = controls
 
 const goalAdapter = createMathTablaGoalAdapter({ centralColumns, centralRows })
-const board = { kind: 'mathtabla', config: { centralColumns, centralRows } } as const
+// The activity is part of the board's identity, so a saved level is validated
+// under the mode that authored it.
+const board = computed((): BoardDescriptor => ({
+  kind: 'mathtabla',
+  config: {
+    centralColumns,
+    centralRows,
+    ...(layered.value ? { activity: 'fraction-multiplication' as const } : {}),
+  },
+}))
+
+/** Drop selected pieces that the current layer no longer accepts input from. */
+function pruneSelection(): void {
+  scene.select([...scene.selection.value].filter(id => !inertIds.value.has(id)))
+}
+
+function setActivity(next: Activity): void {
+  if (blocked.value || next === activity.value) return
+
+  // The scene must already satisfy the next activity's rules: switching never
+  // moves, deletes or reinterprets material.
+  const result = validateSnapshot(scene.trains.value, {
+    ...policy,
+    layeredRoles: { ...policy.layeredRoles!, enabled: () => next === 'fraction-multiplication' },
+  })
+
+  if (!result.allowed) {
+    const label = activities.find(item => item.id === next)!.label
+    activityNotice.value = `The board cannot move to ${label}: ${result.reason}`
+    return
+  }
+
+  activityNotice.value = ''
+  activity.value = next
+  menu.close()
+  pruneSelection()
+}
+
+function setLayer(next: MaterialRole): void {
+  if (blocked.value) return
+  activeLayer.value = next
+  menu.close()
+  pruneSelection()
+}
 
 // Whole grouping is presentation, not authored data. Until a schema migration
 // captures it per step, restoring, importing or clearing starts ungrouped.
@@ -121,13 +235,15 @@ function restoreScene(source: SceneSnapshot) {
   return result
 }
 
-defineExpose({ capture: () => ({ board, trains: captureScene() }), clear: () => restoreScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene() }), clear: () => restoreScene([]) })
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 const areaGroupingMenuChoice = useAreaGroupingMenuChoice(scene)
 
 const message = scene.message
-const readouts = computed(() => getMathTablaReadouts(scene.trains.value, boardDefinition))
+const readouts = computed(() =>
+  getMathTablaReadouts(scene.trains.value, boardDefinition, { layered: layered.value }),
+)
 
 // Both readings of the current whole, recomputed from the live guide.
 const wholeGroupReadings = computed(() => {
@@ -170,19 +286,53 @@ const renderedPieces = computed(() =>
   scene.trains.value.map(trainView),
 )
 
-// The whole denominator is two-dimensional: its reference strips are as flat as
-// the area they describe. Role decides this, never colour or creation history,
-// so it is re-derived from the live region containment after every move,
-// restoration and import. Numerator references and central rods stay raised.
+// Presentation follows the track a piece sits on, never its colour or creation
+// history, so it is re-derived from live region containment after every move,
+// restoration and import:
+// - D references are as flat as the area they describe;
+// - central material is flat and divided into the unit squares it covers,
+//   except numerator rods in fraction multiplication, which stand raised;
+// - N references stay raised.
 const denominatorRegions = boardDefinition.regions.filter(
   region => region.id === 'horizontal-d' || region.id === 'vertical-d',
 )
 
-const flatReferenceIds = computed(() => new Set(
-  scene.trains.value
-    .filter(train => denominatorRegions.some(region => trainFitsRegion(train, region)))
-    .map(train => train.id),
+const presentations = computed(() => new Map<string, RodPresentation>(
+  scene.trains.value.flatMap((train): [string, RodPresentation][] => {
+    if (denominatorRegions.some(region => trainFitsRegion(train, region))) {
+      return [[train.id, 'flat']]
+    }
+    if (trainFitsRegion(train, boardDefinition.array)) {
+      // In fraction multiplication the selected quantity stands raised on
+      // the flat, divided tiles of the whole it is selected from.
+      return [[train.id, layeredRoleOf(train, policy) === 'numerator' ? 'raised' : 'flat-units']]
+    }
+    return []
+  }),
 ))
+
+// Denominator tiles paint beneath numerator rods stacked on them. Draw order
+// only: scene order, IDs and snapshots are unaffected.
+const drawOrder = computed(() => {
+  if (!layered.value) return null
+  const tiles = new Set(
+    scene.trains.value
+      .filter(train => layeredRoleOf(train, policy) === 'denominator')
+      .map(train => train.id),
+  )
+  return (piece: { id: string }) => tiles.has(piece.id) ? 0 : 1
+})
+
+const selectedRole = computed(() => {
+  const id = selectedRod.value?.id
+  const train = id ? scene.trains.value.find(item => item.id === id) : undefined
+  return train ? layeredRoleOf(train, policy) : null
+})
+
+const editingHint = computed(() =>
+  `Editing ${layers.find(layer => layer.id === activeLayer.value)!.label.toLowerCase()}. ` +
+  'Pieces of the other layer that they cover wait until you switch material.',
+)
 
 const selectedRod = computed(() => {
   if (scene.selection.value.size !== 1) return undefined
@@ -193,39 +343,35 @@ const selectedRod = computed(() => {
 })
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
-  { kind: 'action', label: 'Clone', action: { type: 'clone' } },
-  { kind: 'action', label: 'Make a train', action: { type: 'make-train' } },
-  { kind: 'action', label: 'Undo train', action: { type: 'ungroup' } },
-  { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
-
-  addendMenuChoice.value,
+  ...baseRodMenuChoices(addendMenuChoice.value),
   factorMenuChoice.value,
   areaGroupingMenuChoice.value,
-
-  ...orientations.map(orientation => ({
-    kind: 'action' as const,
-    label: orientation[0]!.toUpperCase() + orientation.slice(1),
-    action: {
-      type: 'set-orientation' as const,
-      orientation,
-    },
-    checked: selectedRod.value?.orientation === orientation,
-  })),
-  { kind: 'action', label: 'Delete', action: { type: 'delete' } },
+  ...orientationMenuChoices(orientations, selectedRod.value?.orientation),
+  // The only way a role changes: an explicit, validated conversion, never a move.
+  ...(layered.value
+    ? layers.map(layer => ({
+        kind: 'action' as const,
+        label: `Use as ${layer.label.toLowerCase()}`,
+        action: { type: 'set-material-role' as const, materialRole: layer.id },
+        checked: selectedRole.value === layer.id,
+      }))
+    : []),
+  deleteMenuChoice,
 ])
 
 function onBoardClick(point: Point): void {
   if (blocked.value) return
-  const region = boardDefinition.regions.find(item =>
-    point.x >= item.x && point.x < item.x + item.width &&
-    point.y >= item.y && point.y < item.y + item.depth,
-  )
+  const region = regionAt(boardDefinition.regions, point)
   if (region) activeRegion.value = region.id
 }
 
 function onChoose(value: CuisenaireRodValue): void {
   if (blocked.value) return
-  const result = scene.apply([], { type: 'create', value, regionId: activeRegion.value })
+  // Creation intent: central material joins the layer being edited.
+  const role = layered.value && activeRegion.value === 'array'
+    ? { materialRole: activeLayer.value }
+    : {}
+  const result = scene.apply([], { type: 'create', value, regionId: activeRegion.value, ...role })
 
   if (result.allowed) {
     scene.select(result.createdIds)
@@ -271,6 +417,54 @@ function onRemove(): void {
       <div
         class="math-destinations"
         role="group"
+        aria-label="MathTabla activity"
+      >
+        <PlaygroundActionButton
+          v-for="item in activities"
+          :key="item.id"
+          :disabled="blocked"
+          :pressed="activity === item.id"
+          @click="setActivity(item.id)"
+        >
+          {{ item.label }}
+        </PlaygroundActionButton>
+      </div>
+
+      <div
+        v-if="layered"
+        class="math-destinations"
+        role="group"
+        aria-label="Central material"
+      >
+        <PlaygroundActionButton
+          v-for="layer in layers"
+          :key="layer.id"
+          :disabled="blocked"
+          :pressed="activeLayer === layer.id"
+          @click="setLayer(layer.id)"
+        >
+          {{ layer.label }}
+        </PlaygroundActionButton>
+      </div>
+
+      <p
+        v-if="layered"
+        class="math-editing-hint"
+      >
+        {{ editingHint }}
+      </p>
+
+      <p
+        class="math-activity-notice"
+        role="status"
+        aria-live="polite"
+      >
+        {{ activityNotice }}
+      </p>
+
+      <div
+        class="math-destinations"
+        role="group"
         aria-label="Rod destination"
       >
         <PlaygroundActionButton
@@ -296,6 +490,10 @@ function onRemove(): void {
         <template v-if="readouts.guide">
           <p>Whole area: {{ readouts.guide.width }} × {{ readouts.guide.depth }} = {{ readouts.guideCells }} square units</p>
           <p>Covered: {{ readouts.occupiedCells }} of {{ readouts.guideCells }} square units</p>
+          <template v-if="layered">
+            <p>Denominator tiles: {{ readouts.denominatorCells }} of {{ readouts.guideCells }} square units</p>
+            <p>Numerator: {{ readouts.numeratorCells }} of {{ readouts.guideCells }} square units</p>
+          </template>
         </template>
         <p v-else-if="readouts.state === 'exceeds-board'">
           Whole exceeds this board: {{ readouts.horizontal.denominator }} × {{ readouts.vertical.denominator }}
@@ -352,7 +550,9 @@ function onRemove(): void {
             :cell-size="pieceCellSize"
             :controls="controls"
             :clip-columns="phonePortrait ? visibleColumns : null"
-            :flat-ids="flatReferenceIds"
+            :presentations="presentations"
+            :inert-ids="inertIds"
+            :order="drawOrder"
           />
         </template>
       </MathTablaBoard>
@@ -392,6 +592,15 @@ function onRemove(): void {
   gap: 8px;
   min-width: 0;
   padding: 8px 0;
+}
+
+.math-activity-notice,
+.math-editing-hint {
+  margin: 0;
+}
+
+.math-activity-notice:empty {
+  display: none;
 }
 
 .math-readouts {

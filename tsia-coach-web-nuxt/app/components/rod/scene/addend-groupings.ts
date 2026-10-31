@@ -1,19 +1,9 @@
-import { CuisenaireRodValues } from '../rod.types'
 import type { AddendPair } from './rod.scene.types'
 
-const values = Object.values(CuisenaireRodValues)
-  .sort((a, b) => a - b)
-
+/** All ordered splits into two positive whole-number addends. */
 export function addendPairs(total: number): AddendPair[] {
-  const pairs: AddendPair[] = []
-
-  for (const a of values) {
-    for (const b of values) {
-      if (a + b === total) {
-        pairs.push([a, b])
-      }
-    }
-  }
-
-  return pairs
+  if (!Number.isSafeInteger(total) || total < 2) return []
+  return Array.from({ length: total - 1 }, (_, index) =>
+    [index + 1, total - index - 1] as const,
+  )
 }

@@ -12,24 +12,16 @@ describe('addendPairs', () => {
   })
 
   it('includes the symmetric pair once, in the middle', () => {
-    expect(addendPairs(12)).toEqual([
-      [2, 10],
-      [3, 9],
-      [4, 8],
-      [5, 7],
-      [6, 6],
-      [7, 5],
-      [8, 4],
-      [9, 3],
-      [10, 2],
-    ])
+    expect(addendPairs(12)).toHaveLength(11)
+    expect(addendPairs(12)[5]).toEqual([6, 6])
   })
 
   it('returns no pairs below the smallest achievable sum', () => {
     expect(addendPairs(1)).toEqual([])
   })
 
-  it('returns no pairs above the largest achievable sum', () => {
-    expect(addendPairs(21)).toEqual([])
+  it('supports multi-rod addends', () => {
+    expect(addendPairs(24)).toHaveLength(23)
+    expect(addendPairs(24)).toContainEqual([12, 12])
   })
 })

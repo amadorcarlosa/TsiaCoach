@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import SceneRod from './SceneRod.vue'
 import SceneMarqueeOverlay from './SceneMarqueeOverlay.vue'
 import type { trainView } from './train-view'
+import type { RodPresentation } from '~/components/rod/rod.types'
 import type { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 
 type Piece = ReturnType<typeof trainView>
@@ -13,11 +15,28 @@ const props = defineProps<{
   // Portrait preview: hide pieces wholly outside the first N columns. Null shows all.
   clipColumns?: number | null
   /**
-   * Pieces a board wants drawn on the board plane instead of raised. Boards that
-   * pass nothing keep every piece raised, so only MathTabla changes.
+   * How a board wants individual pieces drawn. Anything the board omits stays
+   * raised, so only the boards that opt in change.
    */
-  flatIds?: ReadonlySet<string> | null
+  presentations?: ReadonlyMap<string, RodPresentation> | null
+  /**
+   * Pieces that are not on the layer being edited. They still render in scene
+   * order; they simply take no input, so the active layer stays reachable.
+   */
+  inertIds?: ReadonlySet<string> | null
+  /**
+   * Draw order only. Scene order and IDs are untouched, so snapshots and
+   * restoration are unaffected by which layer paints on top.
+   */
+  order?: ((piece: Piece) => number) | null
 }>()
+
+const drawn = computed(() => {
+  const rank = props.order
+  if (!rank) return props.pieces
+
+  return [...props.pieces].sort((a, b) => rank(a) - rank(b))
+})
 
 function visible(piece: Piece): boolean {
   const columns = props.clipColumns
@@ -29,7 +48,7 @@ function visible(piece: Piece): boolean {
 
 <template>
   <SceneRod
-    v-for="piece in pieces"
+    v-for="piece in drawn"
     v-show="visible(piece)"
     :id="piece.id"
     :key="piece.id"
@@ -39,7 +58,8 @@ function visible(piece: Piece): boolean {
     :x="piece.x"
     :y="piece.y"
     :cell-size="cellSize"
-    :presentation="flatIds?.has(piece.id) ? 'flat' : 'raised'"
+    :presentation="presentations?.get(piece.id) ?? 'raised'"
+    :layer-inert="inertIds?.has(piece.id) ?? false"
     :selected="controls.highlightedIds.value.has(piece.id)"
     :disabled="controls.blocked.value"
     :snap-to-grid="true"

@@ -3,7 +3,9 @@ import { ref } from 'vue'
 import LevelFileControls from './files/LevelFileControls.vue'
 import BoardGoalEditor from './goals/BoardGoalEditor.vue'
 import PlaygroundAuthoringControls from './PlaygroundAuthoringControls.vue'
-import type { BoardDescriptor } from './files/level-document'
+import { validateLevelDocument, type BoardDescriptor, type LevelDocumentAdapter } from './files/level-document'
+
+
 import type { BoardGoalAdapter } from './goals/goal.types'
 import type { useRodScene } from '~/composables/useRodScene'
 import type { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
@@ -46,13 +48,28 @@ const authoringControls = useAuthoringControls(
 )
 
 const levelFiles = useLevelFiles({
-  adapter: { board: props.board, goals: props.goalAdapter, validateSnapshot: props.scene.validateSnapshot },
+  adapter: {
+    // Read through on every use: a board whose descriptor depends on the
+    // active activity must export and validate under the current one, not the
+    // one that happened to be set when this component mounted.
+    get board() { return props.board },
+    goals: props.goalAdapter,
+    validateSnapshot: props.scene.validateSnapshot,
+  },
   authoring,
   editable: () => !props.editingDisabled(),
   hasWorkingRods: () => props.scene.trains.value.length > 0,
   resolveDrafts: resolveDraft,
   onImported: authoringControls.reset,
 })
+// A resize must accommodate every authored snapshot and goal, not just the active scene.
+defineExpose({
+  checkConfiguration(adapter: LevelDocumentAdapter) {
+    if (!resolveDraft()) return { allowed: false as const, reason: 'Finish the goal draft before resizing.' }
+    return validateLevelDocument({ version: 1, board: adapter.board, steps: authoring.steps.value }, adapter)
+  },
+})
+
 </script>
 
 <template>

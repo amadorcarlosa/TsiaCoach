@@ -14,6 +14,8 @@ type MoveSession = {
 export function useSceneInteraction(options: {
     scene: RodScene
     blocked: () => boolean
+    /** False for pieces on a layer that is not being edited. */
+    eligible?: (id: string) => boolean
 }) {
     const { scene } = options
 
@@ -26,6 +28,7 @@ export function useSceneInteraction(options: {
 
     function select(id: string, intent: SelectionIntent): void {
         if (options.blocked() || session.value) return
+        if (options.eligible?.(id) === false) return
         if (!scene.trains.value.some(train => train.id === id)) return
 
         const selected = new Set(scene.selection.value)
@@ -50,6 +53,7 @@ export function useSceneInteraction(options: {
 
     function beginMove(id: string): boolean {
         if (options.blocked() || session.value) return false
+        if (options.eligible?.(id) === false) return false
 
         const train = scene.trains.value.find(train => train.id === id)
         if (!train) return false

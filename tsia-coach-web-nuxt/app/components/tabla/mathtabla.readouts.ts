@@ -1,6 +1,7 @@
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
-import type { SceneRegion } from '~/components/rod/scene/rod.scene.types'
+import type { MaterialRole, SceneRegion } from '~/components/rod/scene/rod.scene.types'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import { trainFootprints } from '~/components/rod/scene/part-footprint'
 import type { getMathTablaGeometry } from './mathtabla.geometry'
 
 export type MathTablaGuide = Pick<SceneRegion, 'x' | 'y' | 'width' | 'depth'>
@@ -10,10 +11,26 @@ export type MathTablaGuide = Pick<SceneRegion, 'x' | 'y' | 'width' | 'depth'>
 // central grid. A clipped rectangle would misrepresent the whole, so none is drawn.
 export type MathTablaWholeState = 'incomplete' | 'ready' | 'exceeds-board'
 
+/**
+ * Role of central material for counting purposes. Outside fraction
+ * multiplication nothing has a role, so every eligible piece counts as it
+ * always did; inside it, material saved before roles existed keeps its
+ * historical selected-quantity meaning.
+ */
+function countingRole(
+  train: SceneSnapshot[number],
+  layered: boolean,
+): MaterialRole | null {
+  if (!layered) return null
+  return train.materialRole ?? 'numerator'
+}
+
 export function getMathTablaReadouts(
   trains: SceneSnapshot,
   geometry: ReturnType<typeof getMathTablaGeometry>,
+  options: { layered?: boolean } = {},
 ) {
+  const layered = options.layered === true
   const total = (id: string) => {
     const region = geometry.regions.find(item => item.id === id)!
     return trains.filter(train => trainFitsRegion(train, region))
@@ -34,23 +51,48 @@ export function getMathTablaReadouts(
 
   // Count physical central cells, clipped to the guide. Reference totals never
   // substitute for the occupied area; a partial rod contributes only its overlap.
+  // Each set is unique cells, so two pieces covering one cell count it once.
   const occupied = new Set<string>()
+  const numerator = new Set<string>()
+  const denominator = new Set<string>()
+
   if (guide) {
     for (const train of trains) {
       if (!trainFitsRegion(train, geometry.array)) continue
-      for (const part of train.parts) {
-        const left = train.anchor.x + part.offset.x
-        const top = train.anchor.y + part.offset.y
-        const width = part.orientation === 'horizontal' ? part.value : 1
-        const depth = part.orientation === 'vertical' ? part.value : 1
-        for (let y = Math.max(top, guide.y); y < Math.min(top + depth, guide.y + guide.depth); y++) {
-          for (let x = Math.max(left, guide.x); x < Math.min(left + width, guide.x + guide.width); x++) {
-            occupied.add(`${x},${y}`)
+      const role = countingRole(train, layered)
+
+      for (const part of trainFootprints(train)) {
+        for (let y = Math.max(part.y, guide.y); y < Math.min(part.y + part.depth, guide.y + guide.depth); y++) {
+          for (let x = Math.max(part.x, guide.x); x < Math.min(part.x + part.width, guide.x + guide.width); x++) {
+            const cell = `${x},${y}`
+            occupied.add(cell)
+            if (role === 'numerator') numerator.add(cell)
+            if (role === 'denominator') denominator.add(cell)
           }
         }
       }
     }
   }
 
-  return { horizontal, vertical, state, guide, occupiedCells: occupied.size, guideCells: guide ? guide.width * guide.depth : 0 }
+  const guideCells = guide ? guide.width * guide.depth : 0
+
+  return {
+    horizontal,
+    vertical,
+    state,
+    guide,
+    // Every eligible central cell. Unchanged outside fraction multiplication.
+    occupiedCells: occupied.size,
+    /**
+     * Cells the selected quantity covers. Denominator tiles and both reference
+     * tracks contribute nothing, so a fully tiled whole still selects none.
+     */
+    numeratorCells: numerator.size,
+    /**
+     * How much of the whole is physically tiled. Progress only: the whole is
+     * the area the D references define, whether or not tiles are placed.
+     */
+    denominatorCells: denominator.size,
+    guideCells,
+  }
 }

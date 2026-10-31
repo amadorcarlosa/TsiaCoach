@@ -17,6 +17,8 @@ defineProps<{
   removeDisabled: boolean
   // Lets a board wider than the viewport scroll; the portrait preview still clips.
   scrollable?: boolean
+  navigable?: boolean
+  panMode?: boolean
   selectedOrientation?: ArrayRodOrientation
   setBoardViewport: (element: Element | ComponentPublicInstance | null) => void
   setWorkspaceTools: (element: Element | ComponentPublicInstance | null) => void
@@ -27,6 +29,10 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
+  boardPointerMove: [event: PointerEvent]
+  boardPointerEnd: [event: PointerEvent]
+  boardKeydown: [event: KeyboardEvent]
+  boardScroll: []
   boardLostPointerCapture: [event: PointerEvent]
   boardPointerDown: [event: PointerEvent]
   chooseRod: [value: CuisenaireRodValue]
@@ -95,15 +101,26 @@ const emit = defineEmits<{
 
     <slot name="before-board" />
 
+    <!-- The viewport handles keyboard panning only when it itself has focus. -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
     <div
       :ref="setBoardViewport"
       class="array-shell-viewport"
       :class="[viewportClass, {
         'marquee-enabled': !editingDisabled,
+        'array-shell-viewport--navigable': navigable,
+        'array-shell-viewport--panning': panMode,
         'array-shell-viewport--scrollable': scrollable && !phonePortrait,
         'array-shell-viewport--clipped': scrollable && phonePortrait,
       }]"
-      tabindex="-1"
+      :tabindex="navigable ? 0 : -1"
+      role="region"
+      :aria-label="navigable ? 'Board workspace. Use arrow keys to pan.' : undefined"
+      @pointermove="emit('boardPointerMove', $event)"
+      @pointerup="emit('boardPointerEnd', $event)"
+      @pointercancel="emit('boardPointerEnd', $event)"
+      @keydown="emit('boardKeydown', $event)"
+      @scroll="emit('boardScroll')"
       @pointerdown.capture="emit('boardPointerDown', $event)"
       @lostpointercapture="emit('boardLostPointerCapture', $event)"
     >
@@ -120,7 +137,7 @@ const emit = defineEmits<{
     >
       {{ message }}
     </p>
-    <p>{{ pieceCount }} objects on the board</p>
+    <p>{{ pieceCount }} {{ pieceCount === 1 ? 'object' : 'objects' }} on the board</p>
   </div>
 </template>
 
@@ -176,4 +193,11 @@ const emit = defineEmits<{
 .array-shell-viewport--clipped {
   overflow-x: hidden;
 }
+</style>
+
+<style scoped>
+.array-shell-viewport--navigable { height: min(60vh, 560px); min-height: 240px; overflow: auto; overscroll-behavior: contain; position: relative; border: 1px solid var(--mt-border); border-radius: var(--radius-md); touch-action: none; }
+.array-shell-viewport--navigable:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 2px; }
+.array-shell-viewport--panning { cursor: grab; }
+.array-shell-viewport--panning :deep(*) { cursor: inherit; }
 </style>

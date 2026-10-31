@@ -96,6 +96,16 @@ describe('base-ten scene', () => {
     expect(scene.apply([first], { type: 'rotate' }).allowed).toBe(false)
     expect(JSON.stringify(scene.blocks.value)).toBe(before)
   })
+  it('slides a block turned at an edge back onto the board, and back again on the return turn', () => {
+    const { scene, add } = setup(20, 20)
+    const ten = add('tens')
+    scene.apply([ten], { type: 'move', delta: { x: 0, y: 19 } })
+    expect(scene.apply([ten], { type: 'rotate' }).allowed).toBe(true)
+    expect(scene.blocks.value[0]!.anchor).toEqual({ x: 0, y: 10 })
+    expect(scene.apply([ten], { type: 'rotate' }).allowed).toBe(true)
+    expect(scene.blocks.value[0]!.anchor).toEqual({ x: 0, y: 19 })
+  })
+
   it('checks without mutation, clones relative offsets, moves together, and clears deleted selection', () => {
     const { scene, add } = setup()
     const a = add('ones'), b = add('tens')
