@@ -1,7 +1,7 @@
 import type { UnitDimensions } from "#shared/types/rods.ts"
 import type { DeepReadonly } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
-import type { TrainPart } from './scene/rod.scene.types'
+import type { RodSign, TrainPart } from './scene/rod.scene.types'
 
 export type RodAppearance = {
     fill: string
@@ -25,6 +25,11 @@ export type RodProps = {
     presentation?: RodPresentation
     /** Visual state supplied by the interaction wrapper; owns no selection logic. */
     selected?: boolean
+    /**
+     * Appearance only: -1 draws the recessed (concave) cap. Colour and size
+     * still come from the magnitude; the label states the sign explicitly.
+     */
+    sign?: RodSign
 }
 
 export type DragProps = {

@@ -50,7 +50,7 @@ describe('goal semantics', () => {
     { type: 'empty-pair', pairId: 'pair-0' },
     { type: 'occupied-area', regionId: 'array', cells: 121 },
     { type: 'filled-rectangle', regionId: 'array', x: 11, y: 0, columns: 2, rows: 1 },
-    { type: 'region-total', regionId: 'array', value: -1 },
+    { type: 'region-total', regionId: 'array', value: 0.5 },
     { type: 'empty-region', regionId: 'array', extra: true },
   ])('rejects unsupported, invalid and out-of-bounds conditions: %j', condition => {
     expect(array.parse({ type: 'all', conditions: [condition] }).allowed).toBe(false)

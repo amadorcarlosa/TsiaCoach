@@ -13,7 +13,16 @@ import type {
     TrainPart
 } from '~/components/rod/scene/rod.scene.types'
 import { layeredRoleOf, validateScene } from '~/components/rod/scene/rod-scene.placement'
-import { addendPairs } from '~/components/rod/scene/addend-groupings'
+import { signedAddendPairs } from '~/components/rod/scene/addend-groupings'
+import {
+    MIXED_SIGN_REGROUP_REASON,
+    isRodSign,
+    signField,
+    trainMagnitude,
+    trainSignKind,
+    trainSignedTotal,
+    trainUniformSign,
+} from '~/components/rod/scene/rod-arithmetic'
 import { factorShapes } from '~/components/rod/scene/factor-groupings'
 import {
     areaGroupParts,
@@ -134,6 +143,17 @@ export function useRodScene(policy: ScenePolicy) {
                 return reject('Material roles are available in fraction multiplication.')
             }
 
+            // The tray's sign is untrusted input: only 1 and -1, and -1 only
+            // where the board opted in. Hiding the toggle is not validation.
+            if (action.sign !== undefined && !isRodSign(action.sign)) {
+                return reject('Rod signs must be 1 or -1.')
+            }
+            if (action.sign === -1 && !policy.allowNegativeRods) {
+                return reject('This board accepts positive rods only.')
+            }
+            const sign = signField(action.sign ?? 1)
+            const rodName = `${action.sign === -1 ? 'negative ' : ''}${action.value}-rod`
+
             // Creation intent travels with the train; it is never inferred later.
             const role = action.materialRole
                 ? { materialRole: action.materialRole }
@@ -152,7 +172,7 @@ export function useRodScene(policy: ScenePolicy) {
                     for (let x = region.x; x < region.x + region.width; x++) {
                         const train: RodTrain = {
                             id: '', anchor: { x, y },
-                            parts: [{ value: action.value, offset: { x: 0, y: 0 }, orientation }],
+                            parts: [{ value: action.value, ...sign, offset: { x: 0, y: 0 }, orientation }],
                             ...role,
                         }
                         if (!trainFitsRegion(train, region)) continue
@@ -160,7 +180,7 @@ export function useRodScene(policy: ScenePolicy) {
                         if (result.allowed) return result
                     }
                 }
-                return reject(`No room for a ${action.value}-rod in this region.`)
+                return reject(`No room for a ${rodName} in this region.`)
             }
 
             const requestedRow = action.row
@@ -189,6 +209,7 @@ export function useRodScene(policy: ScenePolicy) {
                             anchor: { x, y },
                             parts: [{
                                 value: action.value,
+                                ...sign,
                                 offset: { x: 0, y: 0 },
                                 orientation: 'horizontal',
                             }],
@@ -200,7 +221,7 @@ export function useRodScene(policy: ScenePolicy) {
                 }
             }
 
-            return reject(`No room for a ${action.value}-rod.`)
+            return reject(`No room for a ${rodName}.`)
         }
 
         const selectedIds = new Set(ids)
@@ -383,10 +404,11 @@ export function useRodScene(policy: ScenePolicy) {
                         )
                     }
 
-                    const total = train.parts.reduce(
-                        (sum, part) => sum + part.value,
-                        0,
-                    )
+                    // Arranged by magnitude: -14 can show 2 rows of negative 7.
+                    const sign = trainUniformSign(train)
+                    if (sign === undefined) return reject(MIXED_SIGN_REGROUP_REASON)
+
+                    const total = trainMagnitude(train)
 
                     const candidates = factorShapes(total)
                     const requested = action.shape
@@ -410,6 +432,7 @@ export function useRodScene(policy: ScenePolicy) {
                         { length: shape.rows },
                         (_, row): TrainPart => ({
                             value: shape.columns,
+                            ...signField(sign),
                             orientation: 'horizontal',
                             offset: { x: 0, y: row },
                         }),
@@ -435,6 +458,11 @@ export function useRodScene(policy: ScenePolicy) {
                 }
 
                 const train = selected[0]!
+
+                // Area grouping has no signed meaning defined yet.
+                if (trainSignKind(train) !== 'positive') {
+                    return reject('Area grouping is available for positive rods only.')
+                }
 
                 if (train.parts.some(part => part.orientation === 'tower')) {
                     return reject(
@@ -572,14 +600,10 @@ export function useRodScene(policy: ScenePolicy) {
 
     function getAddendChoices(id: string): AddendChoice[] {
         const train = trains.value.find(train => train.id === id)
-        if (!train) return []
+        // Mixed signs have no finite, instructional list of splits yet.
+        if (!train || trainSignKind(train) === 'mixed') return []
 
-        const total = train.parts.reduce(
-            (sum, part) => sum + part.value,
-            0,
-        )
-
-        return addendPairs(total).map(pair => ({
+        return signedAddendPairs(trainSignedTotal(train)).map(pair => ({
             pair,
             result: check([id], {
                 type: 'regroup-addends',
@@ -590,14 +614,9 @@ export function useRodScene(policy: ScenePolicy) {
 
     function getFactorChoices(id: string): FactorChoice[] {
         const train = trains.value.find(train => train.id === id)
-        if (!train) return []
+        if (!train || trainSignKind(train) === 'mixed') return []
 
-        const total = train.parts.reduce(
-            (sum, part) => sum + part.value,
-            0,
-        )
-
-        return factorShapes(total).map(shape => ({
+        return factorShapes(trainMagnitude(train)).map(shape => ({
             shape,
             result: check([id], {
                 type: 'regroup-factors',

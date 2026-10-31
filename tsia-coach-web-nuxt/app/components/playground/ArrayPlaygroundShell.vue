@@ -4,8 +4,9 @@ import PlaygroundActionButton from '~/components/playground/PlaygroundActionButt
 import PlaygroundRodTray from '~/components/playground/PlaygroundRodTray.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import type { ArrayRodOrientation } from '~/components/rod/array/array-rod.types'
+import type { RodSign } from '~/components/rod/scene/rod.scene.types'
 
-defineProps<{
+withDefaults(defineProps<{
   blocked: boolean
   canOrient: (orientation: ArrayRodOrientation) => boolean
   editingDisabled: boolean
@@ -26,7 +27,15 @@ defineProps<{
   trayId: string
   trayOpen: boolean
   viewportClass: string
-}>()
+  /** Present only on boards that accept negative rods; omitting it hides the toggle. */
+  rodSign?: RodSign
+  /** Board-level readout beside the object count, e.g. a signed total. */
+  totalReadout?: string
+}>(), {
+  selectedOrientation: undefined,
+  rodSign: undefined,
+  totalReadout: undefined,
+})
 
 const emit = defineEmits<{
   boardPointerMove: [event: PointerEvent]
@@ -39,6 +48,7 @@ const emit = defineEmits<{
   orient: [orientation: ArrayRodOrientation]
   removeSelected: []
   updateTrayOpen: [value: boolean]
+  updateRodSign: [sign: RodSign]
 }>()
 </script>
 
@@ -68,6 +78,15 @@ const emit = defineEmits<{
           {{ trayOpen ? 'Hide rods' : 'Show rods' }}
         </button>
 
+        <!-- A toggle, so the chosen sign is announced before anything is created. -->
+        <PlaygroundActionButton
+          v-if="rodSign !== undefined"
+          :pressed="rodSign === -1"
+          @click="emit('updateRodSign', rodSign === -1 ? 1 : -1)"
+        >
+          Negative rods
+        </PlaygroundActionButton>
+
         <PlaygroundActionButton
           v-for="orientation in orientations"
           :key="orientation"
@@ -91,8 +110,15 @@ const emit = defineEmits<{
         v-show="trayOpen"
         :id="trayId"
       >
+        <p
+          v-if="rodSign !== undefined"
+          class="array-shell-sign"
+        >
+          New rods: {{ rodSign === -1 ? 'negative' : 'positive' }}
+        </p>
         <PlaygroundRodTray
           layout="wrap"
+          :sign="rodSign ?? 1"
           :disabled="blocked"
           @choose="emit('chooseRod', $event)"
         />
@@ -137,7 +163,11 @@ const emit = defineEmits<{
     >
       {{ message }}
     </p>
-    <p>{{ pieceCount }} {{ pieceCount === 1 ? 'object' : 'objects' }} on the board</p>
+    <p>
+      {{ pieceCount }} {{ pieceCount === 1 ? 'object' : 'objects' }} on the board<template v-if="totalReadout">
+        · {{ totalReadout }}
+      </template>
+    </p>
   </div>
 </template>
 
@@ -175,6 +205,11 @@ const emit = defineEmits<{
 .array-shell-toolbar > button:focus-visible {
   outline: 2px solid var(--ui-primary);
   outline-offset: 2px;
+}
+
+.array-shell-sign {
+  margin: 0;
+  padding-block: 4px;
 }
 
 .orientation-button {

@@ -7,6 +7,11 @@ export const pointSchema = z.object({ x: z.number().int(), y: z.number().int() }
 export const partSchema = z.object({
   value: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
   addendGroup: z.union([z.literal(0), z.literal(1)]).optional(),
+  // Absent means positive, so older files keep their meaning. Same
+  // forward-only policy as materialRole below: a build predating signs rejects
+  // files that contain one, and nothing here drops or flips a sign to suit it.
+  // Whether a board accepts -1 is the board's scene policy, not the schema's.
+  sign: z.union([z.literal(1), z.literal(-1)]).optional(),
   offset: pointSchema,
   orientation: z.enum(['horizontal', 'vertical', 'tower']),
 }).strict()

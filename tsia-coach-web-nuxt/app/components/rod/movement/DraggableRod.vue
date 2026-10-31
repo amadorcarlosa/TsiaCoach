@@ -10,6 +10,15 @@ import type { DragProps } from '~/components/rod/rod.types.ts'
 import { arrayRodDimensions } from '../array/array-rod.types'
 import { cuisenaireRodPalette } from '~/components/rod/rod.types.ts'
 import type { SelectionIntent } from '../scene/scene-interaction.types'
+import {
+  formatAddend,
+  formatSigned,
+  partSign,
+  partSignedValue,
+  trainMagnitude,
+  trainSignKind,
+  trainSignedTotal,
+} from '../scene/rod-arithmetic'
 
 const props = withDefaults(defineProps<DragProps>(), {
   snapToGrid: true,
@@ -45,13 +54,14 @@ const addendGroups = computed(() => [0, 1].flatMap(group => {
   const y = Math.min(...parts.map(part => part.offset.y))
   const right = Math.max(...parts.map(part => part.offset.x + arrayRodDimensions(part.value, part.orientation).width))
   const bottom = Math.max(...parts.map(part => part.offset.y + arrayRodDimensions(part.value, part.orientation).depth))
-  return [{ group, x, y, width: right - x, depth: bottom - y, total: parts.reduce((sum, part) => sum + part.value, 0) }]
+  return [{ group, x, y, width: right - x, depth: bottom - y, total: trainSignedTotal({ parts }) }]
 }))
 
 const visualParts = computed(() => {
   if (props.parts) {
     return props.parts.map(part => ({
       value: part.value,
+      sign: partSign(part),
       offset: part.offset,
       dimensions: arrayRodDimensions(
         part.value,
@@ -62,22 +72,39 @@ const visualParts = computed(() => {
 
   return [{
     value: props.value,
+    sign: 1 as const,
     offset: { x: 0, y: 0 },
     dimensions: dimensions.value,
   }]
 })
 
-const totalValue = computed(() =>
-  visualParts.value.reduce((sum, part) => sum + part.value, 0),
+const train = computed(() => ({ parts: visualParts.value }))
+const totalValue = computed(() => trainSignedTotal(train.value))
+const signKind = computed(() => trainSignKind(train.value))
+
+// Positive material keeps its established wording. Signed material states the
+// arithmetic total and the physical length separately, because they differ,
+// and a zero total is still a train, never an empty object.
+const trainSummary = computed(() =>
+  signKind.value === 'positive'
+    ? `Train, value ${totalValue.value}`
+    : `${signKind.value === 'mixed' ? 'Mixed-sign train' : 'Train'}, signed total ${totalValue.value}, ` +
+      `physical length ${trainMagnitude(train.value)}`,
 )
 
 // A unit-divided piece shows its ones but is still one group, so the wrapper
 // carries the whole description and every cell inside it stays decorative.
 const objectName = computed(() => {
   if (addendGroups.value.length === 2) {
-    return `Train, value ${totalValue.value}, addends ${addendGroups.value.map(group => group.total).join(' + ')}`
+    return `${trainSummary.value}, addends ${addendGroups.value.map(group => formatAddend(group.total)).join(' + ')}`
   }
   const parts = visualParts.value.length
+
+  if (signKind.value !== 'positive') {
+    return parts === 1
+      ? `Negative ${visualParts.value[0]!.value} rod`
+      : `${trainSummary.value}, ${parts} parts`
+  }
 
   if (props.presentation === 'flat-units') {
     return parts === 1
@@ -204,6 +231,7 @@ defineExpose({
           class="train-part"
           :data-train-part="index"
           :data-part-value="part.value"
+          :data-part-sign="part.sign"
           :style="{
             left: `${part.offset.x * cellSize}px`,
             top: `${part.offset.y * cellSize}px`,
@@ -214,9 +242,10 @@ defineExpose({
             :dimensions="part.dimensions"
             :unit-size="cellSize"
             :appearance="cuisenaireRodPalette[part.value]"
-            :label="String(part.value)"
+            :label="formatSigned(partSignedValue(part))"
             :presentation="presentation"
             :selected="selected"
+            :sign="part.sign"
         />
       </div>
     </div>

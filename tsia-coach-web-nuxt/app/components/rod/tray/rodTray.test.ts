@@ -45,6 +45,8 @@ describe('RodTray', () => {
             label: '5',
             // The tray is not a reference track, so its samples stay raised.
             presentation: 'raised',
+            selected: false,
+            sign: 1,
         })
     })
 

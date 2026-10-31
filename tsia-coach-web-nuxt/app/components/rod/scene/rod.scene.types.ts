@@ -2,8 +2,14 @@ import type { Point } from '~/components/grid/gridPointer'
 import type { AreaGrouping, AreaGroupReading } from '~/components/tabla/area-grouping'
 import type { CuisenaireRodValue } from '../rod.types'
 
+/** A rod's arithmetic sign. It never changes geometry, colour or collision. */
+export type RodSign = 1 | -1
+
 export type TrainPart = {
+  /** Physical magnitude: length, colour and footprint. Never negative. */
   value: CuisenaireRodValue
+  /** Absent means positive, so scenes and files written before signs still mean what they did. */
+  sign?: RodSign
   /** Membership in the two addends of a regrouped train. */
   addendGroup?: 0 | 1
   offset: Point
@@ -71,6 +77,8 @@ export type SceneAction =
       regionId?: string
       /** Creation intent. Never inferred from the destination afterwards. */
       materialRole?: MaterialRole
+      /** Creation intent from the tray. Absent means positive. */
+      sign?: RodSign
     }
     // Deliberate role conversion. Moving a piece must never do this silently.
     | { type: 'set-material-role'; materialRole: MaterialRole }
@@ -129,6 +137,11 @@ export type ScenePolicy = {
   requireHorizontalAnchorRow?: boolean
   /** Absent in every ordinary scene, which keeps the plain no-overlap rule. */
   layeredRoles?: LayeredRolesPolicy
+  /**
+   * Opt in to negative rods. Checked when creating and when replacing or
+   * importing a scene; boards without it accept positive material only.
+   */
+  allowNegativeRods?: boolean
 }
 
 export type SceneResult =

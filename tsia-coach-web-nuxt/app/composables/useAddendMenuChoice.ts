@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import type { useRodScene } from './useRodScene'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
+import { formatAddend } from '~/components/rod/scene/rod-arithmetic'
 
 export function useAddendMenuChoice(
   scene: ReturnType<typeof useRodScene>,
@@ -37,7 +38,7 @@ export function useAddendMenuChoice(
       label: 'Regroup to addends',
       children: choices.map(({ pair }) => ({
         kind: 'action',
-        label: `${pair[0]} + ${pair[1]}`,
+        label: `${formatAddend(pair[0])} + ${formatAddend(pair[1])}`,
         action: {
           type: 'regroup-addends',
           pair,

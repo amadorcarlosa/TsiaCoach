@@ -28,7 +28,7 @@ export function buildExperiment(input: {
       studentMessage: input.studentMessage,
       board: input.capture.board,
       trains: input.capture.trains,
-      coordinateConvention: 'Grid units. Each train has an anchor; each part has an offset relative to that anchor, a rod value (length), and an orientation. This is a single board snapshot, not a history of student actions.',
+      coordinateConvention: 'Grid units. Each train has an anchor; each part has an offset relative to that anchor, a rod value (its physical length, always positive), an orientation, and an optional sign: sign -1 marks a negative rod whose contribution is minus its value; no sign means positive. This is a single board snapshot, not a history of student actions.',
     }, null, 2),
   }
 }

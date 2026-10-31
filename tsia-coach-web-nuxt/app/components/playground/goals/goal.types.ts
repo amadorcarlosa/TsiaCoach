@@ -8,6 +8,8 @@ export type GoalEvaluation = {
 }
 export type GoalAdapter = {
   supportedTypes: readonly GoalCondition['type'][]
+  /** Whether region-total goals may target a negative number. */
+  signedRegionTotals?: boolean
   parse: (input: unknown) => Validation<AuthoringGoal>
   evaluate: (goal: AuthoringGoal, scene: SceneSnapshot) => GoalEvaluation
 }

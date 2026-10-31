@@ -2,6 +2,7 @@ import type { DeepReadonly } from 'vue'
 import { arrayRodDimensions } from '../array/array-rod.types'
 import type { RodTrain } from './rod.scene.types'
 import { trainOrientation } from './train-orientation'
+import { trainMagnitude, trainSignKind, trainSignedTotal } from './rod-arithmetic'
 
 export function trainView(train: DeepReadonly<RodTrain>) {
   const first = train.parts[0]
@@ -39,10 +40,11 @@ export function trainView(train: DeepReadonly<RodTrain>) {
     // Retains the legacy rod prop; never cast the total to a rod value.
     value: first.value,
 
-    total: train.parts.reduce(
-      (sum, part) => sum + part.value,
-      0,
-    ),
+    /** Physical length of all parts. Not an arithmetic total. */
+    magnitude: trainMagnitude(train),
+    /** Arithmetic total; zero does not mean the train is empty. */
+    signedTotal: trainSignedTotal(train),
+    signKind: trainSignKind(train),
 
     orientation: trainOrientation(train),
   }

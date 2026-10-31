@@ -13,6 +13,9 @@ export function copyScene(source: SceneSnapshot): RodTrain[] {
     parts: train.parts.map(part => ({
       ...(part.addendGroup !== undefined ? { addendGroup: part.addendGroup } : {}),
       value: part.value,
+      // Copied as given, even when malformed, so validation can reject it
+      // rather than a copy silently turning a negative rod positive.
+      ...(part.sign !== undefined ? { sign: part.sign } : {}),
       orientation: part.orientation,
       offset: { ...part.offset },
     })),

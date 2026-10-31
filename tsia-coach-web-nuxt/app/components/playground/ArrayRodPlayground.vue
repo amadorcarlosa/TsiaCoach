@@ -4,7 +4,8 @@ import { computed, ref, watch } from 'vue'
 import BoardViewControls from '~/components/grid/BoardViewControls.vue'
 import { useBoardCamera } from '~/composables/useBoardCamera'
 import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
-import type { ScenePolicy } from '~/components/rod/scene/rod.scene.types'
+import type { RodSign, ScenePolicy } from '~/components/rod/scene/rod.scene.types'
+import { formatSigned, trainSignedTotal } from '~/components/rod/scene/rod-arithmetic'
 import type { BoardGoalAdapter } from './goals/goal.types'
 import type { LevelDocumentAdapter } from './files/level-document'
 import type { BoardAdoption } from '~/composables/useLevelFiles'
@@ -79,6 +80,8 @@ const policy: ScenePolicy = {
   editable: () => !editingDisabled.value,
   allowOrientation: true,
   allowFactors: true,
+  // Array is the first signed board; the others stay positive-only.
+  allowNegativeRods: true,
 }
 const scene = useRodScene(policy)
 
@@ -106,6 +109,7 @@ const goalAdapter: BoardGoalAdapter = {
   get regions() { return currentGoals.value.regions },
   get pairs() { return currentGoals.value.pairs },
   get supportedTypes() { return currentGoals.value.supportedTypes },
+  get signedRegionTotals() { return currentGoals.value.signedRegionTotals },
   parse: input => currentGoals.value.parse(input),
   evaluate: (goal, snapshot) => currentGoals.value.evaluate(goal, snapshot),
 }
@@ -201,6 +205,13 @@ const factorMenuChoice = useFactorMenuChoice(scene)
 
 const message = scene.message
 
+const rodSign = ref<RodSign>(1)
+
+// Arithmetic, not occupancy: +10 and -10 read 0 but still fill 20 cells.
+const totalReadout = computed(() =>
+  `Signed total ${formatSigned(scene.trains.value.reduce((sum, train) => sum + trainSignedTotal(train), 0))}`,
+)
+
 const renderedPieces = computed(() =>
   scene.trains.value.map(trainView),
 )
@@ -222,7 +233,7 @@ const menuChoices = computed<SceneMenuChoice[]>(() => [
 
 function onChoose(value: CuisenaireRodValue): void {
   if (blocked.value) return
-  const result = scene.apply([], { type: 'create', value })
+  const result = scene.apply([], { type: 'create', value, sign: rodSign.value })
 
   if (result.allowed) {
     scene.select(result.createdIds)
@@ -247,6 +258,8 @@ function onRemove(): void {
     :orientations="arrayRodOrientations"
     :phone-portrait="phonePortrait"
     :piece-count="renderedPieces.length"
+    :rod-sign="rodSign"
+    :total-readout="totalReadout"
     preview-notice="Portrait preview: columns 0–12. Rotate to landscape to edit."
     :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
     :selected-orientation="selectedRod?.orientation"
@@ -268,6 +281,7 @@ function onRemove(): void {
     @orient="onOrient"
     @remove-selected="onRemove"
     @update-tray-open="trayOpen = $event"
+    @update-rod-sign="rodSign = $event"
   >
     <template #before-board>
       <form

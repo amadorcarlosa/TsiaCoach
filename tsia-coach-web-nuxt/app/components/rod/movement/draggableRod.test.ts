@@ -117,3 +117,43 @@ describe('selection on rod surfaces', () => {
     expect(wrapper.findAll('.rod--selected .top')).toHaveLength(1)
   })
 })
+
+describe('DraggableRod negative rods', () => {
+  const negative = (value: TrainPart['value'], x: number): TrainPart =>
+    ({ value, sign: -1, orientation: 'horizontal', offset: { x, y: 0 } })
+
+  it('keeps the colour and footprint, recesses the cap and labels the sign', () => {
+    const plain = rod({ value: 10, parts: [{ value: 10, orientation: 'horizontal', offset: { x: 0, y: 0 } }] })
+    const signed = rod({ value: 10, parts: [negative(10, 0)] })
+
+    const style = (wrapper: typeof plain) => wrapper.get('.rod').attributes('style') ?? ''
+    expect(style(signed)).toBe(style(plain))
+    expect(signed.get('.rod').classes()).toContain('rod--negative')
+    expect(signed.get('.rod').attributes('data-rod-sign')).toBe('negative')
+    expect(signed.get('[data-rod-surface]').text()).toBe('−10')
+    // Still one surface and the same six faces: nothing extra can take input.
+    expect(signed.findAll('[data-rod-surface]')).toHaveLength(1)
+    expect(signed.findAll('.face')).toHaveLength(6)
+    expect(signed.get('[data-piece-id]').attributes('aria-label'))
+      .toBe('Negative 10 rod at column 2, row 2. Use arrow keys to move.')
+  })
+
+  it('names signed and mixed trains by signed total and physical length', () => {
+    const homogeneous = rod({ parts: [negative(10, 0), negative(4, 10)] })
+    const mixed = rod({ parts: [{ value: 10, orientation: 'horizontal', offset: { x: 0, y: 0 } }, negative(4, 10)] })
+    const zero = rod({ parts: [{ value: 10, orientation: 'horizontal', offset: { x: 0, y: 0 } }, negative(10, 10)] })
+
+    expect(homogeneous.get('[data-piece-id]').attributes('aria-label'))
+      .toContain('Train, signed total -14, physical length 14, 2 parts')
+    expect(mixed.get('[data-piece-id]').attributes('aria-label'))
+      .toContain('Mixed-sign train, signed total 6, physical length 14, 2 parts')
+    // Zero total is still material on the board, not an empty object.
+    expect(zero.get('[data-piece-id]').attributes('aria-label'))
+      .toContain('Mixed-sign train, signed total 0, physical length 20, 2 parts')
+  })
+
+  it('keeps the selection ring on the recessed cap', () => {
+    const wrapper = rod({ parts: [negative(3, 0)], selected: true })
+    expect(wrapper.get('.rod').classes()).toEqual(expect.arrayContaining(['rod--negative', 'rod--selected']))
+  })
+})

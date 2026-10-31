@@ -1,11 +1,19 @@
 import type { DeepReadonly } from 'vue'
 import type { CuisenaireRodValue } from '../rod.types'
-import { addendPairs } from './addend-groupings'
+import { signedAddendPairs } from './addend-groupings'
 import type {
   AddendPair,
   RodTrain,
   TrainPart,
 } from './rod.scene.types'
+import {
+  MIXED_SIGN_REGROUP_REASON,
+  formatSigned,
+  signField,
+  trainMagnitude,
+  trainSignedTotal,
+  trainUniformSign,
+} from './rod-arithmetic'
 import { trainShape } from './train-shape'
 import { partFootprint } from './part-footprint'
 
@@ -19,7 +27,8 @@ type LinearLayout =
       orientation: TrainPart['orientation']
       vertical: boolean
       start: { x: number, y: number }
-      total: number
+      /** Physical length in cells. The arithmetic total is trainSignedTotal. */
+      span: number
     }
   | { allowed: false, reason: string }
 
@@ -74,11 +83,11 @@ export function linearLayout(
       : a.offset.x - b.offset.x,
   )
   const start = { ...ordered[0]!.offset }
-  let total = 0
+  let span = 0
 
   for (const part of ordered) {
-    const expectedX = start.x + (vertical ? 0 : total)
-    const expectedY = start.y + (vertical ? total : 0)
+    const expectedX = start.x + (vertical ? 0 : span)
+    const expectedY = start.y + (vertical ? span : 0)
 
     if (
       part.offset.x !== expectedX ||
@@ -90,7 +99,7 @@ export function linearLayout(
       }
     }
 
-    total += part.value
+    span += part.value
   }
 
   return {
@@ -98,7 +107,7 @@ export function linearLayout(
     orientation,
     vertical,
     start,
-    total,
+    span,
   }
 }
 
@@ -140,8 +149,10 @@ export function makeLinearTrain(
       )
 
     for (const { part } of orderedParts) {
+      // Joining keeps every rod's own sign; mixed material is allowed.
       parts.push({
         value: part.value,
+        ...(part.sign !== undefined ? { sign: part.sign } : {}),
         orientation: part.orientation,
         offset: { x: cursor, y: 0 },
       })
@@ -179,16 +190,13 @@ export function orientTrain(
     )
   }
 
-  const total = train.parts.reduce(
-    (sum, part) => sum + part.value,
-    0,
-  )
-  // A straight train covers the same cells as one rod of its total length.
-  const { width, depth } = partFootprint({ value: total, offset: { x: 0, y: 0 }, orientation })
+  const span = trainMagnitude(train)
+  // A straight train covers the same cells as one rod of its physical length.
+  const { width, depth } = partFootprint({ value: span, offset: { x: 0, y: 0 }, orientation })
 
   if (width > bounds.columns || depth > bounds.rows) {
     return reject(
-      `A value-${total} train cannot fit ${orientation}ly ` +
+      `A length-${span} train cannot fit ${orientation}ly ` +
       `on this ${bounds.columns}-column, ${bounds.rows}-row board.`,
     )
   }
@@ -222,12 +230,17 @@ export function regroupTrainToOnes(
   const layout = linearLayout(train)
   if (!layout.allowed) return layout
 
+  const sign = trainUniformSign(train)
+  if (sign === undefined) return reject(MIXED_SIGN_REGROUP_REASON)
+
+  // -14 becomes fourteen negative ones: count by magnitude, keep the sign.
   return allow(copyTrain(
     train,
     Array.from(
-      { length: layout.total },
+      { length: layout.span },
       (_, index): TrainPart => ({
         value: 1,
+        ...signField(sign),
         orientation: layout.orientation,
         offset: {
           x: layout.start.x + (layout.vertical ? 0 : index),
@@ -245,7 +258,11 @@ export function regroupTrainToAddends(
   const layout = linearLayout(train)
   if (!layout.allowed) return layout
 
-  const candidates = addendPairs(layout.total)
+  const sign = trainUniformSign(train)
+  if (sign === undefined) return reject(MIXED_SIGN_REGROUP_REASON)
+
+  const total = trainSignedTotal(train)
+  const candidates = signedAddendPairs(total)
   const pair = requested
     ? candidates.find(candidate =>
         candidate[0] === requested[0] &&
@@ -257,7 +274,7 @@ export function regroupTrainToAddends(
     return reject(
       requested
         ? 'Choose two rods valued 1–10 that add to this object’s value.'
-        : `Value ${layout.total} has no two-addend arrangement using rods valued 1–10.`,
+        : `Value ${formatSigned(total)} has no two-addend arrangement using rods valued 1–10.`,
     )
   }
 
@@ -267,20 +284,24 @@ export function regroupTrainToAddends(
       x: train.anchor.x + layout.start.x + (layout.vertical ? 0 : cursor),
       y: train.anchor.y + layout.start.y + (layout.vertical ? cursor : 0),
     }
-    let remaining = addend
+    // Build from the magnitude, then apply the sign: lengths, counts and
+    // palette keys are never negative.
+    const magnitude = Math.abs(addend)
+    let remaining = magnitude
     let offset = 0
     const parts: TrainPart[] = []
     while (remaining > 0) {
       const value = Math.min(10, remaining) as CuisenaireRodValue
       parts.push({
         value,
+        ...signField(sign),
         orientation: layout.orientation,
         offset: { x: layout.vertical ? 0 : offset, y: layout.vertical ? offset : 0 },
       })
       remaining -= value
       offset += value
     }
-    cursor += addend
+    cursor += magnitude
     return {
       id: '', anchor, parts,
       ...(train.materialRole ? { materialRole: train.materialRole } : {}),
@@ -305,6 +326,7 @@ export function releaseTrain(
     },
     parts: [{
       value: part.value,
+      ...(part.sign !== undefined ? { sign: part.sign } : {}),
       orientation: part.orientation,
       offset: { x: 0, y: 0 },
     }],

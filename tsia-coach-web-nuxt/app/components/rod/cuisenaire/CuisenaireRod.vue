@@ -6,7 +6,10 @@ import {type RodProps, rodStyle} from "~/components/rod/rod.types.ts";
 const props = withDefaults(defineProps<RodProps>(), {
   presentation: 'raised',
   selected: false,
+  sign: 1,
 })
+
+const negative = computed(() => props.sign === -1)
 
 // Both flat presentations sit on the board plane; only the unit-divided one
 // also draws the unit cells the piece is made of.
@@ -37,9 +40,10 @@ const style = computed(() => ({
 <template>
   <div
     class="rod"
-    :class="{ 'rod--flat': flat, 'rod--units': unitDivided, 'rod--selected': selected }"
+    :class="{ 'rod--flat': flat, 'rod--units': unitDivided, 'rod--selected': selected, 'rod--negative': negative }"
     :style="style"
     :data-rod-presentation="presentation"
+    :data-rod-sign="negative ? 'negative' : 'positive'"
     :data-rod-label="label"
     :data-width-px="dimensions.width * unitSize"
   >
@@ -180,6 +184,29 @@ const style = computed(() => ({
 </style>
 
 <style scoped>
+/* A negative rod keeps its colour and footprint but its cap is recessed: a
+   flat rim around a hollow lit from the top left, so the upper-left inner
+   walls fall into shadow and the lower-right walls catch light. Everything is
+   painted on the existing surface, so hit testing, size and the selection
+   ring are unchanged, and no extra face can take input or focus. */
+.rod--negative [data-rod-surface] {
+  --rim: max(2px, min(4px, calc(var(--d) * 0.14)));
+
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--fill) 62%, black) 0%,
+      color-mix(in srgb, var(--fill) 88%, black) 55%,
+      var(--fill) 100%
+    );
+  box-shadow:
+    inset 0 0 0 var(--rim) var(--fill),
+    inset 0 0 0 calc(var(--rim) + 1px) color-mix(in srgb, var(--fill) 45%, black),
+    inset calc(var(--rim) + 3px) calc(var(--rim) + 3px) 5px rgb(0 0 0 / 40%),
+    inset calc(-1 * var(--rim) - 2px) calc(-1 * var(--rim) - 2px) 4px rgb(255 255 255 / 30%);
+  font-weight: 700;
+}
+
 /* Paint on the actual cap, so raised rods, towers and flat pieces all use
    their own surface geometry. The ring never changes layout or hit testing. */
 .rod--selected [data-rod-surface]::after {

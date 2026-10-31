@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import type { useRodScene } from './useRodScene'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
+import { trainUniformSign } from '~/components/rod/scene/rod-arithmetic'
 
 export function useFactorMenuChoice(
   scene: ReturnType<typeof useRodScene>,
@@ -26,6 +27,9 @@ export function useFactorMenuChoice(
     }
 
     const choices = scene.getFactorChoices(ids[0]!)
+    const train = scene.trains.value.find(item => item.id === ids[0])
+    // "2 rows of negative 7" describes the arrangement; its total is -14.
+    const rowName = train && trainUniformSign(train) === -1 ? 'negative ' : ''
     const anyAllowed = choices.some(choice => choice.result.allowed)
 
     const defaultResult = scene.check(ids, {
@@ -37,7 +41,7 @@ export function useFactorMenuChoice(
       label: 'Regroup to factors',
       children: choices.map(({ shape }) => ({
         kind: 'action',
-        label: `${shape.rows} rows of ${shape.columns}`,
+        label: `${shape.rows} rows of ${rowName}${shape.columns}`,
         action: {
           type: 'regroup-factors',
           shape,

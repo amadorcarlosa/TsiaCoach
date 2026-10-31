@@ -5,7 +5,7 @@ const baseURL = external ?? 'http://127.0.0.1:3117'
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: ['board-camera.spec.ts', 'playground-editing.spec.ts', 'fraction-authoring.spec.ts', 'shared-authoring.spec.ts', 'mathtabla.spec.ts', 'mathtabla-fraction.spec.ts', 'level-goals.spec.ts', 'level-files.spec.ts'],
+  testMatch: ['board-camera.spec.ts', 'playground-editing.spec.ts', 'fraction-authoring.spec.ts', 'shared-authoring.spec.ts', 'mathtabla.spec.ts', 'mathtabla-fraction.spec.ts', 'level-goals.spec.ts', 'level-files.spec.ts', 'negative-rods.spec.ts'],
   outputDir: './output/playwright/playground',
   workers: 1,
   use: {

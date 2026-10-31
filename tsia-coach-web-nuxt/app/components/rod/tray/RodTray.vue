@@ -13,7 +13,7 @@ import CuisenaireRod from "~/components/rod/cuisenaire/CuisenaireRod.vue";
 
 
 
-defineProps<RodTrayProps>()
+withDefaults(defineProps<RodTrayProps>(), { sign: 1 })
 
 const emit = defineEmits<{
   choose: [value: CuisenaireRodValue]
@@ -33,7 +33,7 @@ const emit = defineEmits<{
         :key="item.value"
         :class="styles.choice"
         type="button"
-        :aria-label=ariaRod(item.number)
+        :aria-label="ariaRod(item.number, sign)"
         :disabled="disabled"
         @click="emit('choose', item.value)"
     >
@@ -43,7 +43,8 @@ const emit = defineEmits<{
      :dimensions="{ width: item.value, depth: 1, height: 1 }"
      :unit-size="unitSize"
      :appearance="cuisenaireRodPalette[item.value]"
-     :label="String(item.value)"
+     :label="sign === -1 ? `−${item.value}` : String(item.value)"
+     :sign="sign"
  />
       </span>
 

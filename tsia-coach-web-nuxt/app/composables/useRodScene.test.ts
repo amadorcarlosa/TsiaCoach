@@ -998,7 +998,7 @@ describe('set-orientation', () => {
     expect(scene.trains.value[0]!.anchor).toEqual({ x: 3, y: 2 })
   })
 
-  it('rejects a value-13 train that cannot fit vertically', () => {
+  it('rejects a length-13 train that cannot fit vertically', () => {
     const scene = createScene()
 
     const id = createTrain(scene, 10, 3)
@@ -1009,7 +1009,7 @@ describe('set-orientation', () => {
       orientation: 'vertical',
     })).toEqual({
       allowed: false,
-      reason: 'A value-13 train cannot fit vertically on this 24-column, 12-row board.',
+      reason: 'A length-13 train cannot fit vertically on this 24-column, 12-row board.',
     })
     expect(sceneSnapshot(scene)).toEqual(before)
   })

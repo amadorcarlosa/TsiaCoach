@@ -117,7 +117,7 @@ function clear() {
       <label v-if="condition.type === 'region-total'">Value<input
         v-model.number="condition.value"
         type="number"
-        min="0"
+        :min="adapter.signedRegionTotals ? undefined : 0"
         step="1"
       ></label>
       <label v-if="condition.type === 'occupied-area'">Cells<input

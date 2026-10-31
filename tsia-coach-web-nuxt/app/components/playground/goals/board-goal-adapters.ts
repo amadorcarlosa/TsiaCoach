@@ -8,13 +8,15 @@ import { authoringGoalSchema } from './goal.schema'
 import type { BoardGoalAdapter, GoalCondition, GoalTarget } from './goal.types'
 import { occupiedCells, matchesRectangle, matchesExactFraction, type GoalRegion } from './goal-occupancy'
 import { contains, partFootprint } from '~/components/rod/scene/part-footprint'
+import { partSignedValue } from '~/components/rod/scene/rod-arithmetic'
 
 type Pair = GoalTarget & { numeratorCapacity: number; denominatorCapacity: number; read: (scene: SceneSnapshot) => { numerator: number; denominator: number } }
 const regionTypes = ['empty-region', 'region-total', 'occupied-area', 'filled-rectangle'] as const
-function createAdapter(regions: GoalRegion[], pairs: Pair[] = []): BoardGoalAdapter {
+function createAdapter(regions: GoalRegion[], pairs: Pair[] = [], options: { signedRegionTotals?: boolean } = {}): BoardGoalAdapter {
+  const signedRegionTotals = options.signedRegionTotals === true
   const supportedTypes: GoalCondition['type'][] = [...regionTypes, ...(pairs.length ? ['fraction-exact', 'empty-pair'] as const : [])]
   const adapter: BoardGoalAdapter = {
-    supportedTypes, regions, pairs,
+    supportedTypes, regions, pairs, signedRegionTotals,
     parse(input) {
       const parsed = authoringGoalSchema.safeParse(input)
       if (!parsed.success) return { allowed: false, reason: parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') }
@@ -31,6 +33,7 @@ function createAdapter(regions: GoalRegion[], pairs: Pair[] = []): BoardGoalAdap
         } else {
           const region = regions.find(region => region.id === condition.regionId)
           if (!region) return { allowed: false, reason: 'Unknown region.' }
+          if (condition.type === 'region-total' && condition.value < 0 && !signedRegionTotals) return { allowed: false, reason: 'This board accepts region totals of 0 or more.' }
           if (condition.type === 'occupied-area' && condition.cells > region.width * region.depth) return { allowed: false, reason: 'Occupied area exceeds region capacity.' }
           if (condition.type === 'filled-rectangle' && (condition.x + condition.columns > region.width || condition.y + condition.rows > region.depth)) return { allowed: false, reason: 'Rectangle exceeds region bounds.' }
         }
@@ -58,7 +61,8 @@ function createAdapter(regions: GoalRegion[], pairs: Pair[] = []): BoardGoalAdap
             case 'region-total': {
               let total = 0
               for (const train of scene) for (const part of train.parts) {
-                if (contains(region, partFootprint(part, train.anchor))) total += part.value
+                // Signed contribution; occupancy goals still read physical cells.
+                if (contains(region, partFootprint(part, train.anchor))) total += partSignedValue(part)
               }
               satisfied = total === condition.value
             }
@@ -76,7 +80,7 @@ export function createBarGoalAdapter(config: { columns: number; targetCount: num
   return createAdapter(geometry.targets.map((target, index) => ({ id: target.id, label: `Target ${index + 1}`, x: 0, y: target.row, width: config.columns, depth: 1 })))
 }
 export function createArrayGoalAdapter(config: { columns: number; rows: number }) {
-  return createAdapter([{ id: 'array', label: 'Array', x: 0, y: 0, width: config.columns, depth: config.rows }])
+  return createAdapter([{ id: 'array', label: 'Array', x: 0, y: 0, width: config.columns, depth: config.rows }], [], { signedRegionTotals: true })
 }
 export function createFractionGoalAdapter(config: { columns: number; pairCount: number }) {
   const geometry = getFractionTablaGeometry(config.pairCount, 1, config.columns)

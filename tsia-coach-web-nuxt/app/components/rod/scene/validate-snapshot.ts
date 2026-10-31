@@ -1,6 +1,7 @@
 import { materialRoles, type RodTrain, type ScenePolicy } from './rod.scene.types'
 import { copyScene, type SceneSnapshot } from './scene-snapshot'
 import { validateScene } from './rod-scene.placement'
+import { isRodSign } from './rod-arithmetic'
 export type SnapshotValidation = { allowed: true; trains: RodTrain[] } | { allowed: false; reason: string }
 /** Pure replacement validation. Screen orientation/editability is checked only at commit. */
 export function validateSnapshot(source: SceneSnapshot, policy: ScenePolicy): SnapshotValidation {
@@ -48,6 +49,16 @@ export function validateSnapshot(source: SceneSnapshot, policy: ScenePolicy): Sn
               part.value > 10
           ) {
               return reject('Rod values must be integers from 1 to 10.')
+          }
+
+          if (part.sign !== undefined && !isRodSign(part.sign)) {
+              return reject('Rod signs must be 1 or -1.')
+          }
+
+          if (part.sign === -1 && !policy.allowNegativeRods) {
+              return reject(
+                  'This board accepts positive rods only. Negative rods are available on the Array board.',
+              )
           }
 
           if (
