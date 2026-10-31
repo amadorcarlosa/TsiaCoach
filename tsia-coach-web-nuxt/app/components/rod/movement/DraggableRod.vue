@@ -78,6 +78,24 @@ const visualParts = computed(() => {
   }]
 })
 
+// What is drawn. Normally the parts themselves; during a zero-pair preview the
+// larger rod is drawn as ghost pieces over the same cells. The semantic object
+// (its name, value and input) still comes from visualParts.
+const drawnParts = computed(() => {
+  const preview = props.preview
+  if (preview?.role === 'decomposed') {
+    return preview.pieces.map(piece => ({
+      value: piece.value,
+      sign: piece.sign,
+      offset: piece.offset,
+      dimensions: arrayRodDimensions(piece.value, piece.orientation),
+      previewRole: piece.role as 'remainder' | 'cancelling' | undefined,
+    }))
+  }
+  const role = preview?.role === 'zero-pair' ? 'cancelling' as const : undefined
+  return visualParts.value.map(part => ({ ...part, previewRole: role }))
+})
+
 const train = computed(() => ({ parts: visualParts.value }))
 const totalValue = computed(() => trainSignedTotal(train.value))
 const signKind = computed(() => trainSignKind(train.value))
@@ -226,10 +244,12 @@ defineExpose({
         }"
       />
       <div
-          v-for="(part, index) in visualParts"
-          :key="index"
+          v-for="(part, index) in drawnParts"
+          :key="`${preview?.role ?? 'part'}-${index}`"
           class="train-part"
-          :data-train-part="index"
+          :class="part.previewRole && `train-part--${part.previewRole}`"
+          :data-train-part="preview?.role === 'decomposed' ? undefined : index"
+          :data-preview-role="part.previewRole"
           :data-part-value="part.value"
           :data-part-sign="part.sign"
           :style="{
@@ -246,6 +266,18 @@ defineExpose({
             :presentation="presentation"
             :selected="selected"
             :sign="part.sign"
+        />
+        <!-- Decorative boundary for a preview: hatched and dashed for the zero
+             pair, solid for what remains, so colour is never the only cue. -->
+        <span
+            v-if="part.previewRole"
+            class="preview-mark"
+            :class="`preview-mark--${part.previewRole}`"
+            :style="{
+              width: `${part.dimensions.width * cellSize}px`,
+              height: `${part.dimensions.depth * cellSize}px`,
+              transform: `translateZ(${presentation === 'raised' ? part.dimensions.height * cellSize + 2 : 2}px)`,
+            }"
         />
       </div>
     </div>
@@ -285,5 +317,27 @@ defineExpose({
 .train-part {
   position: absolute;
   transform-style: preserve-3d;
+}
+
+.preview-mark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+.preview-mark--cancelling {
+  border: 3px dashed var(--ui-warning, #d97706);
+  background: repeating-linear-gradient(
+    45deg,
+    rgb(255 255 255 / 0%) 0 5px,
+    color-mix(in srgb, var(--ui-warning, #d97706) 35%, transparent) 5px 8px
+  );
+}
+
+.preview-mark--remainder {
+  border: 3px solid var(--ui-success, #16a34a);
 }
 </style>

@@ -230,3 +230,8 @@ When using an already-running frontend, set `PLAYGROUND_URL` to that origin. API
 - Which future boards opt into signed arithmetic, and how their goals/readouts interpret it.
 
 These decisions do not prevent building the sign-aware foundation and backward-compatible persistence first.
+
+
+## Stage 6 detailed plan
+
+See [Stage 6: explicit zero-pair cancellation](negative-rods-stage-6-implementation-guide.md) for the next implementation milestone: preview and confirm cancellation of two independent opposite-sign rods, including visible decomposition for unequal magnitudes. This plan keeps broader mixed-train regrouping outside the first cancellation release.

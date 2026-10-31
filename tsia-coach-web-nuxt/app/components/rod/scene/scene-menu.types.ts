@@ -1,4 +1,4 @@
-import type { SceneAction } from './rod.scene.types'
+import type { SceneAction, SceneResult } from './rod.scene.types'
 
 export type SceneMenuAction = Extract<
     SceneAction,
@@ -16,12 +16,25 @@ export type SceneMenuAction = Extract<
     }
 >
 
+/**
+ * Requests a board opens instead of committing. Choosing one never mutates the
+ * scene: the board starts a flow (such as a preview) that commits separately.
+ */
+export type SceneMenuCommand = 'preview-zero-pair'
+
 export type SceneMenuChoice =
   | {
       kind: 'action'
       label: string
       action: SceneMenuAction
       checked?: boolean
+    }
+  | {
+      kind: 'command'
+      label: string
+      command: SceneMenuCommand
+      /** Availability, computed by the board from the current selection. */
+      result: SceneResult
     }
   | {
       kind: 'submenu'

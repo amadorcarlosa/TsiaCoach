@@ -1,5 +1,6 @@
 import type { Point } from '~/components/grid/gridPointer'
 import type { AreaGrouping, AreaGroupReading } from '~/components/tabla/area-grouping'
+import type { DeepReadonly } from 'vue'
 import type { CuisenaireRodValue } from '../rod.types'
 
 /** A rod's arithmetic sign. It never changes geometry, colour or collision. */
@@ -94,6 +95,14 @@ export type SceneAction =
     | { type: 'regroup-area'; grouping: AreaGrouping }
     | { type: 'ungroup' }
     | {
+      type: 'cancel-zero-pair'
+      /**
+       * The two trains exactly as the preview saw them. A stale-view guard,
+       * not a result: the scene recomputes the plan from its own data.
+       */
+      expectedInputs: readonly DeepReadonly<RodTrain>[]
+    }
+    | {
   type: 'set-orientation'
   orientation: TrainPart['orientation']
 }
@@ -142,6 +151,8 @@ export type ScenePolicy = {
    * importing a scene; boards without it accept positive material only.
    */
   allowNegativeRods?: boolean
+  /** Opt in to cancelling one positive and one negative rod as a zero pair. */
+  allowZeroPairCancellation?: boolean
 }
 
 export type SceneResult =

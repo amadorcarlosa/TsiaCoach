@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { SceneAction, SceneResult } from './rod.scene.types'
 import type {
-  SceneMenuAction, SceneMenuChoice,
+  SceneMenuAction, SceneMenuChoice, SceneMenuCommand,
   SceneMenuRequest,
 } from './scene-menu.types'
 
@@ -19,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   action: [action: SceneMenuAction]
+  command: [command: SceneMenuCommand]
   close: []
   'restore-focus': []
 }>()
@@ -35,7 +36,23 @@ function choose(action: SceneMenuAction): void {
   emit('close')
 }
 
+function runCommand(command: SceneMenuCommand): void {
+  // The board's flow takes focus next; returning it to the rod would steal it.
+  restoreFocus = false
+  emit('command', command)
+  emit('close')
+}
+
 function toMenuItem(choice: SceneMenuChoice): DropdownMenuItem {
+  if (choice.kind === 'command') {
+    return {
+      label: choice.label,
+      disabled: !choice.result.allowed,
+      description: choice.result.allowed ? undefined : choice.result.reason,
+      onSelect: () => runCommand(choice.command),
+    }
+  }
+
   if (choice.kind === 'submenu') {
     const empty = choice.children.length === 0
 

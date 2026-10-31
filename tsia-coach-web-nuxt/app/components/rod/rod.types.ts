@@ -2,6 +2,7 @@ import type { UnitDimensions } from "#shared/types/rods.ts"
 import type { DeepReadonly } from 'vue'
 import type { Point } from '~/components/grid/gridPointer'
 import type { RodSign, TrainPart } from './scene/rod.scene.types'
+import type { ZeroPairPiece } from './scene/zero-pair-cancellation'
 
 export type RodAppearance = {
     fill: string
@@ -16,6 +17,15 @@ export type RodAppearance = {
  * This is presentation only: values, footprints and dimensions are unchanged.
  */
 export type RodPresentation = 'raised' | 'flat' | 'flat-units'
+
+/**
+ * A decorative preview drawn on a piece, never scene data. 'zero-pair' marks
+ * the whole rod as cancelling material; 'decomposed' draws the rod as ghost
+ * pieces (remainder + cancelling part) over its unchanged footprint.
+ */
+export type RodPreview =
+    | { role: 'zero-pair' }
+    | { role: 'decomposed'; pieces: readonly ZeroPairPiece[] }
 
 export type RodProps = {
     dimensions: UnitDimensions
@@ -47,6 +57,8 @@ export type DragProps = {
     constrainPosition?: (position: Point, direction?: Point) => Point
     previewDelta?: Point
     presentation?: RodPresentation
+    /** Decorative only: the semantic object, its label and its input are unchanged. */
+    preview?: RodPreview
     /**
      * On a layered board, this piece is not on the layer being edited. It stays
      * visible and keeps its place in the scene, but takes no pointer, focus or

@@ -12,6 +12,10 @@ import type { BoardAdoption } from '~/composables/useLevelFiles'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
 import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
+import ZeroPairPreview from '~/components/rod/scene/ZeroPairPreview.vue'
+import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
+import { useCancellationPreview } from '~/composables/useCancellationPreview'
+import { useZeroPairMenuChoice } from '~/composables/useZeroPairMenuChoice'
 import ArrayPlaygroundShell from '~/components/playground/ArrayPlaygroundShell.vue'
 import type { CuisenaireRodValue } from '~/components/rod/rod.types'
 import {
@@ -20,7 +24,7 @@ import {
 } from '~/components/rod/array/array-rod.types'
 import { trainView } from '~/components/rod/scene/train-view'
 
-import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
+import type { SceneMenuChoice, SceneMenuCommand } from '~/components/rod/scene/scene-menu.types'
 import { useRodScene } from '~/composables/useRodScene'
 import { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 import { useFactorMenuChoice } from '~/composables/useFactorMenuChoice'
@@ -82,13 +86,25 @@ const policy: ScenePolicy = {
   allowFactors: true,
   // Array is the first signed board; the others stay positive-only.
   allowNegativeRods: true,
+  allowZeroPairCancellation: true,
 }
 const scene = useRodScene(policy)
+
+// While a zero pair is previewed, the board takes no edits at all.
+const preview = useCancellationPreview({
+  scene,
+  viewport: boardViewport,
+  disabled: () => editingDisabled.value,
+  beforeOpen: () => {
+    controls.cancelGestures()
+    controls.menu.close()
+  },
+})
 
 const controls = useRodPlaygroundInteraction({
   scene,
   viewport: boardViewport,
-  disabled: () => editingDisabled.value,
+  disabled: () => editingDisabled.value || preview.active.value,
   cancelVersion: () => props.cancelVersion?.() ?? 0,
 })
 
@@ -99,9 +115,20 @@ const {
   checkSelected,
   applySelected,
   addendMenuChoice,
-  captureScene,
-  replaceScene,
+  captureScene: captureCommitted,
+  replaceScene: replaceCommitted,
 } = controls
+
+// Authoring, import and capture never see a preview: it is dismissed first,
+// and ghost pieces are never scene data in any case.
+function captureScene() {
+  preview.dismiss('', false)
+  return captureCommitted()
+}
+function replaceScene(source: SceneSnapshot) {
+  preview.dismiss('', false)
+  return replaceCommitted(source)
+}
 
 const currentGoals = computed(() => createArrayGoalAdapter(dimensions.value))
 // Stable adapter identity: authoring services retain the adapter while its bounds change.
@@ -116,6 +143,8 @@ const goalAdapter: BoardGoalAdapter = {
 const board = computed(() => ({ kind: 'array' as const, config: { ...dimensions.value } }))
 
 function cancelViewGestures() {
+  // Pan, zoom, reset and resize move the board under any preview highlight.
+  preview.dismiss()
   controls.cancelGestures()
   menu.close()
 }
@@ -202,6 +231,11 @@ function resizeBoard() {
 defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene() }), clear: () => replaceScene([]) })
 
 const factorMenuChoice = useFactorMenuChoice(scene)
+const zeroPairMenuChoice = useZeroPairMenuChoice(scene)
+
+function onMenuCommand(command: SceneMenuCommand): void {
+  if (command === 'preview-zero-pair') preview.open([...scene.selection.value])
+}
 
 const message = scene.message
 
@@ -227,6 +261,7 @@ const selectedRod = computed(() => {
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   ...baseRodMenuChoices(addendMenuChoice.value),
   factorMenuChoice.value,
+  zeroPairMenuChoice.value,
   ...orientationMenuChoices(arrayRodOrientations, selectedRod.value?.orientation),
   deleteMenuChoice,
 ])
@@ -241,10 +276,12 @@ function onChoose(value: CuisenaireRodValue): void {
 }
 
 function onOrient(orientation: ArrayRodOrientation): void {
+  if (blocked.value) return
   applySelected({ type: 'set-orientation', orientation })
 }
 
 function onRemove(): void {
+  if (blocked.value) return
   applySelected({ type: 'delete' })
 }
 </script>
@@ -252,7 +289,7 @@ function onRemove(): void {
 <template>
   <ArrayPlaygroundShell
     :blocked="blocked"
-    :can-orient="orientation => checkSelected({ type: 'set-orientation', orientation }).allowed"
+    :can-orient="orientation => !blocked && checkSelected({ type: 'set-orientation', orientation }).allowed"
     :editing-disabled="editingDisabled"
     :message="message"
     :orientations="arrayRodOrientations"
@@ -261,7 +298,7 @@ function onRemove(): void {
     :rod-sign="rodSign"
     :total-readout="totalReadout"
     preview-notice="Portrait preview: columns 0–12. Rotate to landscape to edit."
-    :remove-disabled="!checkSelected({ type: 'delete' }).allowed"
+    :remove-disabled="blocked || !checkSelected({ type: 'delete' }).allowed"
     :selected-orientation="selectedRod?.orientation"
     :set-board-viewport="setBoardViewport"
     :set-workspace-tools="setWorkspaceTools"
@@ -341,6 +378,7 @@ function onRemove(): void {
             :pieces="renderedPieces"
             :cell-size="pieceCellSize"
             :controls="controls"
+            :previews="preview.previews.value"
           />
         </template>
       </ArrayRodTabla>
@@ -353,8 +391,15 @@ function onRemove(): void {
         :choices="menuChoices"
         :check="scene.check"
         @action="menu.applyAction"
+        @command="onMenuCommand"
         @close="menu.close"
         @restore-focus="menu.restoreFocus"
+      />
+      <ZeroPairPreview
+        :plan="preview.plan.value"
+        :announcement="preview.announcement.value"
+        @confirm="preview.confirm"
+        @keep="preview.dismiss()"
       />
     </template>
 

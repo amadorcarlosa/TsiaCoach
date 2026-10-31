@@ -15,6 +15,13 @@ import type {
 import { layeredRoleOf, validateScene } from '~/components/rod/scene/rod-scene.placement'
 import { signedAddendPairs } from '~/components/rod/scene/addend-groupings'
 import {
+    applyZeroPairPlan,
+    planZeroPair,
+    zeroPairBaseline,
+    zeroPairReasons,
+    type ZeroPairResult,
+} from '~/components/rod/scene/zero-pair-cancellation'
+import {
     MIXED_SIGN_REGROUP_REASON,
     isRodSign,
     signField,
@@ -506,6 +513,26 @@ export function useRodScene(policy: ScenePolicy) {
                     : reject(`Cannot regroup this area. ${result.reason}`)
             }
 
+            case 'cancel-zero-pair': {
+                // Only the two targets, exactly as the preview captured them.
+                const expectedIds = new Set(action.expectedInputs.map(train => train.id))
+                if (
+                    expectedIds.size !== action.expectedInputs.length ||
+                    expectedIds.size !== selectedIds.size ||
+                    [...selectedIds].some(id => !expectedIds.has(id)) ||
+                    zeroPairBaseline(action.expectedInputs, ids) !== zeroPairBaseline(selected, ids)
+                ) {
+                    return reject(zeroPairReasons.stale)
+                }
+
+                const planned = planZeroPair(current, [...selectedIds], {
+                    enabled: policy.allowZeroPairCancellation === true,
+                })
+                if (!planned.allowed) return planned
+
+                return validate(applyZeroPairPlan(current, planned.plan))
+            }
+
             case 'ungroup': {
                 const released: RodTrain[] = []
 
@@ -648,6 +675,20 @@ export function useRodScene(policy: ScenePolicy) {
         }))
     }
 
+    /**
+     * The plan a preview shows. Read-only: committing goes through apply()
+     * with 'cancel-zero-pair', which rebuilds and revalidates this plan.
+     */
+    function planZeroPairFor(ids: readonly string[]): ZeroPairResult {
+        if (!policy.editable()) return { allowed: false, reason: 'Editing is unavailable.' }
+        const planned = planZeroPair(trains.value, ids, {
+            enabled: policy.allowZeroPairCancellation === true,
+        })
+        if (!planned.allowed) return planned
+        const result = validateScene(applyZeroPairPlan(trains.value, planned.plan), policy)
+        return result.allowed ? planned : result
+    }
+
     function select(ids: readonly string[]): void {
         const existingIds = new Set(trains.value.map(train => train.id))
         selection.value = new Set(ids.filter(id => existingIds.has(id)))
@@ -747,5 +788,6 @@ export function useRodScene(policy: ScenePolicy) {
         getAddendChoices,
         getFactorChoices,
         getAreaGroupingChoices,
+        planZeroPair: planZeroPairFor,
     }
 }

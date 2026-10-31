@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import SceneRod from './SceneRod.vue'
 import SceneMarqueeOverlay from './SceneMarqueeOverlay.vue'
 import type { trainView } from './train-view'
-import type { RodPresentation } from '~/components/rod/rod.types'
+import type { RodPresentation, RodPreview } from '~/components/rod/rod.types'
 import type { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 
 type Piece = ReturnType<typeof trainView>
@@ -29,6 +29,8 @@ const props = defineProps<{
    * restoration are unaffected by which layer paints on top.
    */
   order?: ((piece: Piece) => number) | null
+  /** Decorative previews, such as a zero pair. Never counted or selectable. */
+  previews?: ReadonlyMap<string, RodPreview> | null
 }>()
 
 const drawn = computed(() => {
@@ -59,6 +61,7 @@ function visible(piece: Piece): boolean {
     :y="piece.y"
     :cell-size="cellSize"
     :presentation="presentations?.get(piece.id) ?? 'raised'"
+    :preview="previews?.get(piece.id)"
     :layer-inert="inertIds?.has(piece.id) ?? false"
     :selected="controls.highlightedIds.value.has(piece.id)"
     :disabled="controls.blocked.value"
