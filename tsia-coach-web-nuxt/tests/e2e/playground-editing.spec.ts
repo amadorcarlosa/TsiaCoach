@@ -1760,7 +1760,7 @@ test.describe('marquee selection', () => {
     await expect(first).toHaveClass(/--selected/)
   })
 
-  test('array marquee follows the tilted board', async ({ playground: p }) => {
+  test('array marquee follows the board tilt', async ({ playground: p }) => {
     await p.show('Array')
     const first = await p.add('Array', 'four')
     const second = await p.add('Array', 'two')
@@ -1775,15 +1775,23 @@ test.describe('marquee selection', () => {
         await expect(overlay).toBeVisible()
 
         // The overlay lives in board space, so on screen it is foreshortened
-        // by the tilt and overlaps each rod's ground footprint.
+        // by whatever tilt the board has (none on today's flat Array board)
+        // and overlaps each rod's ground footprint.
         const box = await overlay.boundingBox()
         if (!box) throw new Error('Missing marquee box')
 
-        const cell = await p.panel('Array').locator('[data-grid-world]').first()
-          .evaluate(world => parseFloat(getComputedStyle(world).getPropertyValue('--cell-size')))
-        const tilt = 15 * Math.PI / 180
+        // Read the tilt off the board instead of assuming one: rotateX(θ)
+        // leaves cos θ in m22, and an untilted board reports 1.
+        const { cell, cosTilt } = await p.panel('Array').locator('[data-grid-world]').first()
+          .evaluate(world => {
+            const style = getComputedStyle(world)
+            return {
+              cell: parseFloat(style.getPropertyValue('--cell-size')),
+              cosTilt: new DOMMatrixReadOnly(style.transform).m22,
+            }
+          })
         expect(box.width).toBeCloseTo((to.x - from.x) * cell, 0)
-        expect(box.height).toBeCloseTo((from.y - to.y) * cell * Math.cos(tilt), 0)
+        expect(box.height).toBeCloseTo((from.y - to.y) * cell * cosTilt, 0)
 
         for (const rod of [first, second]) {
           const footprint = await rod.boundingBox()
