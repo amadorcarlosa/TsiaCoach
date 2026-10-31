@@ -5,6 +5,7 @@ import {type RodProps, rodStyle} from "~/components/rod/rod.types.ts";
 
 const props = withDefaults(defineProps<RodProps>(), {
   presentation: 'raised',
+  selected: false,
 })
 
 // Both flat presentations sit on the board plane; only the unit-divided one
@@ -36,7 +37,7 @@ const style = computed(() => ({
 <template>
   <div
     class="rod"
-    :class="{ 'rod--flat': flat, 'rod--units': unitDivided }"
+    :class="{ 'rod--flat': flat, 'rod--units': unitDivided, 'rod--selected': selected }"
     :style="style"
     :data-rod-presentation="presentation"
     :data-rod-label="label"
@@ -175,5 +176,18 @@ const style = computed(() => ({
 .right {
   transform: translateX(var(--w)) rotateZ(90deg) rotateX(90deg);
   filter: brightness(0.7);
+}
+</style>
+
+<style scoped>
+/* Paint on the actual cap, so raised rods, towers and flat pieces all use
+   their own surface geometry. The ring never changes layout or hit testing. */
+.rod--selected [data-rod-surface]::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 2px solid var(--ui-primary);
+  box-shadow: 0 0 0 1px var(--mt-bg-elevated);
+  pointer-events: none;
 }
 </style>

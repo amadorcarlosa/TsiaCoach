@@ -216,6 +216,7 @@ defineExpose({
             :appearance="cuisenaireRodPalette[part.value]"
             :label="String(part.value)"
             :presentation="presentation"
+            :selected="selected"
         />
       </div>
     </div>

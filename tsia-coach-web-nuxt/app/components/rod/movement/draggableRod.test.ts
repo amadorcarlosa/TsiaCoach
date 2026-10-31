@@ -102,3 +102,18 @@ describe('addend group presentation', () => {
     expect(wrapper.get('[data-addend-group="1"]').attributes('style')).toContain('left: 242px')
   })
 })
+
+
+describe('selection on rod surfaces', () => {
+  it.each(['raised', 'flat', 'flat-units'] as const)('highlights every part of a selected %s train and clears on deselection', async presentation => {
+    const wrapper = rod({ parts: train, presentation, selected: true })
+    expect(wrapper.findAll('.rod--selected [data-rod-surface]')).toHaveLength(2)
+    expect(wrapper.get('[data-piece-id]').attributes('aria-label')).toContain('Selected.')
+    await wrapper.setProps({ selected: false })
+    expect(wrapper.findAll('.rod--selected')).toHaveLength(0)
+  })
+  it('highlights the cap of a tower using the same renderer', () => {
+    const wrapper = rod({ selected: true, dimensions: { width: 1, depth: 1, height: 4 } })
+    expect(wrapper.findAll('.rod--selected .top')).toHaveLength(1)
+  })
+})

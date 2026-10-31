@@ -23,6 +23,8 @@ export type RodProps = {
     appearance: RodAppearance
     label: string
     presentation?: RodPresentation
+    /** Visual state supplied by the interaction wrapper; owns no selection logic. */
+    selected?: boolean
 }
 
 export type DragProps = {
