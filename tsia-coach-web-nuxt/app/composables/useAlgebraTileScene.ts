@@ -1,6 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import { algebraTileDefinition, algebraTileDimensions, algebraTileTerms, algebraTileLabels, type AlgebraTile, type AlgebraTileTerm, type AlgebraTileSign } from '~/components/algebratiles/algebra-tile.types'
 import type { Point } from '~/components/grid/gridPointer'
+import { offsetsByDistance, onBoardRange } from '~/components/grid/nearest-offsets'
 import { createTurnMemory, edgeShift, settleTurn, shifted, type TurnedPiece } from '~/components/grid/rotation-fit'
 
 export type AlgebraTileAction =
@@ -113,9 +114,8 @@ export function useAlgebraTileScene(options: { editable: () => boolean; columns?
         : reject('Not enough room to turn here. Move the tile or clear the space first.')
     }
     if (action.type === 'clone') {
-      const offsets: Point[] = []
-      for (let y = -rows; y <= rows; y++) for (let x = -columns; x <= columns; x++) if (x || y) offsets.push({ x, y })
-      offsets.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) - Math.abs(b.x) - Math.abs(b.y) || b.x - a.x || b.y - a.y)
+      // Nearest on-board offsets first, generated lazily.
+      const offsets = offsetsByDistance(onBoardRange(selected.map(tile => ({ ...tile.anchor, ...algebraTileDimensions(tile) })), columns, rows))
       for (const offset of offsets) {
         const copies = selected.map(tile => ({ ...tile, id: '', anchor: { x: tile.anchor.x + offset.x, y: tile.anchor.y + offset.y } }))
         if (copies.every(tile => fits(tile, current))) return { allowed: true, tiles: [...current, ...copies] }

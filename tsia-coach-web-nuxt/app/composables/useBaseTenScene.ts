@@ -1,6 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import { baseTenCatalog, baseTenDimensions, defaultBaseTenPose, supportedBaseTenPoses, type BaseTenPose, playableDenominations, type BaseTenBlock, type PlayableDenomination } from '~/components/basetenblocks/base10.types'
 import type { Point } from '~/components/grid/gridPointer'
+import { offsetsByDistance, onBoardRange } from '~/components/grid/nearest-offsets'
 import { createTurnMemory, edgeShift, settleTurn, shifted, type TurnedPiece } from '~/components/grid/rotation-fit'
 
 export type BaseTenAction =
@@ -99,9 +100,8 @@ export function useBaseTenScene(options: { editable: () => boolean; columns?: nu
       return turn(current, oblong, 'rotate', block => { block.rotated = !block.rotated; return 'rotate' })
     }
     if (action.type === 'clone') {
-      const offsets: Point[] = []
-      for (let y = -rows; y <= rows; y++) for (let x = -columns; x <= columns; x++) if (x || y) offsets.push({ x, y })
-      offsets.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) - Math.abs(b.x) - Math.abs(b.y) || b.x - a.x || b.y - a.y)
+      // Nearest on-board offsets first, generated lazily.
+      const offsets = offsetsByDistance(onBoardRange(selected.map(block => ({ ...block.anchor, ...baseTenDimensions(block) })), columns, rows))
       for (const offset of offsets) {
         const copies = selected.map(block => ({ ...block, id: '', anchor: { x: block.anchor.x + offset.x, y: block.anchor.y + offset.y } }))
         if (copies.every(block => fits(block, current))) return { allowed: true, blocks: [...current, ...copies] }

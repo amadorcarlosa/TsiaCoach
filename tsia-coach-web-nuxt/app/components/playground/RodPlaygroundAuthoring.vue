@@ -11,7 +11,7 @@ import type { useRodScene } from '~/composables/useRodScene'
 import type { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 import { useLevelAuthoring } from '~/composables/useLevelAuthoring'
 import { useAuthoringControls } from '~/composables/useAuthoringControls'
-import { useLevelFiles } from '~/composables/useLevelFiles'
+import { useLevelFiles, type BoardAdoption } from '~/composables/useLevelFiles'
 
 type Interaction = ReturnType<typeof useRodPlaygroundInteraction>
 
@@ -25,6 +25,8 @@ const props = defineProps<{
   replaceScene: Interaction['replaceScene']
   blocked: () => boolean
   editingDisabled: () => boolean
+  // Lets an imported level switch the board, e.g. to its saved size.
+  adoptBoard?: BoardAdoption
 }>()
 
 const goalEditor = ref<InstanceType<typeof BoardGoalEditor> | null>(null)
@@ -61,6 +63,7 @@ const levelFiles = useLevelFiles({
   hasWorkingRods: () => props.scene.trains.value.length > 0,
   resolveDrafts: resolveDraft,
   onImported: authoringControls.reset,
+  adoptBoard: props.adoptBoard,
 })
 // A resize must accommodate every authored snapshot and goal, not just the active scene.
 defineExpose({

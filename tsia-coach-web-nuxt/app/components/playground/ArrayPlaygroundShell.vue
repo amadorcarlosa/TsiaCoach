@@ -114,7 +114,7 @@ const emit = defineEmits<{
         'array-shell-viewport--clipped': scrollable && phonePortrait,
       }]"
       :tabindex="navigable ? 0 : -1"
-      role="region"
+      :role="navigable ? 'region' : undefined"
       :aria-label="navigable ? 'Board workspace. Use arrow keys to pan.' : undefined"
       @pointermove="emit('boardPointerMove', $event)"
       @pointerup="emit('boardPointerEnd', $event)"
@@ -193,9 +193,7 @@ const emit = defineEmits<{
 .array-shell-viewport--clipped {
   overflow-x: hidden;
 }
-</style>
 
-<style scoped>
 .array-shell-viewport--navigable { height: min(60vh, 560px); min-height: 240px; overflow: auto; overscroll-behavior: contain; position: relative; border: 1px solid var(--mt-border); border-radius: var(--radius-md); touch-action: none; }
 .array-shell-viewport--navigable:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 2px; }
 .array-shell-viewport--panning { cursor: grab; }

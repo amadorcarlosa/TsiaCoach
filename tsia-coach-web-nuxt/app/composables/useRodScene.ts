@@ -26,6 +26,7 @@ import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
 import { contains, partFootprint, trainBounds, trainFootprints } from '~/components/rod/scene/part-footprint'
+import { offsetsByDistance, onBoardRange } from '~/components/grid/nearest-offsets'
 import {
     createTurnMemory,
     edgeShift,
@@ -281,20 +282,12 @@ export function useRodScene(policy: ScenePolicy) {
             case 'clone': {
                 // Search nearby offsets first. One shared offset preserves
                 // the selected trains' positions relative to each other.
-                const offsets = []
-
-                for (let y = -policy.rows; y <= policy.rows; y++) {
-                    for (let x = -policy.columns; x <= policy.columns; x++) {
-                        if (x !== 0 || y !== 0) offsets.push({ x, y })
-                    }
-                }
-
-                offsets.sort((a, b) =>
-                    (Math.abs(a.x) + Math.abs(a.y)) -
-                    (Math.abs(b.x) + Math.abs(b.y)) ||
-                    b.x - a.x ||
-                    b.y - a.y,
-                )
+                // Only offsets that keep the copy on the board are tried.
+                const offsets = offsetsByDistance(onBoardRange(
+                    selected.flatMap(trainFootprints),
+                    policy.columns,
+                    policy.rows,
+                ))
 
                 for (const offset of offsets) {
                     const copies = selected.map(train => ({

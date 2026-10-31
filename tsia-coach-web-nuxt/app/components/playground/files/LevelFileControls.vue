@@ -38,6 +38,9 @@ async function select(event: Event) {
           <dt>{{ key }}</dt><dd>{{ value }}</dd>
         </template>
       </dl>
+      <p v-if="files.preview.value.resizesBoard">
+        The board will change to this level's size.
+      </p>
       <p>Current authoring work and unsaved board changes will be replaced.</p>
       <button
         type="button"

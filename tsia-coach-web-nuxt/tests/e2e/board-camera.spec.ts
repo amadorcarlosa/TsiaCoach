@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { Touch } from './fixtures/playground-fixture'
 
 const arrayName = 'Array Rod Playground'
 const part = (value: number, x = 0) => ({ value, orientation: 'horizontal', offset: { x, y: 0 } })
@@ -90,8 +91,8 @@ test('shrinking checks saved steps even when the working board is empty', async 
   await rod.scrollIntoViewIfNeeded()
   await rod.locator('[data-rod-surface]').click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
-  await panel.getByLabel('Columns', { exact: true }).fill('24')
-  await panel.getByLabel('Rows', { exact: true }).fill('12')
+  await panel.getByRole('form', { name: 'Board dimensions' }).getByLabel('Columns', { exact: true }).fill('24')
+  await panel.getByRole('form', { name: 'Board dimensions' }).getByLabel('Rows', { exact: true }).fill('12')
   await panel.getByRole('button', { name: 'Resize board', exact: true }).click()
   await expect(panel).toContainText('Cannot resize:')
   await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-columns', '100')
@@ -123,4 +124,75 @@ test('marquee selection uses board coordinates after zoom and pan', async ({ pag
   await page.keyboard.press('ArrowRight')
   await expect(rod).toHaveAttribute('aria-label', /column 21, row 15/)
   await expect(panel.locator('[data-piece-id="two"]')).toHaveAttribute('aria-label', /column 28, row 15/)
+})
+
+
+test.describe('touch board navigation', () => {
+  test.use({ contextOptions: { hasTouch: true, reducedMotion: 'reduce' } })
+  test('pan mode captures touch without creating a selection', async ({ page }) => {
+    const panel = page.getByRole('tabpanel', { name: arrayName, exact: true })
+    const viewport = panel.getByRole('region', { name: /Board workspace/ })
+    await panel.getByRole('button', { name: 'Pan board', exact: true }).tap()
+    await page.evaluate(() => window.scrollTo(0, 0))
+    const box = await viewport.boundingBox()
+    if (!box) throw new Error('Missing viewport')
+    const touch = new Touch(page)
+    await touch.down(1, { x: box.x + 300, y: box.y + 150 })
+    await touch.move(1, { x: box.x + 100, y: box.y + 75 })
+    await touch.up(1)
+    await expect.poll(() => viewport.evaluate(el => el.scrollLeft)).toBeGreaterThan(100)
+    await expect(panel.locator('[data-piece-id]')).toHaveCount(0)
+    await panel.getByRole('button', { name: 'Reset view', exact: true }).tap()
+    await expect.poll(() => viewport.evaluate(el => [el.scrollLeft, el.scrollTop])).toEqual([0, 0])
+  })
+})
+
+
+test('zooming cancels an unfinished drag without moving the rod', async ({ page }) => {
+  const panel = page.getByRole('tabpanel', { name: arrayName, exact: true })
+  await panel.getByRole('button', { name: 'Choose five rod', exact: true }).click()
+  const rod = panel.locator('[data-piece-id]')
+  const box = await rod.locator('[data-rod-surface]').boundingBox()
+  if (!box) throw new Error('Missing rod')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2 + 60, { steps: 8 })
+  await panel.getByLabel('Zoom', { exact: true }).selectOption('0.5')
+  await page.mouse.up()
+  await expect(rod).toHaveAttribute('aria-label', /column 0, row 0/)
+  await expect.poll(() => rod.evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41)).toBe(0)
+})
+
+test('shrinking also validates saved goals against the new capacity', async ({ page }) => {
+  const panel = page.getByRole('tabpanel', { name: arrayName, exact: true })
+  const level = document([])
+  Object.assign(level.steps[0]!, { goal: { type: 'all', conditions: [{ type: 'filled-rectangle', regionId: 'array', x: 80, y: 80, columns: 10, rows: 10 }] } })
+  await panel.locator('input[type=file]').setInputFiles({ name: 'goal.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(level)) })
+  await panel.getByRole('group', { name: 'Replace level confirmation' }).getByRole('button', { name: 'Replace', exact: true }).click()
+  await panel.getByRole('form', { name: 'Board dimensions' }).getByLabel('Columns', { exact: true }).fill('24')
+  await panel.getByRole('form', { name: 'Board dimensions' }).getByLabel('Rows', { exact: true }).fill('12')
+  await panel.getByRole('button', { name: 'Resize board', exact: true }).click()
+  await expect(panel).toContainText('Cannot resize:')
+  await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-columns', '100')
+})
+
+test('importing a level adopts its saved board size', async ({ page }) => {
+  const panel = page.getByRole('tabpanel', { name: arrayName, exact: true })
+  const size = panel.getByRole('form', { name: 'Board dimensions' })
+  await size.getByLabel('Columns').fill('30')
+  await size.getByLabel('Rows').fill('20')
+  await size.getByRole('button', { name: 'Resize board', exact: true }).click()
+  await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-columns', '30')
+
+  await panel.locator('input[type=file]').setInputFiles({ name: 'large.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document([
+    { id: 'far', anchor: { x: 90, y: 95 }, parts: [part(5)] },
+  ]))) })
+  const confirmation = panel.getByRole('group', { name: 'Replace level confirmation' })
+  await expect(confirmation).toContainText("The board will change to this level's size.")
+  await confirmation.getByRole('button', { name: 'Replace', exact: true }).click()
+
+  await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-columns', '100')
+  await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-rows', '100')
+  await expect(size.getByLabel('Columns')).toHaveValue('100')
+  await expect(panel.locator('[data-piece-id="far"]')).toHaveAttribute('aria-label', /column 90, row 95/)
 })

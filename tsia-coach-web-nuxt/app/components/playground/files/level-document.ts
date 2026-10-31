@@ -8,7 +8,7 @@ export type LevelDocumentAdapter = {
   goals: GoalAdapter
   validateSnapshot: (snapshot: SceneSnapshot) => SceneResult
 }
-function sameBoard(a: BoardDescriptor, b: BoardDescriptor): boolean {
+export function sameBoard(a: BoardDescriptor, b: BoardDescriptor): boolean {
   switch (a.kind) {
     case 'bar': return b.kind === 'bar' && a.config.columns === b.config.columns && a.config.targetCount === b.config.targetCount
     case 'array': return b.kind === 'array' && a.config.columns === b.config.columns && a.config.rows === b.config.rows
@@ -20,13 +20,21 @@ function sameBoard(a: BoardDescriptor, b: BoardDescriptor): boolean {
     case 'mathtabla': return b.kind === 'mathtabla' && a.config.centralColumns === b.config.centralColumns && a.config.centralRows === b.config.centralRows && a.config.activity === b.config.activity
   }
 }
+/** Names a board's kind and configuration, e.g. "an array board (100 columns, 100 rows)". */
+function describeBoard(board: BoardDescriptor): string {
+  const settings = Object.entries(board.config)
+    .map(([key, value]) => `${value} ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}`)
+    .join(', ')
+  const article = /^[aeiou]/.test(board.kind) ? 'an' : 'a'
+  return `${article} ${board.kind} board (${settings})`
+}
 /** Only the activity differs: say so, rather than blaming the board size. */
 function activityMismatch(document: BoardDescriptor, playground: BoardDescriptor): string {
   if (
     document.kind !== 'mathtabla' || playground.kind !== 'mathtabla' ||
     document.config.centralColumns !== playground.config.centralColumns ||
     document.config.centralRows !== playground.config.centralRows
-  ) return 'Board kind or configuration does not match this playground.'
+  ) return `This level was made for ${describeBoard(document)}, but this playground is ${describeBoard(playground)}.`
 
   const name = (board: Extract<BoardDescriptor, { kind: 'mathtabla' }>) =>
     board.config.activity ?? 'area'

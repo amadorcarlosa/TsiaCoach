@@ -6,6 +6,8 @@ import { useBoardCamera } from '~/composables/useBoardCamera'
 import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
 import type { ScenePolicy } from '~/components/rod/scene/rod.scene.types'
 import type { BoardGoalAdapter } from './goals/goal.types'
+import type { LevelDocumentAdapter } from './files/level-document'
+import type { BoardAdoption } from '~/composables/useLevelFiles'
 import ArrayRodTabla from '~/components/tabla/ArrayRodTabla.vue'
 import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import SceneMenu from '~/components/rod/scene/SceneMenu.vue'
@@ -132,30 +134,65 @@ watch(editingDisabled, disabled => {
   if (disabled) camera.endPan()
 })
 
+const MAX_BOARD_SIZE = 500
+const validSize = (value: number) => Number.isInteger(value) && value >= 1 && value <= MAX_BOARD_SIZE
+
+/** Validation for a board of another size; the live board is untouched. */
+function adapterForSize(columns: number, rows: number): LevelDocumentAdapter {
+  const nextPolicy = { ...policy, columns, rows }
+  return {
+    board: { kind: 'array', config: { columns, rows } },
+    goals: createArrayGoalAdapter({ columns, rows }),
+    validateSnapshot: snapshot => validateSnapshot(snapshot, nextPolicy),
+  }
+}
+
+function applySize(columns: number, rows: number) {
+  cancelViewGestures()
+  dimensions.value = { columns, rows }
+  draftColumns.value = columns
+  draftRows.value = rows
+  sizeMessage.value = `Board resized to ${columns} columns by ${rows} rows.`
+  void camera.reset()
+}
+
+// An imported level brings its own size; the import replaces the working
+// board, so only the file's steps and goals need to fit.
+const adoptBoard: BoardAdoption = {
+  adapterFor: board => board.kind === 'array' &&
+    validSize(board.config.columns) && validSize(board.config.rows)
+    ? adapterForSize(board.config.columns, board.config.rows)
+    : null,
+  apply: board => {
+    if (board.kind !== 'array') return () => {}
+    const before = { ...dimensions.value }
+    const message = sizeMessage.value
+    applySize(board.config.columns, board.config.rows)
+    return () => {
+      dimensions.value = before
+      draftColumns.value = before.columns
+      draftRows.value = before.rows
+      sizeMessage.value = message
+    }
+  },
+}
+
 function resizeBoard() {
   const columns = Number(draftColumns.value)
   const rows = Number(draftRows.value)
-  if (![columns, rows].every(value => Number.isInteger(value) && value >= 1 && value <= 500)) {
-    sizeMessage.value = 'Use whole-number dimensions from 1 to 500.'
+  if (!validSize(columns) || !validSize(rows)) {
+    sizeMessage.value = `Use whole-number dimensions from 1 to ${MAX_BOARD_SIZE}.`
     return
   }
-  const nextPolicy = { ...policy, columns, rows }
-  const validate = (snapshot: Parameters<typeof validateSnapshot>[0]) => validateSnapshot(snapshot, nextPolicy)
-  const working = validate(scene.trains.value)
-  const authored = authoringPanel.value?.checkConfiguration({
-    board: { kind: 'array', config: { columns, rows } },
-    goals: createArrayGoalAdapter({ columns, rows }),
-    validateSnapshot: validate,
-  })
+  const next = adapterForSize(columns, rows)
+  const working = next.validateSnapshot(scene.trains.value)
+  const authored = authoringPanel.value?.checkConfiguration(next)
   const failure = !working.allowed ? working : authored && !authored.allowed ? authored : null
   if (failure) {
     sizeMessage.value = `Cannot resize: ${failure.reason}`
     return
   }
-  cancelViewGestures()
-  dimensions.value = { columns, rows }
-  sizeMessage.value = `Board resized to ${columns} columns by ${rows} rows.`
-  void camera.reset()
+  applySize(columns, rows)
 }
 
 defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene() }), clear: () => replaceScene([]) })
@@ -242,7 +279,7 @@ function onRemove(): void {
           v-model.number="draftColumns"
           type="number"
           min="1"
-          max="500"
+          :max="MAX_BOARD_SIZE"
           required
           :disabled="editingDisabled"
         ></label>
@@ -250,7 +287,7 @@ function onRemove(): void {
           v-model.number="draftRows"
           type="number"
           min="1"
-          max="500"
+          :max="MAX_BOARD_SIZE"
           required
           :disabled="editingDisabled"
         ></label>
@@ -318,6 +355,7 @@ function onRemove(): void {
         :replace-scene="replaceScene"
         :blocked="() => blocked"
         :editing-disabled="() => editingDisabled"
+        :adopt-board="adoptBoard"
       />
     </template>
   </ArrayPlaygroundShell>
