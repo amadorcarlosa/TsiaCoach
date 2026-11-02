@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import SceneRod from './SceneRod.vue'
 import SceneMarqueeOverlay from './SceneMarqueeOverlay.vue'
 import type { trainView } from './train-view'
-import type { RodPresentation, RodPreview } from '~/components/rod/rod.types'
+import type { RodPresentation, RodPreview, ZeroPlaneView } from '~/components/rod/rod.types'
 import type { useRodPlaygroundInteraction } from '~/composables/useRodPlaygroundInteraction'
 
 type Piece = ReturnType<typeof trainView>
@@ -11,6 +11,7 @@ type Piece = ReturnType<typeof trainView>
 const props = defineProps<{
   pieces: readonly Piece[]
   cellSize: number
+  zeroPlane?: ZeroPlaneView
   controls: ReturnType<typeof useRodPlaygroundInteraction>
   // Portrait preview: hide pieces wholly outside the first N columns. Null shows all.
   clipColumns?: number | null
@@ -60,6 +61,7 @@ function visible(piece: Piece): boolean {
     :x="piece.x"
     :y="piece.y"
     :cell-size="cellSize"
+    :zero-plane="zeroPlane"
     :presentation="presentations?.get(piece.id) ?? 'raised'"
     :preview="previews?.get(piece.id)"
     :layer-inert="inertIds?.has(piece.id) ?? false"

@@ -25,13 +25,19 @@ export type RodPresentation = 'raised' | 'flat' | 'flat-units'
  */
 export type RodPreview =
     | { role: 'zero-pair' }
+    /** A planned command would remove or replace this piece. */
+    | { role: 'removed' }
     | { role: 'decomposed'; pieces: readonly ZeroPairPiece[] }
+
+/** Opt-in view experiment; depth is pixels and never changes logical geometry. */
+export type ZeroPlaneView = { depth: number; tilt: number; transparent: boolean }
 
 export type RodProps = {
     dimensions: UnitDimensions
     unitSize: number
     appearance: RodAppearance
     label: string
+    zeroPlane?: ZeroPlaneView
     presentation?: RodPresentation
     /** Visual state supplied by the interaction wrapper; owns no selection logic. */
     selected?: boolean
@@ -56,6 +62,7 @@ export type DragProps = {
     beginMove?: () => boolean
     constrainPosition?: (position: Point, direction?: Point) => Point
     previewDelta?: Point
+    zeroPlane?: ZeroPlaneView
     presentation?: RodPresentation
     /** Decorative only: the semantic object, its label and its input are unchanged. */
     preview?: RodPreview

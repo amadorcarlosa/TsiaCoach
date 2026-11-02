@@ -19,7 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   action: [action: SceneMenuAction]
-  command: [command: SceneMenuCommand]
+  command: [command: SceneMenuCommand, params?: Readonly<Record<string, number>>]
   close: []
   'restore-focus': []
 }>()
@@ -36,10 +36,10 @@ function choose(action: SceneMenuAction): void {
   emit('close')
 }
 
-function runCommand(command: SceneMenuCommand): void {
+function runCommand(command: SceneMenuCommand, params?: Readonly<Record<string, number>>): void {
   // The board's flow takes focus next; returning it to the rod would steal it.
   restoreFocus = false
-  emit('command', command)
+  emit('command', command, params)
   emit('close')
 }
 
@@ -49,7 +49,7 @@ function toMenuItem(choice: SceneMenuChoice): DropdownMenuItem {
       label: choice.label,
       disabled: !choice.result.allowed,
       description: choice.result.allowed ? undefined : choice.result.reason,
-      onSelect: () => runCommand(choice.command),
+      onSelect: () => runCommand(choice.command, choice.params),
     }
   }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { authoringGoalSchema } from '../goals/goal.schema'
+import { systemsBoardConfigSchema } from '~/components/systems/systems.schema'
 const positiveInteger = z.number().int().min(1)
 const id = z.string().min(1).refine(value => value.trim().length > 0)
 export const pointSchema = z.object({ x: z.number().int(), y: z.number().int() }).strict()
@@ -39,6 +40,9 @@ export const boardDescriptorSchema = z.discriminatedUnion('kind', [
     centralRows: positiveInteger,
     activity: z.literal('fraction-multiplication').optional(),
   }).strict() }).strict(),
+  // The whole problem travels with the rods: a snapshot without its
+  // equations is not a reproducible activity.
+  z.object({ kind: z.literal('systems'), config: systemsBoardConfigSchema }).strict(),
 ])
 export const levelDocumentSchema = z.object({ version: z.literal(1), board: boardDescriptorSchema, steps: z.array(stepSchema) }).strict()
 export type BoardDescriptor = z.infer<typeof boardDescriptorSchema>

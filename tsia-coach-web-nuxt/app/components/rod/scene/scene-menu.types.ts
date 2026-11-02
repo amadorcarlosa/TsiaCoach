@@ -20,7 +20,14 @@ export type SceneMenuAction = Extract<
  * Requests a board opens instead of committing. Choosing one never mutates the
  * scene: the board starts a flow (such as a preview) that commits separately.
  */
-export type SceneMenuCommand = 'preview-zero-pair'
+export type SceneMenuCommand =
+  | 'preview-zero-pair'
+  | 'systems-repeat-row'
+  | 'systems-arrange-rows'
+  | 'systems-redistribute'
+  | 'systems-test-candidate'
+  | 'region-add-here'
+  | 'region-select-group'
 
 export type SceneMenuChoice =
   | {
@@ -33,6 +40,8 @@ export type SceneMenuChoice =
       kind: 'command'
       label: string
       command: SceneMenuCommand
+      /** Command arguments, such as a chosen x and y. Never scene data. */
+      params?: Readonly<Record<string, number>>
       /** Availability, computed by the board from the current selection. */
       result: SceneResult
     }

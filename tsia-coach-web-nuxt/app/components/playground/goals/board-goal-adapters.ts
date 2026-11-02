@@ -9,6 +9,8 @@ import type { BoardGoalAdapter, GoalCondition, GoalTarget } from './goal.types'
 import { occupiedCells, matchesRectangle, matchesExactFraction, type GoalRegion } from './goal-occupancy'
 import { contains, partFootprint } from '~/components/rod/scene/part-footprint'
 import { partSignedValue } from '~/components/rod/scene/rod-arithmetic'
+import { systemsGeometry } from '~/components/systems/systems.geometry'
+import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
 
 type Pair = GoalTarget & { numeratorCapacity: number; denominatorCapacity: number; read: (scene: SceneSnapshot) => { numerator: number; denominator: number } }
 const regionTypes = ['empty-region', 'region-total', 'occupied-area', 'filled-rectangle'] as const
@@ -97,5 +99,17 @@ export function createMathTablaGoalAdapter(config: { centralColumns: number; cen
     numeratorCapacity: id === 'horizontal' ? config.centralColumns : config.centralRows,
     denominatorCapacity: id === 'horizontal' ? config.centralColumns : config.centralRows,
     read: scene => getMathTablaReadouts(scene, geometry)[id],
+  })))
+}
+
+/**
+ * Systems boards keep the generic region goals for each variable group.
+ * Whether the system is solved is derived from the rods and shown separately;
+ * an occupied-area goal is not a claim that the system holds.
+ */
+export function createSystemsGoalAdapter(config: SystemsBoardConfig) {
+  const geometry = systemsGeometry(config)
+  return createAdapter(geometry.variableRegions.map(region => ({
+    id: region.id, label: region.label, x: region.x, y: region.y, width: region.width, depth: region.depth,
   })))
 }

@@ -128,12 +128,14 @@ export function useSceneInteraction(options: {
         cancelMove()
     }
 
-    function previewFor(id: string): Point | undefined {
+    // Rod followers exclude the leader (GSAP draws it); board decorations may
+    // request its delta too so cutouts track the exact same movement session.
+    function previewFor(id: string, includeLeader = false): Point | undefined {
         const current = session.value
 
         if (
             !current ||
-            current.leaderId === id ||
+            (!includeLeader && current.leaderId === id) ||
             !current.ids.includes(id)
         ) return undefined
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import ZeroPlaneRod from './ZeroPlaneRod.vue'
 import {type RodProps, rodStyle} from "~/components/rod/rod.types.ts";
 
 
@@ -38,7 +39,13 @@ const style = computed(() => ({
 </script>
 
 <template>
+  <ZeroPlaneRod
+    v-if="zeroPlane"
+    :dimensions="dimensions" :unit-size="unitSize" :appearance="appearance"
+    :label="label" :sign="sign" :selected="selected" :view="zeroPlane"
+  />
   <div
+    v-else
     class="rod"
     :class="{ 'rod--flat': flat, 'rod--units': unitDivided, 'rod--selected': selected, 'rod--negative': negative }"
     :style="style"

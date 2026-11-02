@@ -89,10 +89,12 @@ const drawnParts = computed(() => {
       sign: piece.sign,
       offset: piece.offset,
       dimensions: arrayRodDimensions(piece.value, piece.orientation),
-      previewRole: piece.role as 'remainder' | 'cancelling' | undefined,
+      previewRole: piece.role as 'remainder' | 'cancelling' | 'removed' | undefined,
     }))
   }
-  const role = preview?.role === 'zero-pair' ? 'cancelling' as const : undefined
+  const role = preview?.role === 'zero-pair'
+    ? 'cancelling' as const
+    : preview?.role === 'removed' ? 'removed' as const : undefined
   return visualParts.value.map(part => ({ ...part, previewRole: role }))
 })
 
@@ -207,7 +209,7 @@ defineExpose({
   <div
       ref="element"
       class="draggable-rod"
-      :class="{ 'draggable-rod--selected': selected, 'draggable-rod--inert': layerInert }"
+      :class="{ 'draggable-rod--selected': selected, 'draggable-rod--inert': layerInert, 'draggable-rod--zero-plane': Boolean(zeroPlane) }"
       :data-piece-id="id"
       :data-presentation="presentation"
       :data-layer-inert="layerInert ? 'true' : undefined"
@@ -228,7 +230,7 @@ defineExpose({
       @pointerdown.capture="onSelectionPointerDown"
       @keydown.capture="onSelectionKeydown"
   >
-    <div class="rod-visual" :class="raisedPiece.visual" :style="raisedPieceStyle">
+    <div class="rod-visual" :class="zeroPlane ? 'zero-plane-visual' : raisedPiece.visual" :style="zeroPlane ? undefined : raisedPieceStyle">
       <div
         v-for="group in addendGroups"
         :key="`addend-${group.group}`"
@@ -266,6 +268,7 @@ defineExpose({
             :presentation="presentation"
             :selected="selected"
             :sign="part.sign"
+            :zero-plane="zeroPlane"
         />
         <!-- Decorative boundary for a preview: hatched and dashed for the zero
              pair, solid for what remains, so colour is never the only cue. -->
@@ -285,6 +288,12 @@ defineExpose({
 </template>
 
 <style scoped>
+/* Only the opt-in projected hit surface takes pointer input; empty logical
+   wrapper rectangles must not occlude another rod's recessed visible face. */
+.draggable-rod--zero-plane { pointer-events: none; }
+.draggable-rod--zero-plane.draggable-rod--inert :deep(.hit-surface) { pointer-events: none; }
+.zero-plane-visual { position: absolute; inset: 0; transform-style: preserve-3d; }
+
 .draggable-rod {
   position: absolute;
   transform-style: preserve-3d;
@@ -334,6 +343,15 @@ defineExpose({
     45deg,
     rgb(255 255 255 / 0%) 0 5px,
     color-mix(in srgb, var(--ui-warning, #d97706) 35%, transparent) 5px 8px
+  );
+}
+
+.preview-mark--removed {
+  border: 3px dashed var(--ui-error, #dc2626);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(255 255 255 / 0%) 0 5px,
+    color-mix(in srgb, var(--ui-error, #dc2626) 35%, transparent) 5px 8px
   );
 }
 

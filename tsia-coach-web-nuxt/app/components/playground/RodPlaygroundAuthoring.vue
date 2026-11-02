@@ -67,6 +67,8 @@ const levelFiles = useLevelFiles({
 })
 // A resize must accommodate every authored snapshot and goal, not just the active scene.
 defineExpose({
+  /** Captured steps; a board that changes its problem must not reinterpret them. */
+  stepCount: () => authoring.steps.value.length,
   checkConfiguration(adapter: LevelDocumentAdapter) {
     if (!resolveDraft()) return { allowed: false as const, reason: 'Finish the goal draft before resizing.' }
     return validateLevelDocument({ version: 1, board: adapter.board, steps: authoring.steps.value }, adapter)

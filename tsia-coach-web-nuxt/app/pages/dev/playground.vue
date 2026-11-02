@@ -8,6 +8,7 @@ import AlgebraTilePlayground from '~/components/playground/AlgebraTilePlayground
 import BarRodPlayground from '~/components/playground/BarRodPlayground.vue'
 import FractionPlayground from '~/components/playground/FractionPlayground.vue'
 import MathTablaPlayground from '~/components/playground/MathTablaPlayground.vue'
+import SystemsOfEquationsPlayground from '~/components/playground/SystemsOfEquationsPlayground.vue'
 
 const tabs = playgroundTabs.map(({ id, label }) => ({
   label,
@@ -82,6 +83,12 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
       <template #mathTablaPlayground>
         <MathTablaPlayground
           :active="activeTab === 'mathTablaPlayground'"
+          :cancel-version="readCancelVersion"
+        />
+      </template>
+      <template #systemsPlayground>
+        <SystemsOfEquationsPlayground
+          :active="activeTab === 'systemsPlayground'"
           :cancel-version="readCancelVersion"
         />
       </template>

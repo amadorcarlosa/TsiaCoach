@@ -157,3 +157,17 @@ describe('DraggableRod negative rods', () => {
     expect(wrapper.get('.rod').classes()).toEqual(expect.arrayContaining(['rod--negative', 'rod--selected']))
   })
 })
+
+
+describe('opt-in zero-plane rendering', () => {
+  it('uses the shared sign and selection data without altering the semantic train', () => {
+    const wrapper = rod({ selected: true, zeroPlane: { depth: 36, tilt: 28, transparent: true }, parts: [
+      { value: 10, sign: -1, orientation: 'horizontal', offset: { x: 0, y: 0 } },
+      { value: 4, sign: -1, orientation: 'horizontal', offset: { x: 10, y: 0 } },
+    ] })
+    expect(wrapper.findAll('[data-zero-sign="-1"]')).toHaveLength(2)
+    expect(wrapper.findAll('.zero-rod.selected')).toHaveLength(2)
+    expect(wrapper.findAll('[data-piece-id]')).toHaveLength(1)
+    expect(wrapper.get('[data-piece-id]').attributes('aria-label')).toContain('-14')
+  })
+})

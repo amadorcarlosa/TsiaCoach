@@ -2,6 +2,18 @@ import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import type { SceneResult } from '~/components/rod/scene/rod.scene.types'
 import type { GoalAdapter, Validation } from '../goals/goal.types'
 import { levelDocumentSchema, type BoardDescriptor, type LevelDocumentV1 } from './level-document.schema'
+import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
+import { equationText } from '~/components/systems/systems.geometry'
+
+/** Field-by-field, so key order in a hand-written file never matters. */
+function sameSystem(a: SystemsBoardConfig, b: SystemsBoardConfig): boolean {
+  return a.laneColumns === b.laneColumns && a.regionGapRows === b.regionGapRows &&
+    a.system.equations.every((equation, index) => {
+      const other = b.system.equations[index]
+      return other !== undefined && equation.id === other.id && equation.targetArea === other.targetArea &&
+        equation.coefficients.x === other.coefficients.x && equation.coefficients.y === other.coefficients.y
+    })
+}
 export type { BoardDescriptor, LevelDocumentV1 } from './level-document.schema'
 export type LevelDocumentAdapter = {
   board: BoardDescriptor
@@ -18,10 +30,15 @@ export function sameBoard(a: BoardDescriptor, b: BoardDescriptor): boolean {
     // must not load into one. The scene check below then runs under the right
     // mode rather than reinterpreting the file.
     case 'mathtabla': return b.kind === 'mathtabla' && a.config.centralColumns === b.config.centralColumns && a.config.centralRows === b.config.centralRows && a.config.activity === b.config.activity
+    case 'systems': return b.kind === 'systems' && sameSystem(a.config, b.config)
   }
 }
 /** Names a board's kind and configuration, e.g. "an array board (100 columns, 100 rows)". */
 function describeBoard(board: BoardDescriptor): string {
+  if (board.kind === 'systems') {
+    return `a systems of equations board (${board.config.system.equations.map(equationText).join('; ')}, ` +
+      `${board.config.laneColumns} columns per row)`
+  }
   const settings = Object.entries(board.config)
     .map(([key, value]) => `${value} ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}`)
     .join(', ')

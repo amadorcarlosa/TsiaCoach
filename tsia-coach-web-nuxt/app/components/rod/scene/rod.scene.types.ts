@@ -48,6 +48,22 @@ export type SceneRegion = {
 
 export type AddendPair = readonly [number, number]
 
+/**
+ * A board-specific command, such as a systems "repeat row". The board's pure
+ * planner turns it into removals and additions at check and at commit, so the
+ * scene never trusts trains supplied by a preview.
+ */
+export type BoardTransform = {
+  name: string
+  params?: Readonly<Record<string, number>>
+  /** The planner's input key when the preview opened; a mismatch is stale. */
+  expected?: string
+}
+
+export type BoardTransformPlan =
+  | { allowed: true; remove: readonly string[]; add: readonly RodTrain[] }
+  | { allowed: false; reason: string }
+
 export type AddendChoice = {
   pair: AddendPair
   result: SceneResult
@@ -94,6 +110,7 @@ export type SceneAction =
     // cannot change the footprint, only how the same cells are grouped.
     | { type: 'regroup-area'; grouping: AreaGrouping }
     | { type: 'ungroup' }
+    | { type: 'board-transform'; transform: BoardTransform }
     | {
       type: 'cancel-zero-pair'
       /**
@@ -153,6 +170,18 @@ export type ScenePolicy = {
   allowNegativeRods?: boolean
   /** Opt in to cancelling one positive and one negative rod as a zero pair. */
   allowZeroPairCancellation?: boolean
+  /**
+   * Make a train and Clone keep material in the region it came from. Boards
+   * whose regions carry meaning (systems groups) opt in; others keep the
+   * plain rule that a result must fit some region.
+   */
+  regionBoundEdits?: boolean
+  /** Planner for 'board-transform' actions. Absent boards reject them. */
+  planTransform?: (
+    trains: readonly RodTrain[],
+    ids: readonly string[],
+    transform: BoardTransform,
+  ) => BoardTransformPlan
 }
 
 export type SceneResult =

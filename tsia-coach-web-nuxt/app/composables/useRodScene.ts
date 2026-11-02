@@ -59,6 +59,10 @@ import {
 } from '~/components/rod/scene/linear-train-operations'
 
 
+/** The first region that wholly contains a train, if any. */
+const homeRegion = (policy: ScenePolicy, train: RodTrain) =>
+    policy.regions?.find(region => trainFitsRegion(train, region))
+
 type Turn = { id: string; inverse: string; shift: Point }
 
 type Candidate =
@@ -317,6 +321,8 @@ export function useRodScene(policy: ScenePolicy) {
                     policy.rows,
                 ))
 
+                const homes = selected.map(train => homeRegion(policy, train))
+
                 for (const offset of offsets) {
                     const copies = selected.map(train => ({
                         ...train,
@@ -330,6 +336,10 @@ export function useRodScene(policy: ScenePolicy) {
                             offset: { ...part.offset },
                         })),
                     }))
+
+                    // A copy stays in the group its original belongs to.
+                    if (policy.regionBoundEdits && copies.some((copy, index) =>
+                        homes[index] && !trainFitsRegion(copy, homes[index]))) continue
 
                     const result = validate([...current, ...copies])
                     if (result.allowed) return result
@@ -352,6 +362,11 @@ export function useRodScene(policy: ScenePolicy) {
             }
 
             case 'make-train': {
+                if (policy.regionBoundEdits &&
+                    new Set(selected.map(train => homeRegion(policy, train)?.id)).size > 1) {
+                    return reject('Select rods from one group.')
+                }
+
                 if (new Set(selected.map(effectiveRole)).size > 1) {
                     return reject(
                         'Select material of one kind: denominator tiles and numerator rods cannot join one train.',
@@ -513,6 +528,24 @@ export function useRodScene(policy: ScenePolicy) {
                     : reject(`Cannot regroup this area. ${result.reason}`)
             }
 
+            case 'board-transform': {
+                if (!policy.planTransform) return reject('This board has no such command.')
+                const planned = policy.planTransform(current, [...selectedIds], action.transform)
+                if (!planned.allowed) return planned
+
+                const removed = new Set(planned.remove)
+                // Added trains always get fresh IDs, whatever the planner wrote.
+                return validate([
+                    ...current.filter(train => !removed.has(train.id)),
+                    ...planned.add.map(train => ({
+                        ...train,
+                        id: '',
+                        anchor: { ...train.anchor },
+                        parts: train.parts.map(part => ({ ...part, offset: { ...part.offset } })),
+                    })),
+                ])
+            }
+
             case 'cancel-zero-pair': {
                 // Only the two targets, exactly as the preview captured them.
                 const expectedIds = new Set(action.expectedInputs.map(train => train.id))
@@ -601,6 +634,7 @@ export function useRodScene(policy: ScenePolicy) {
         const existingIds = new Set(committed.map(train => train.id))
 
         const selectsCreatedTrains =
+            action.type === 'board-transform' ||
             action.type === 'make-train' ||
             action.type === 'ungroup'
 
