@@ -70,31 +70,27 @@ describe('region-bound factor placement', () => {
     expect(scene.trains.value[1]).toEqual(obstacle)
   })
 
-  it('distinguishes a region too small from blocked space and never crosses to another equation', () => {
+  it('distributes factors when the region is too shallow for a rectangle', () => {
     const small = { ...region, depth: 3 }
     const scene = setup([rod('selected', 2, 4)], small)
-    const before = JSON.stringify(scene.trains.value)
     const result = scene.apply(['selected'], square)
-    expect(result.allowed).toBe(false)
-    if (result.allowed) throw new Error('Expected too-small rejection')
-    expect(result.reason).toContain('at least 5 columns wide and 5 rows high')
-    expect(scene.message.value).toBe(result.reason)
-    expect(JSON.stringify(scene.trains.value)).toBe(before)
+    expect(result.allowed).toBe(true)
+    expect(scene.trains.value[0]!.parts).toHaveLength(5)
+    expect(trainFitsRegion(scene.trains.value[0]!, small)).toBe(true)
+    expect(trainMagnitude(scene.trains.value[0]!)).toBe(25)
   })
 
-  it('rejects fully blocked placements and rechecks against newly added obstacles', () => {
+  it('distributes groups around obstacles that block every complete rectangle', () => {
     const scene = setup([rod('selected', 2, 6)])
     expect(scene.check(['selected'], square).allowed).toBe(true)
     expect(scene.replace([rod('selected', 2, 6), rod('blocker', 2, 2)]).allowed).toBe(true)
     scene.select(['selected'])
-    const before = JSON.stringify(scene.trains.value)
     const result = scene.apply(['selected'], square)
-    expect(result.allowed).toBe(false)
-    if (result.allowed) throw new Error('Expected blocked rejection')
-    expect(result.reason).toContain('existing rods block every valid 5 by 5 placement')
-    expect(scene.getFactorChoices('selected')).toContainEqual({ shape: square.shape, result })
+    expect(result.allowed).toBe(true)
+    expect(scene.getFactorChoices('selected')).toContainEqual({ shape: square.shape, result: { allowed: true } })
     expect(useFactorMenuChoice(scene).value).toMatchObject({ disabledReason: undefined })
-    expect(JSON.stringify(scene.trains.value)).toBe(before)
+    expect(scene.trains.value[1]).toEqual(rod('blocker', 2, 2))
+    expect(trainFitsRegion(scene.trains.value[0]!, region)).toBe(true)
     expect([...scene.selection.value]).toEqual(['selected'])
   })
 
@@ -137,14 +133,34 @@ describe('region-bound factor placement', () => {
   })
 
   it('preserves every source when the selected replacements cannot all fit', () => {
-    const home = { ...region, width: 6, depth: 2 }
+    const home = { ...region, width: 4, depth: 3 }
+    const source = rod('a', 2, 2, [3])
+    source.parts.push({ value: 3, orientation: 'horizontal', offset: { x: 0, y: 1 } })
     const scene = setup([
-      rod('a', 2, 2, [4]), rod('b', 2, 3, [6]), rod('blocker', 6, 2, [2]),
+      source, rod('blocker-1', 5, 2, [1]), rod('blocker-2', 5, 3, [1]), rod('blocker-3', 2, 4, [4]),
     ], home)
-    scene.select(['a', 'b'])
+    scene.select(['a'])
     const before = JSON.stringify(scene.trains.value)
-    expect(scene.apply(['a', 'b'], { type: 'regroup-factors' }).allowed).toBe(false)
+    const result = scene.apply(['a'], { type: 'regroup-factors', shape: { rows: 3, columns: 2 } })
+    expect(result.allowed).toBe(false)
+    if (result.allowed) throw new Error('Expected insufficient contiguous space')
+    expect(result.reason).toContain('No collision-free placement')
     expect(JSON.stringify(scene.trains.value)).toBe(before)
-    expect([...scene.selection.value]).toEqual(['a', 'b'])
+    expect([...scene.selection.value]).toEqual(['a'])
+  })
+
+  it('breaks 24 into twelve twos without requiring twelve coefficient rows', () => {
+    const scene = setup([rod('selected', 2, 2, [10, 10, 4])], { ...region, depth: 2 })
+    const action = { type: 'regroup-factors', shape: { rows: 12, columns: 2 } } as const
+    const before = JSON.stringify(scene.trains.value)
+    expect(scene.check(['selected'], action).allowed).toBe(true)
+    expect(JSON.stringify(scene.trains.value)).toBe(before)
+    expect(scene.apply(['selected'], action).allowed).toBe(true)
+    const result = scene.trains.value[0]!
+    expect(result.parts).toHaveLength(12)
+    expect(result.parts.every(part => part.value === 2)).toBe(true)
+    expect(trainMagnitude(result)).toBe(24)
+    expect(trainFitsRegion(result, { ...region, depth: 2 })).toBe(true)
+    expect(result.id).toBe('selected')
   })
 })

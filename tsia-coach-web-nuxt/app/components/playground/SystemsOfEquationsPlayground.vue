@@ -310,7 +310,7 @@ function onChoose(value: CuisenaireRodValue): void {
 
 // ---- Train context menu -----------------------------------------------------
 
-const factorMenuChoice = useFactorMenuChoice(scene)
+const factorMenuChoice = useFactorMenuChoice(scene, true)
 const renderedPieces = computed(() => scene.trains.value.map(trainView))
 const selectedRod = computed(() => scene.selection.value.size === 1
   ? renderedPieces.value.find(piece => scene.selection.value.has(piece.id))

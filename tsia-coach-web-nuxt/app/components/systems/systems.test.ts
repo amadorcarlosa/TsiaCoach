@@ -331,13 +331,14 @@ describe('systems scene integration', () => {
     expect(clone.anchor.y).toBeLessThan(x.y + x.depth)
   })
 
-  it('rejects negative rods and vertical rods in lanes', () => {
+  it('rejects negative rods and towers but allows vertical prototypes in lanes', () => {
     const p = policy(development)
     const [row] = rows(region(development, 1, 'x'), 3, { lanes: [0] })
     expect(validateSnapshot([{ ...row!, parts: [{ ...row!.parts[0]!, sign: -1 }] }], p).allowed).toBe(false)
     const scene = useRodScene(p)
     scene.replace([row!])
-    expect(scene.check([row!.id], { type: 'set-orientation', orientation: 'vertical' }).allowed).toBe(false)
+    expect(scene.check([row!.id], { type: 'set-orientation', orientation: 'vertical' }).allowed).toBe(true)
+    expect(scene.check([row!.id], { type: 'set-orientation', orientation: 'tower' }).allowed).toBe(false)
   })
 })
 

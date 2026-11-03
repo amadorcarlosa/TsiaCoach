@@ -68,7 +68,7 @@ export function systemsGeometry(config: SystemsBoardConfig): SystemsGeometry {
         coefficient,
         label: `Equation ${equationIndex + 1}, ${coefficient} ${coefficient === 1 ? 'row' : 'rows'} of ${variable}`,
         x, y: row, width, depth: coefficient,
-        orientations: ['horizontal'],
+        orientations: ['horizontal', 'vertical'],
       })
       row += coefficient
     })

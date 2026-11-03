@@ -9,7 +9,7 @@ import { trainFootprints } from '~/components/rod/scene/part-footprint'
 import { trainMagnitude } from '~/components/rod/scene/rod-arithmetic'
 import { SYSTEMS_GUTTER_COLUMNS, equationText, systemsGeometry } from './systems.geometry'
 import type { SystemEvaluation } from './systems.evaluate'
-import { areaFeedback } from './systems.feedback'
+import { areaFeedback, equationCorrectness } from './systems.feedback'
 import type { SystemsBoardConfig } from './systems.schema'
 
 /**
@@ -59,6 +59,16 @@ const headings = computed(() => geometry.value.headings.map(heading => {
     area: evaluated ? areaFeedback(evaluated) : '',
     satisfied: evaluated?.satisfied ?? false,
   }
+}))
+
+const equationOutlines = computed(() => props.config.system.equations.map((equation, index) => {
+  const regions = geometry.value.variableRegions.filter(region => region.equationId === equation.id)
+  const x = Math.min(...regions.map(region => region.x))
+  const y = Math.min(...regions.map(region => region.y))
+  const right = Math.max(...regions.map(region => region.x + region.width))
+  const bottom = Math.max(...regions.map(region => region.y + region.depth))
+  const evaluated = props.evaluation.valid ? props.evaluation.equations[index] : undefined
+  return { id: equation.id, correctness: equationCorrectness(evaluated), style: box(x, y, right - x, bottom - y) }
 }))
 
 const ghostParts = computed(() => props.ghosts.flatMap((train, index) =>
@@ -124,6 +134,17 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
         aria-hidden="true"
       >{{ region.variable }}</div>
     </template>
+
+    <div
+      v-for="outline in equationOutlines"
+      :key="`outline-${outline.id}`"
+      class="sys-equation-outline"
+      :class="`sys-equation-outline--${outline.correctness}`"
+      :data-systems-equation-outline="outline.id"
+      :data-correctness="outline.correctness"
+      :style="outline.style"
+      aria-hidden="true"
+    />
 
     <div
       v-if="!continuous && geometry.staging"
@@ -192,6 +213,17 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
 </template>
 
 <style scoped>
+.sys-equation-outline {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  outline: 2px solid var(--mt-border);
+  outline-offset: 2px;
+  z-index: 1;
+}
+.sys-equation-outline--correct { outline: 3px solid var(--ui-success, #16a34a); }
+.sys-equation-outline--incorrect { outline: 3px solid var(--ui-error, #dc2626); }
+
 .sys-suggestion {
   position: absolute;
   opacity: 0.5;

@@ -458,16 +458,15 @@ export function useRodScene(policy: ScenePolicy) {
                     for (const [index, train] of selected.entries()) {
                         const region = homes[index]
                         const bounds = trainBounds(train)
-                        const shape = `${bounds.depth} rows of ${bounds.width}`
+                        const shape = `Groups of ${bounds.width}`
                         if (!region) return reject('Select a train entirely inside one compatible region.')
                         if (
                             !train.parts.every(part => region.orientations.includes(part.orientation)) ||
-                            bounds.width > region.width ||
-                            bounds.depth > region.depth
+                            bounds.width > region.width
                         ) {
                             return reject(
                                 `${shape} cannot fit in this region. ` +
-                                `This arrangement requires an uninterrupted area at least ${bounds.width} columns wide and ${bounds.depth} rows high.`,
+                                `Each group requires at least ${bounds.width} uninterrupted columns.`,
                             )
                         }
                     }
@@ -506,13 +505,67 @@ export function useRodScene(policy: ScenePolicy) {
                     }
 
                     if (!place(0)) {
-                        const bounds = trainBounds(selected[0]!)
-                        return reject(
-                            selected.length === 1
-                                ? `${bounds.depth} rows of ${bounds.width} cannot fit in this region. ` +
-                                  `The region is large enough, but existing rods block every valid ${bounds.width} by ${bounds.depth} placement.`
-                                : 'Cannot arrange these factors together. No collision-free placement exists for all selected trains within their original regions.',
-                        )
+                        // A factor describes equal groups, not a requirement to
+                        // stack them into one rectangle. Keep each row intact.
+                        const groups = selected.flatMap((train, sourceIndex) =>
+                            [...new Set(train.parts.map(part => part.offset.y))].map(row => ({
+                                sourceIndex,
+                                train: {
+                                    ...train,
+                                    anchor: { ...train.anchor },
+                                    parts: train.parts.filter(part => part.offset.y === row)
+                                        .map(part => ({ ...part, offset: { x: part.offset.x, y: 0 } })),
+                                },
+                            })))
+                        const distributed: RodTrain[] = []
+                        function distribute(index: number): boolean {
+                            if (index === groups.length) return true
+                            const group = groups[index]!
+                            const train = group.train
+                            const region = homes[group.sourceIndex]!
+                            const bounds = trainBounds(train)
+                            function* offsets() {
+                                yield { x: 0, y: 0 }
+                                yield* offsetsByDistance({
+                                    minX: region.x - bounds.x,
+                                    maxX: region.x + region.width - bounds.x - bounds.width,
+                                    minY: region.y - bounds.y,
+                                    maxY: region.y + region.depth - bounds.y - bounds.depth,
+                                })
+                            }
+                            for (const offset of offsets()) {
+                                const candidate = {
+                                    ...train,
+                                    anchor: { x: train.anchor.x + offset.x, y: train.anchor.y + offset.y },
+                                }
+                                if (!trainFitsRegion(candidate, region)) continue
+                                if (!validateScene([...fixed, ...distributed, candidate], policy).allowed) continue
+                                distributed.push(candidate)
+                                if (distribute(index + 1)) return true
+                                distributed.pop()
+                            }
+                            return false
+                        }
+                        if (!distribute(0)) {
+                            return reject('Cannot break into these factor groups. No collision-free placement exists for all groups within their original regions.')
+                        }
+                        for (const [sourceIndex, train] of selected.entries()) {
+                            const pieces = distributed.filter((_, index) => groups[index]!.sourceIndex === sourceIndex)
+                            const anchor = {
+                                x: Math.min(...pieces.map(piece => piece.anchor.x)),
+                                y: Math.min(...pieces.map(piece => piece.anchor.y)),
+                            }
+                            placed.push({
+                                ...train, anchor,
+                                parts: pieces.flatMap(piece => piece.parts.map(part => ({
+                                    ...part,
+                                    offset: {
+                                        x: piece.anchor.x + part.offset.x - anchor.x,
+                                        y: piece.anchor.y + part.offset.y - anchor.y,
+                                    },
+                                }))),
+                            })
+                        }
                     }
                     const replacements = new Map(placed.map(train => [train.id, train]))
                     return validate(current.map(train => replacements.get(train.id) ?? train))

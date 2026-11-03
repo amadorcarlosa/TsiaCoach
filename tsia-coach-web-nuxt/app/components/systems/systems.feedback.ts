@@ -10,7 +10,9 @@ export function groupFeedback(group: GroupEvaluation): string {
   const v = group.variable
   switch (group.status) {
     case 'empty': return `No ${v} rows yet.`
-    case 'incomplete': return `Some ${v} rows are still empty (${group.rowWidths.join(', ')} cells).`
+    case 'incomplete': return group.rowWidths.some(width => width === 0)
+      ? `Some ${v} rows are still empty (${group.rowWidths.join(', ')} cells).`
+      : `Arrange the ${v} rods as horizontal coefficient rows to establish a value.`
     case 'gaps': return `An ${v} row has a gap in it.`
     case 'unequal-widths': return `The ${v} rows have different lengths (${group.rowWidths.join(', ')}).`
     case 'misaligned': return `These ${v} rows have equal length but start at different columns.`
@@ -23,6 +25,11 @@ export function areaFeedback(equation: EquationEvaluation): string {
   if (equation.difference > 0) return `${counted}; ${equation.difference} excess.`
   if (equation.difference < 0) return `${counted}; ${-equation.difference} missing.`
   return `${counted}.`
+}
+
+export function equationCorrectness(equation: EquationEvaluation | undefined): 'neutral' | 'correct' | 'incorrect' {
+  if (!equation || equation.groups.x.status !== 'rectangle' || equation.groups.y.status !== 'rectangle') return 'neutral'
+  return equation.areaMatches ? 'correct' : 'incorrect'
 }
 
 export function equationFeedback(equation: EquationEvaluation): string {

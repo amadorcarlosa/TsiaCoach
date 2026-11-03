@@ -25,16 +25,21 @@ export function substituteSystem(config: SystemsBoardConfig, sources: readonly D
   const rows = geometry.variableRegions.map(region => {
     const lanes: { x: number; value: TrainPart['value'] }[][] =
       Array.from({ length: region.depth }, () => [])
+    let prototyping = false
     for (const train of sources.filter(train => trainFitsRegion(train, region))) {
       for (const part of train.parts) {
+        if (part.orientation !== 'horizontal') {
+          prototyping = true
+          continue
+        }
         const bounds = partFootprint(part, train.anchor)
         lanes[bounds.y - region.y]!.push({ x: bounds.x, value: part.value })
       }
     }
-    const complete = lanes.every(lane => lane.length === 1) &&
+    const complete = !prototyping && lanes.every(lane => lane.length === 1) &&
       new Set(lanes.map(lane => lane[0]?.value)).size === 1 &&
       new Set(lanes.map(lane => lane[0]?.x)).size === 1
-    return { region, lanes, complete }
+    return { region, lanes, complete, prototyping }
   })
 
   for (const variable of variableIds) {
@@ -49,11 +54,11 @@ export function substituteSystem(config: SystemsBoardConfig, sources: readonly D
     candidates[variable] = value
     const origin = completed[0]!
     lines.push(`${variable} = ${value} established from Equation ${origin.region.equationIndex + 1}.`)
-    for (const { region, lanes, complete } of groups) {
+    for (const { region, lanes, complete, prototyping } of groups) {
       if (complete) continue
       const occupied = lanes.filter(lane => lane.length)
       const start = occupied[0]?.[0]?.x ?? region.x
-      if (occupied.some(lane => lane.length !== 1 || lane[0]!.value !== value || lane[0]!.x !== start)) {
+      if (prototyping || occupied.some(lane => lane.length !== 1 || lane[0]!.value !== value || lane[0]!.x !== start)) {
         lines.push(`Equation ${region.equationIndex + 1}'s ${variable} region contains different or extra learner rods. Nothing there was replaced.`)
         continue
       }

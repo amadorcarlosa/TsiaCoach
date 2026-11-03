@@ -75,8 +75,10 @@ function cellsOf(train: DeepReadonly<RodTrain>): { x: number; y: number }[] {
 
 function evaluateGroup(region: VariableRegion, snapshot: Snapshot): GroupEvaluation {
   const lanes: number[][] = Array.from({ length: region.coefficient }, () => [])
+  let prototyping = false
   for (const train of snapshot) {
     if (!trainFitsRegion(train, region)) continue
+    if (train.parts.some(part => part.orientation !== 'horizontal')) prototyping = true
     for (const cell of cellsOf(train)) lanes[cell.y - region.y]!.push(cell.x - region.x)
   }
   for (const lane of lanes) lane.sort((a, b) => a - b)
@@ -95,6 +97,7 @@ function evaluateGroup(region: VariableRegion, snapshot: Snapshot): GroupEvaluat
   }
 
   if (occupiedArea === 0) return { ...base, status: 'empty' }
+  if (prototyping) return { ...base, status: 'incomplete' }
   if (lanes.some(lane => lane.length === 0)) return { ...base, status: 'incomplete' }
   // A lane is solid when its cells run without a break from first to last.
   if (lanes.some(lane => lane[lane.length - 1]! - lane[0]! + 1 !== lane.length)) {
