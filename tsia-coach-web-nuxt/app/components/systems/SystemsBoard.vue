@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
+import CuisenaireRod from '~/components/rod/cuisenaire/CuisenaireRod.vue'
+import { cuisenaireRodPalette } from '~/components/rod/rod.types'
+import { arrayRodDimensions } from '~/components/rod/array/array-rod.types'
 import type { RodTrain } from '~/components/rod/scene/rod.scene.types'
 import { trainFootprints } from '~/components/rod/scene/part-footprint'
 import { trainMagnitude } from '~/components/rod/scene/rod-arithmetic'
@@ -21,10 +24,12 @@ const props = withDefaults(defineProps<{
   activeRegion?: string | null
   /** Rows a previewed command would add. Outlines only, never counted. */
   ghosts?: readonly RodTrain[]
+  suggestions?: readonly RodTrain[]
   viewportPadding?: string
 }>(), {
   activeRegion: null,
   ghosts: () => [],
+  suggestions: () => [],
   viewportPadding: '16px',
 })
 
@@ -121,7 +126,7 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
     </template>
 
     <div
-      v-if="!continuous"
+      v-if="!continuous && geometry.staging"
       class="sys-heading sys-heading--staging"
       :style="box(0, geometry.stagingHeadingRow, geometry.columns, 1)"
       aria-hidden="true"
@@ -129,6 +134,7 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
       <strong>{{ geometry.staging.label }}</strong>
     </div>
     <div
+      v-if="geometry.staging"
       class="sys-region sys-region--staging"
       :class="{ 'sys-region--active': activeRegion === geometry.staging.id }"
       :data-systems-region="geometry.staging.id"
@@ -154,6 +160,30 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
       {{ label.length }}
     </div>
 
+    <div
+      v-for="suggestion in suggestions"
+      :key="suggestion.id"
+      class="sys-suggestion"
+      :data-systems-suggestion="suggestion.id"
+      :style="box(suggestion.anchor.x, suggestion.anchor.y, 0, 0)"
+      aria-hidden="true"
+      inert
+    >
+      <div
+        v-for="(part, index) in suggestion.parts"
+        :key="index"
+        :style="{ position: 'absolute', left: `${part.offset.x * cellSize}px`, top: `${part.offset.y * cellSize}px` }"
+      >
+        <CuisenaireRod
+          :dimensions="arrayRodDimensions(part.value, part.orientation)"
+          :unit-size="cellSize"
+          :appearance="cuisenaireRodPalette[part.value]"
+          :label="String(part.value)"
+          presentation="flat"
+        />
+      </div>
+    </div>
+
     <slot
       name="pieces"
       :cell-size="cellSize"
@@ -162,6 +192,14 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
 </template>
 
 <style scoped>
+.sys-suggestion {
+  position: absolute;
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+.sys-suggestion :deep(.rod) { outline: 1px dashed var(--mt-text); outline-offset: -2px; }
+
 .sys-heading {
   position: absolute;
   display: flex;

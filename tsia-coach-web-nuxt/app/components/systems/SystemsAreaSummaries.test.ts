@@ -11,14 +11,14 @@ import { systemsGeometry } from './systems.geometry'
 
 enableAutoUnmount(afterEach)
 
-const config = systemsFixtures.development.config
+const config = { ...systemsFixtures.development.config, staging: true }
 const geometry = systemsGeometry(config)
 
 function setup() {
   const scene = useRodScene({
     columns: geometry.columns,
     rows: geometry.rows,
-    spawnRows: [geometry.staging.y],
+    spawnRows: [geometry.staging!.y],
     regions: geometry.regions,
     editable: () => true,
     allowOrientation: true,
@@ -60,13 +60,13 @@ describe('live equation area summaries', () => {
 
     await apply([rod!], { type: 'regroup-ones' })
     expect(summary().text()).toContain('Total area: 6')
-    await apply([rod!], { type: 'move', delta: { x: 0, y: geometry.staging.y - y.y } })
+    await apply([rod!], { type: 'move', delta: { x: 0, y: geometry.staging!.y - y.y } })
     expect(summary().text()).toContain('y area: 0')
     expect(summary().text()).toContain('Total area: 3')
     await apply([rod!], { type: 'set-orientation', orientation: 'vertical' })
     expect(summary().text()).toContain('Total area: 3')
     await apply([rod!], { type: 'set-orientation', orientation: 'horizontal' })
-    await apply([rod!], { type: 'move', delta: { x: 0, y: x.y - geometry.staging.y } })
+    await apply([rod!], { type: 'move', delta: { x: 0, y: x.y - geometry.staging!.y } })
     expect(summary().text()).toContain('Total area: 6')
     await apply([rod!], { type: 'delete' })
     expect(summary().text()).toContain('Total area: 3')

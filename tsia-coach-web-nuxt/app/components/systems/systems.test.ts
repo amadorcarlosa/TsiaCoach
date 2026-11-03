@@ -50,7 +50,7 @@ const valid = (config: SystemsBoardConfig, scene: RodTrain[]) => {
 function policy(config: SystemsBoardConfig): ScenePolicy {
   const geometry = systemsGeometry(config)
   return {
-    columns: geometry.columns, rows: geometry.rows, spawnRows: [geometry.staging.y], regions: geometry.regions,
+    columns: geometry.columns, rows: geometry.rows, spawnRows: [geometry.staging?.y ?? geometry.variableRegions[0]!.y], regions: geometry.regions,
     editable: () => true, allowOrientation: true, allowFactors: true, regionBoundEdits: true,
     planTransform: (trains, ids, transform) => {
       const result = planSystemsTransform(config, trains, ids, transform)
@@ -76,17 +76,19 @@ describe('systems schema and geometry', () => {
     expect(bad(config => { Reflect.set(config, 'extra', 1) })).toBe(false)
   })
 
-  it('derives four lane regions from the coefficients, plus staging', () => {
+  it('derives four lane regions without staging for the current problems', () => {
     const geometry = systemsGeometry(development)
     expect(geometry.variableRegions.map(item => [item.id, item.depth, item.width])).toEqual([
-      ['equation-1:x', 3, 24], ['equation-1:y', 5, 24], ['equation-2:x', 4, 24], ['equation-2:y', 2, 24],
+      ['equation-1:x', 3, development.laneColumns], ['equation-1:y', 5, development.laneColumns],
+      ['equation-2:x', 4, development.laneColumns], ['equation-2:y', 2, development.laneColumns],
     ])
     const [a, b, c, d] = geometry.variableRegions
     // Adjacent x/y lanes, with one blank row between equations.
     expect([a!.y, b!.y, c!.y, d!.y]).toEqual([0, 3, 9, 13])
-    expect(geometry.staging.y).toBe(16)
-    expect(geometry.rows).toBe(20)
-    expect(geometry.columns).toBe(26)
+    expect(geometry.staging).toBeNull()
+    expect(geometry.regions).toHaveLength(4)
+    expect(geometry.rows).toBe(15)
+    expect(geometry.columns).toBe(2 + development.laneColumns)
     expect(geometry.variableRegions.every(item => item.x === 2)).toBe(true)
   })
 })
@@ -179,11 +181,14 @@ describe('systems evaluation', () => {
   })
 
   it('excludes staging, refuses overlaps, negatives and stray trains', () => {
-    const staging = systemsGeometry(development).staging
+    const legacy = { ...development, staging: undefined }
+    const staging = systemsGeometry(legacy).staging!
     const loose: RodTrain = { id: 'loose', anchor: { x: staging.x, y: staging.y }, parts: [{ value: 9, offset: { x: 0, y: 0 }, orientation: 'horizontal' }] }
-    const result = valid(development, [...model(development, [3, 5]), loose])
+    const result = valid(legacy, [...model(legacy, [3, 5]), loose])
     expect(result.satisfied).toBe(true)
     expect(result.stagingArea).toBe(9)
+    expect(evaluateSystem(development, [loose])).toEqual({ valid: false, reason: 'A train lies outside every group.' })
+    expect(validateSnapshot([loose], policy(development)).allowed).toBe(false)
 
     const x = rows(region(development, 1, 'x'), 3)
     expect(evaluateSystem(development, [...x, { ...x[0]!, id: 'twin' }])).toEqual({ valid: false, reason: 'Two rods share the same cells.' })
@@ -213,9 +218,10 @@ describe('systems planners', () => {
       .toEqual({ allowed: false, reason: systemsReasons.occupied })
     expect(planSystemsTransform(development, [row!, blocker!], [row!.id, blocker!.id], { name: 'repeat-row' }))
       .toEqual({ allowed: false, reason: systemsReasons.makeTrain })
-    const staging = systemsGeometry(development).staging
+    const legacy = { ...development, staging: undefined }
+    const staging = systemsGeometry(legacy).staging!
     const loose: RodTrain = { id: 'loose', anchor: { x: staging.x, y: staging.y }, parts: [{ value: 4, offset: { x: 0, y: 0 }, orientation: 'horizontal' }] }
-    expect(planSystemsTransform(development, [loose], ['loose'], { name: 'repeat-row' }))
+    expect(planSystemsTransform(legacy, [loose], ['loose'], { name: 'repeat-row' }))
       .toEqual({ allowed: false, reason: systemsReasons.inGroup })
   })
 
@@ -300,7 +306,7 @@ describe('systems scene integration', () => {
     const before = state(scene)
     expect(scene.apply([scene0[0]!.id], { type: 'board-transform', transform: { name: 'repeat-row' } }).allowed).toBe(false)
     expect(state(scene)).toBe(before)
-    const created = scene.apply([], { type: 'create', value: 1, regionId: 'staging' })
+    const created = scene.apply([], { type: 'create', value: 1, regionId: 'equation-1:y' })
     expect(created.allowed && created.createdIds).toEqual(['train-1'])
   })
 
@@ -373,9 +379,9 @@ describe('systems level files', () => {
 
 
 it('preserves the spaced geometry of previously saved systems levels', () => {
-  const legacy = { ...development, layout: undefined }
+  const legacy = { ...development, layout: undefined, staging: undefined, laneColumns: 24 }
   const geometry = systemsGeometry(legacy)
   expect(geometry.variableRegions.map(region => region.y)).toEqual([1, 5, 11, 16])
-  expect(geometry.staging.y).toBe(19)
+  expect(geometry.staging?.y).toBe(19)
   expect(geometry.columns).toBe(28)
 })

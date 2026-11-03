@@ -9,6 +9,7 @@ export const systemsFixtures = {
     label: '3x + 5y = 34, 4x + 2y = 22',
     config: {
       layout: 'continuous',
+      staging: false,
       system: {
         equations: [
           { id: 'equation-1', coefficients: { x: 3, y: 5 }, targetArea: 34 },
@@ -23,6 +24,7 @@ export const systemsFixtures = {
     label: '2x + y = 32, x + 3y = 26',
     config: {
       layout: 'continuous',
+      staging: false,
       system: {
         equations: [
           { id: 'equation-1', coefficients: { x: 2, y: 1 }, targetArea: 32 },

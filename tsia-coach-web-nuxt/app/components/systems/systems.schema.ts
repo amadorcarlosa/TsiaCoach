@@ -39,6 +39,8 @@ export const systemsBoardConfigSchema = z.object({
   system: linearSystemSchema,
   /** Omitted in older saved levels, whose original spaced coordinates remain valid. */
   layout: z.literal('continuous').optional(),
+  /** Omitted in saved boards that include the legacy staging region. */
+  staging: z.boolean().optional(),
   /** Cells per lane: the longest variable length the board can show. */
   laneColumns: z.number().int().min(1).max(systemsLimits.maxLaneColumns),
   /** Rows between the equation bands; each band's heading uses the first. */

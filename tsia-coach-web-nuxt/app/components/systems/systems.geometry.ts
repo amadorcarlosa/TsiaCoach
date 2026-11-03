@@ -24,7 +24,7 @@ export type SystemsGeometry = {
   columns: number
   rows: number
   variableRegions: readonly VariableRegion[]
-  staging: StagingRegion
+  staging: StagingRegion | null
   /** Every region, in the order the scene policy checks them. */
   regions: readonly SceneRegion[]
   /** Heading rows above each band, for equation text and status. */
@@ -76,22 +76,24 @@ export function systemsGeometry(config: SystemsBoardConfig): SystemsGeometry {
   })
 
   const stagingHeadingRow = row
-  if (!continuous) row += config.regionGapRows
-  const staging: StagingRegion = {
+  const includeStaging = config.staging !== false
+  if (!continuous && includeStaging) row += config.regionGapRows
+  const staging: StagingRegion | null = includeStaging ? {
     kind: 'staging',
     id: STAGING_REGION_ID,
     label: 'Staging (not counted)',
     x, y: row, width, depth: STAGING_ROWS,
     orientations: ['horizontal', 'vertical', 'tower'],
-  }
-  row += STAGING_ROWS
+  } : null
+  if (staging) row += STAGING_ROWS
+  else if (continuous) row -= config.regionGapRows
 
   return {
     columns: x + width,
     rows: row,
     variableRegions,
     staging,
-    regions: [...variableRegions, staging],
+    regions: staging ? [...variableRegions, staging] : variableRegions,
     headings,
     stagingHeadingRow,
   }

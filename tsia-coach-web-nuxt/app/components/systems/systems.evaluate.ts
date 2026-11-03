@@ -156,7 +156,7 @@ export function evaluateSystem(config: SystemsBoardConfig, snapshot: Snapshot): 
   const agreement = { x: agree('x'), y: agree('y') }
 
   const stagingArea = snapshot
-    .filter(train => trainFitsRegion(train, geometry.staging))
+    .filter(train => geometry.staging && trainFitsRegion(train, geometry.staging))
     .reduce((sum, train) => sum + cellsOf(train).length, 0)
 
   return {

@@ -80,6 +80,38 @@ async function pieceIn(panel: Locator, regionId: string) {
 }
 
 test.describe('systems of equations playground', () => {
+  test('waits for a completed coefficient region and propagates only its variable', async ({ playground, page }) => {
+    void playground
+    const panel = await openSystems(page)
+    const suggestions = panel.locator('[data-systems-suggestion]')
+    await expect(suggestions).toHaveCount(0)
+    await destination(panel, 'Eq 1: x (3 rows)')
+    await add(panel, 'three')
+    await expect(suggestions).toHaveCount(0)
+    // Put each subsequent rod in its own row rather than extending the first.
+    const second = await add(panel, 'three')
+    await second.focus()
+    await second.press('ArrowDown')
+    for (let step = 0; step < 3; step++) await second.press('ArrowLeft')
+    await expect(suggestions).toHaveCount(0)
+    const third = await add(panel, 'three')
+    await third.focus()
+    await third.press('ArrowDown')
+    await third.press('ArrowDown')
+    for (let step = 0; step < 3; step++) await third.press('ArrowLeft')
+    await expect(suggestions).toHaveCount(4)
+    await expect(panel.locator('[data-piece-id]')).toHaveCount(3)
+    await expect(panel.locator('[data-systems-result]')).toHaveCount(0)
+    await expect(suggestions.first()).toHaveAttribute('inert', '')
+    await expect(panel.locator('[data-systems-substitution]')).toContainText('x = 3 established from Equation 1')
+    await expect(panel.locator('[data-systems-suggestion*=":y:"]')).toHaveCount(0)
+    await expect(panel.getByRole('region', { name: 'Equation 1 area summary', exact: true })).toContainText('Total area: 9')
+    await expect(panel.getByRole('region', { name: 'Equation 2 area summary', exact: true })).toContainText('Total area: 12')
+    await expect(panel.locator('[data-systems-substitution]')).not.toContainText('y = 5')
+    await panel.getByRole('button', { name: 'Remove selected rod', exact: true }).click()
+    await expect(suggestions).toHaveCount(0)
+  })
+
   test('regroups a lower-row 25-cell train into a 5 by 5 rectangle in the same region', async ({ playground, page }) => {
     void playground
     const panel = await openSystems(page)
@@ -150,7 +182,7 @@ test.describe('systems of equations playground', () => {
     await add(panel, 'three')
     await expect(first).toContainText('x area: 12')
     await expect(first).toContainText('Total area: 37')
-    await expect(second).toContainText('Total area: 0')
+    await expect(second).toContainText('Total area: 10')
     await panel.getByRole('button', { name: 'Remove selected rod', exact: true }).click()
     await expect(first).toContainText('Total area: 34')
 
@@ -316,6 +348,10 @@ test('systems opens as one compact grid with adjacent coefficient row bands', as
   const panel = await openSystems(page)
   const regions = panel.locator('[data-continuous-band]')
   await expect(regions).toHaveCount(4)
+  await expect(panel.locator('[data-systems-region="staging"]')).toHaveCount(0)
+  await expect(panel.getByRole('combobox', { name: 'Rod destination', exact: true }).locator('option')).toHaveCount(4)
+  await expect(panel.getByText(/Staging:/)).toHaveCount(0)
+  await expect(panel.locator('[data-grid-world]')).toHaveAttribute('data-grid-rows', '15')
   await expect(panel.locator('.sys-lane-label')).toHaveCount(14)
   const boxes = await regions.evaluateAll(elements => elements.map(el => {
     const box = el.getBoundingClientRect()

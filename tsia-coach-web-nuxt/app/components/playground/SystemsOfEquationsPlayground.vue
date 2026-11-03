@@ -23,6 +23,7 @@ import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { trainView } from '~/components/rod/scene/train-view'
 import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
 import SystemsBoard from '~/components/systems/SystemsBoard.vue'
+import { substituteSystem } from '~/components/systems/systems.substitution'
 import SystemsAreaSummaries from '~/components/systems/SystemsAreaSummaries.vue'
 import { evaluateSystem } from '~/components/systems/systems.evaluate'
 import { agreementFeedback, equationFeedback, groupFeedback, systemFeedback } from '~/components/systems/systems.feedback'
@@ -90,7 +91,7 @@ function policyFor(target: SystemsBoardConfig, layout: SystemsGeometry): ScenePo
   return {
     columns: layout.columns,
     rows: layout.rows,
-    spawnRows: [layout.staging.y],
+    spawnRows: [layout.staging?.y ?? layout.variableRegions[0]!.y],
     regions: layout.regions,
     editable: () => !editingDisabled.value,
     allowOrientation: true,
@@ -105,7 +106,7 @@ function policyFor(target: SystemsBoardConfig, layout: SystemsGeometry): ScenePo
 const policy: ScenePolicy = {
   get columns() { return geometry.value.columns },
   get rows() { return geometry.value.rows },
-  get spawnRows() { return [geometry.value.staging.y] },
+  get spawnRows() { return [geometry.value.staging?.y ?? geometry.value.variableRegions[0]!.y] },
   get regions() { return geometry.value.regions },
   editable: () => !editingDisabled.value,
   allowOrientation: true,
@@ -264,6 +265,7 @@ watch(editingDisabled, disabled => {
 // ---- Evaluation and readouts ------------------------------------------------
 
 const evaluation = computed(() => evaluateSystem(config.value, scene.trains.value))
+const substitution = computed(() => substituteSystem(config.value, scene.trains.value))
 const equationRows = computed(() => config.value.system.equations.map((equation, index) => {
   const evaluated = evaluation.value.valid ? evaluation.value.equations[index]! : null
   return {
@@ -276,7 +278,7 @@ const equationRows = computed(() => config.value.system.equations.map((equation,
 const agreementRows = computed(() => evaluation.value.valid
   ? [agreementFeedback(evaluation.value, 'x'), agreementFeedback(evaluation.value, 'y')]
   : [])
-const stagingReadout = computed(() => evaluation.value.valid
+const stagingReadout = computed(() => geometry.value.staging && evaluation.value.valid
   ? `Staging: ${evaluation.value.stagingArea} cells, not counted`
   : '')
 
@@ -291,7 +293,7 @@ const destinations = computed(() => [
     id: region.id,
     label: `Eq ${region.equationIndex + 1}: ${region.variable} (${region.coefficient} ${region.coefficient === 1 ? 'row' : 'rows'})`,
   })),
-  { id: geometry.value.staging.id, label: 'Staging' },
+  ...(geometry.value.staging ? [{ id: geometry.value.staging.id, label: 'Staging' }] : []),
 ])
 
 function onBoardClick(point: Point): void {
@@ -595,7 +597,8 @@ function onRemove(): void {
         <SystemsBoard
           :config="config"
           :cell-size="cellSize"
-          :evaluation="evaluation"
+          :evaluation="substitution.evaluation"
+          :suggestions="substitution.suggestions"
           :active-region="activeRegion"
           :ghosts="preview.ghosts.value"
           :viewport-padding="`${boardPaddingY}px 16px`"
@@ -615,7 +618,7 @@ function onRemove(): void {
     <template #board-aside>
       <SystemsAreaSummaries
         :config="config"
-        :evaluation="evaluation"
+        :evaluation="substitution.evaluation"
         :cell-size="cellSize"
         :padding-y="boardPaddingY"
         :scroll-top="boardScrollTop"
@@ -657,8 +660,24 @@ function onRemove(): void {
     <template #after-workspace>
       <section
         class="sys-feedback"
+        aria-label="Variable substitution"
+        aria-live="polite"
+        aria-atomic="true"
+        data-systems-substitution
+      >
+        <p>Solid rods are yours. Faded, outlined rods show substitution suggestions and are not saved or editable.</p>
+        <p
+          v-for="line in substitution.lines"
+          :key="line"
+        >
+          {{ line }}
+        </p>
+      </section>
+      <section
+        class="sys-feedback"
         aria-label="Constraint feedback"
       >
+        <p><strong>Learner material only (excluding substitution suggestions):</strong></p>
         <p
           v-for="row in equationRows"
           :key="row.id"
