@@ -303,3 +303,15 @@ Configure `PLAYGROUND_URL` when using an existing frontend. Do not introduce ext
 ## Completion example
 
 A student opens the fixture, builds one candidate using the rod context menus, tests it against the other equation, sees accurate excess/missing area and disagreement, revises the rows, and captures their discovery steps. They can also build x=14 from a 10-and-4 train and use it consistently across both equations in the long-variable fixture. At every point, the visible material and computed constraints come from the same committed scene.
+
+
+## November 2, 2026: continuous-grid presentation
+
+The default development fixtures now use `layout: 'continuous'`: adjacent x/y row bands, one separator row between equations, a two-column coefficient/variable gutter, and a shared visible grid. Per-row labels and the equation text preserve variable identity while the four band accents follow the supplied reference. Rod colors still represent magnitude.
+
+The Systems tab retains the Array shell, rod layer, context menus and camera. Creation destination and problem selection are compact selects; detailed feedback is collapsed below the board. Older files omitting `layout` retain their original spaced geometry and saved coordinates. New exports preserve the explicit layout setting. Mathematical region evaluation and transformation planners derive their geometry from the same configuration in either layout.
+
+
+### Empty starting board
+
+The Systems board starts with no placed rods. Students create material from the top palette, using the selected destination or a region context menu. Reset board and problem switching also start empty; there are no automatic starter rods or activation-time seeding. The blank staging grid remains available for optional loose material and counts toward neither equation.

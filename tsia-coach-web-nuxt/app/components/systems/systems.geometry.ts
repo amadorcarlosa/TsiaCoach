@@ -41,11 +41,13 @@ export const equationText = (equation: LinearEquation) => {
 }
 
 /**
- * Pure layout. Each equation is a band: a heading row, its x lanes, one
- * separator row, then its y lanes. Staging follows the last band.
+ * Pure layout. Continuous boards place x/y lanes directly together, with
+ * a separator between equations. Omitted layout retains legacy heading/gap
+ * coordinates so previously saved scenes keep their meaning.
  */
 export function systemsGeometry(config: SystemsBoardConfig): SystemsGeometry {
-  const x = SYSTEMS_GUTTER_COLUMNS
+  const continuous = config.layout === 'continuous'
+  const x = continuous ? 2 : SYSTEMS_GUTTER_COLUMNS
   const width = config.laneColumns
   const variableRegions: VariableRegion[] = []
   const headings: { equationId: string; equationIndex: number; row: number }[] = []
@@ -53,9 +55,9 @@ export function systemsGeometry(config: SystemsBoardConfig): SystemsGeometry {
 
   config.system.equations.forEach((equation, equationIndex) => {
     headings.push({ equationId: equation.id, equationIndex, row })
-    row += config.regionGapRows
+    if (!continuous) row += config.regionGapRows
     variableIds.forEach((variable, index) => {
-      if (index > 0) row += 1
+      if (!continuous && index > 0) row += 1
       const coefficient = equation.coefficients[variable]
       variableRegions.push({
         kind: 'variable',
@@ -70,10 +72,11 @@ export function systemsGeometry(config: SystemsBoardConfig): SystemsGeometry {
       })
       row += coefficient
     })
+    if (continuous) row += config.regionGapRows
   })
 
   const stagingHeadingRow = row
-  row += config.regionGapRows
+  if (!continuous) row += config.regionGapRows
   const staging: StagingRegion = {
     kind: 'staging',
     id: STAGING_REGION_ID,

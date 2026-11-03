@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import BoardViewControls from '~/components/grid/BoardViewControls.vue'
 import { clientPointToGrid, measureGridFrame } from '~/components/grid/grid-coordinates'
 import type { Point } from '~/components/grid/gridPointer'
@@ -150,15 +150,6 @@ function replaceScene(source: SceneSnapshot) {
 
 // ---- Problem, initial scene, reset and clear --------------------------------
 
-/** A few loose rods in staging. Never the solution. */
-function initialScene(layout: SystemsGeometry): RodTrain[] {
-  const rod = (id: string, value: CuisenaireRodValue, x: number, row: number): RodTrain => ({
-    id, anchor: { x: layout.staging.x + x, y: layout.staging.y + row },
-    parts: [{ value, offset: { x: 0, y: 0 }, orientation: 'horizontal' }],
-  })
-  return [rod('start-1', 10, 0, 0), rod('start-2', 4, 11, 0), rod('start-3', 5, 16, 0), rod('start-4', 3, 0, 1)]
-}
-
 const board = computed((): BoardDescriptor => ({ kind: 'systems', config: copyConfig(config.value) }))
 
 function adapterFor(target: SystemsBoardConfig): LevelDocumentAdapter {
@@ -179,8 +170,8 @@ function cancelViewGestures() {
 
 function resetScene(): void {
   if (blocked.value) return
-  const result = replaceScene(initialScene(geometry.value))
-  problemMessage.value = result.allowed ? 'Board reset to the starting rods. Captured steps are unchanged.' : result.reason
+  const result = replaceScene([])
+  problemMessage.value = result.allowed ? 'Board reset to an empty grid. Captured steps are unchanged.' : result.reason
 }
 
 function clearScene(): void {
@@ -196,7 +187,7 @@ function clearScene(): void {
 function setProblem(id: SystemsFixtureId): void {
   if (blocked.value || id === fixtureId.value) return
   const current = JSON.stringify(copyScene(scene.trains.value))
-  const untouched = current === '[]' || current === JSON.stringify(copyScene(initialScene(geometry.value)))
+  const untouched = current === '[]'
   if (!untouched || (authoringPanel.value?.stepCount() ?? 0) > 0) {
     problemMessage.value = 'Clear the board and delete captured steps before switching problems.'
     return
@@ -204,7 +195,7 @@ function setProblem(id: SystemsFixtureId): void {
   cancelViewGestures()
   config.value = copyConfig(systemsFixtures[id].config)
   fixtureId.value = id
-  replaceScene(initialScene(geometry.value))
+  replaceScene([])
   problemMessage.value = `Problem changed to ${systemsFixtures[id].label}.`
   void camera.reset()
 }
@@ -242,20 +233,11 @@ defineExpose<RodPlaygroundExposed>({
   clear: () => replaceScene([]),
 })
 
-// Tabs mount hidden, where replacing is refused; seed on first activation.
-let seeded = false
-function seedStartingRods(): void {
-  if (seeded || editingDisabled.value) return
-  seeded = replaceScene(initialScene(geometry.value)).allowed
-}
-onMounted(seedStartingRods)
-watch(editingDisabled, seedStartingRods)
-
 // ---- Camera -----------------------------------------------------------------
 
 const camera = useBoardCamera({
   viewport: boardViewport,
-  baseCellSize: () => baseCellSize.value,
+  baseCellSize: () => config.value.layout === 'continuous' ? Math.min(24, baseCellSize.value) : baseCellSize.value,
   disabled: () => editingDisabled.value,
   beforeChange: cancelViewGestures,
 })
@@ -304,8 +286,6 @@ const destinations = computed(() => [
   })),
   { id: geometry.value.staging.id, label: 'Staging' },
 ])
-const destinationLabel = computed(() =>
-  destinations.value.find(item => item.id === activeRegion.value)?.label ?? '')
 
 function onBoardClick(point: Point): void {
   if (blocked.value) return
@@ -448,6 +428,13 @@ function onRegionCommand(command: SceneMenuCommand): void {
   }
 }
 
+function onProblemChange(event: Event): void {
+  const select = event.target as HTMLSelectElement
+  setProblem(select.value as SystemsFixtureId)
+  // A refused problem switch must keep the select aligned with the current problem.
+  select.value = fixtureId.value ?? ''
+}
+
 // ---- Toolbar ----------------------------------------------------------------
 
 function onOrient(orientation: ArrayRodOrientation): void {
@@ -494,42 +481,6 @@ function onRemove(): void {
     @update-tray-open="trayOpen = $event"
   >
     <template #tools-start>
-      <div
-        class="sys-row"
-        role="group"
-        aria-label="Problem"
-      >
-        <PlaygroundActionButton
-          v-for="(fixture, id) in systemsFixtures"
-          :key="id"
-          :disabled="blocked || editingDisabled"
-          :pressed="fixtureId === id"
-          @click="setProblem(id)"
-        >
-          {{ fixture.label }}
-        </PlaygroundActionButton>
-      </div>
-      <div
-        class="sys-row"
-        role="group"
-        aria-label="Rod destination"
-      >
-        <PlaygroundActionButton
-          v-for="destination in destinations"
-          :key="destination.id"
-          :disabled="blocked"
-          :pressed="activeRegion === destination.id"
-          @click="activeRegion = destination.id"
-        >
-          {{ destination.label }}
-        </PlaygroundActionButton>
-      </div>
-      <p class="sys-note">
-        New rods go to: {{ destinationLabel }}
-      </p>
-    </template>
-
-    <template #before-board>
       <section
         class="sys-readouts"
         aria-label="Equations"
@@ -540,61 +491,78 @@ function onRemove(): void {
             :key="row.id"
           >
             <strong>{{ row.text }}</strong>
-            <span>{{ row.summary }}</span>
           </li>
         </ul>
-        <details
-          class="sys-details"
-          open
-        >
-          <summary>Shape and agreement feedback</summary>
-          <ul>
-            <template
-              v-for="row in equationRows"
-              :key="`groups-${row.id}`"
-            >
-              <li
-                v-for="line in row.groups"
-                :key="line"
-              >
-                {{ row.text.split(':')[0] }}: {{ line }}
-              </li>
-            </template>
-            <li
-              v-for="line in agreementRows"
-              :key="line"
-            >
-              {{ line }}
-            </li>
-          </ul>
-        </details>
-        <p
-          class="sys-status"
-          role="status"
-          aria-live="polite"
-          data-systems-status
-        >
-          {{ systemFeedback(evaluation) }}
-        </p>
       </section>
+    </template>
 
-      <div
-        class="sys-row"
-        role="group"
-        aria-label="Board"
-      >
-        <PlaygroundActionButton
-          :disabled="blocked || editingDisabled"
-          @click="resetScene"
+    <template #before-board>
+      <div class="sys-compact-controls">
+        <label
+          class="sys-destination"
+          role="group"
+          aria-label="Rod destination"
         >
-          Reset to starting rods
-        </PlaygroundActionButton>
-        <PlaygroundActionButton
-          :disabled="blocked || editingDisabled"
-          @click="clearScene"
-        >
-          Clear board (keeps equations and steps)
-        </PlaygroundActionButton>
+          Add rods to
+          <select
+            v-model="activeRegion"
+            :disabled="blocked"
+            aria-label="Rod destination"
+          >
+            <option
+              v-for="destination in destinations"
+              :key="destination.id"
+              :value="destination.id"
+            >
+              {{ destination.label }}
+            </option>
+          </select>
+        </label>
+        <label class="sys-destination">
+          Problem
+          <select
+            :value="fixtureId ?? ''"
+            :disabled="blocked || editingDisabled"
+            aria-label="Problem"
+            @change="onProblemChange"
+          >
+            <option
+              v-if="fixtureId === null"
+              value=""
+              disabled
+            >
+              Imported problem
+            </option>
+            <option
+              v-for="(fixture, id) in systemsFixtures"
+              :key="id"
+              :value="id"
+            >
+              {{ fixture.label }}
+            </option>
+          </select>
+        </label>
+        <details class="sys-problem-options">
+          <summary>Board options</summary>
+          <div
+            class="sys-row"
+            role="group"
+            aria-label="Board"
+          >
+            <PlaygroundActionButton
+              :disabled="blocked || editingDisabled"
+              @click="resetScene"
+            >
+              Reset board
+            </PlaygroundActionButton>
+            <PlaygroundActionButton
+              :disabled="blocked || editingDisabled"
+              @click="clearScene"
+            >
+              Clear board (keeps equations and steps)
+            </PlaygroundActionButton>
+          </div>
+        </details>
       </div>
       <p
         v-if="problemMessage"
@@ -670,6 +638,48 @@ function onRemove(): void {
     </template>
 
     <template #after-workspace>
+      <section
+        class="sys-feedback"
+        aria-label="Constraint feedback"
+      >
+        <p
+          v-for="row in equationRows"
+          :key="row.id"
+        >
+          {{ row.summary }}
+        </p>
+        <details class="sys-details">
+          <summary>Shape and agreement feedback</summary>
+          <ul>
+            <template
+              v-for="row in equationRows"
+              :key="`groups-${row.id}`"
+            >
+              <li
+                v-for="line in row.groups"
+                :key="line"
+              >
+                {{ row.text.split(':')[0] }}: {{ line }}
+              </li>
+            </template>
+            <li
+              v-for="line in agreementRows"
+              :key="line"
+            >
+              {{ line }}
+            </li>
+          </ul>
+        </details>
+        <p
+          class="sys-status"
+          role="status"
+          aria-live="polite"
+          data-systems-status
+        >
+          {{ systemFeedback(evaluation) }}
+        </p>
+      </section>
+
       <RodPlaygroundAuthoring
         v-if="showAuthoring"
         ref="authoringPanel"
@@ -731,4 +741,15 @@ function onRemove(): void {
   margin: 0;
   font-weight: 600;
 }
+</style>
+
+<style scoped>
+.sys-equations { text-align: center; padding-block: 4px; gap: 2px; }
+.sys-equations li { justify-content: center; font-size: clamp(18px, 2vw, 26px); }
+.sys-compact-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sys-destination { display: flex; gap: 8px; align-items: center; font-size: 0.875rem; }
+.sys-destination select { min-height: 40px; padding: 6px 10px; border: 1px solid var(--mt-border); border-radius: var(--radius-md); background: var(--mt-bg-elevated); color: var(--mt-text); }
+.sys-problem-options { font-size: 0.875rem; }
+.sys-feedback { padding-block: 8px; font-size: 0.875rem; }
+.sys-feedback p { margin-block: 4px; }
 </style>

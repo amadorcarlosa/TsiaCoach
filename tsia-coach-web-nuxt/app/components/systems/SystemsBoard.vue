@@ -28,6 +28,9 @@ const props = withDefaults(defineProps<{
   viewportPadding: '16px',
 })
 
+const continuous = computed(() => props.config.layout === 'continuous')
+const bandColor = (index: number, variable: string) =>
+  [['#86c747', '#f2d72e'], ['#a674c4', '#f06c69']][index]?.[variable === 'x' ? 0 : 1] ?? 'var(--mt-grid)'
 const geometry = computed(() => systemsGeometry(props.config))
 const gridConfig = computed(() => ({
   columns: geometry.value.columns,
@@ -67,12 +70,12 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
   <GridSurface
     :config="gridConfig"
     :view="{ tiltDegrees: 0 }"
-    :show-grid="false"
+    :show-grid="continuous"
     :viewport-padding="viewportPadding"
     viewport-alignment="start"
   >
     <div
-      v-for="heading in headings"
+      v-for="heading in continuous ? [] : headings"
       :key="heading.equationId"
       class="sys-heading"
       :class="{ 'sys-heading--satisfied': heading.satisfied }"
@@ -91,22 +94,34 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
       <div
         class="sys-bracket"
         :class="`sys-bracket--${region.variable}`"
-        :style="box(0, region.y, SYSTEMS_GUTTER_COLUMNS - 0.25, region.depth)"
+        :style="{ ...box(0, region.y, continuous ? 1 : SYSTEMS_GUTTER_COLUMNS - 0.25, region.depth), ...(continuous ? { border: 'none', paddingRight: '4px' } : {}) }"
         aria-hidden="true"
       >
         <span class="sys-bracket-count">{{ region.coefficient }}{{ region.variable }}</span>
-        <span class="sys-bracket-text">{{ region.coefficient }} {{ region.coefficient === 1 ? 'row' : 'rows' }}</span>
+        <span v-if="!continuous" class="sys-bracket-text">{{ region.coefficient }} {{ region.coefficient === 1 ? 'row' : 'rows' }}</span>
       </div>
       <div
         class="sys-region"
         :class="[`sys-region--${region.variable}`, { 'sys-region--active': activeRegion === region.id }]"
         :data-systems-region="region.id"
-        :style="box(region.x, region.y, region.width, region.depth)"
+        :style="{
+          ...box(region.x, region.y, region.width, region.depth),
+          ...(continuous ? { '--band-color': bandColor(region.equationIndex, region.variable) } : {}),
+        }"
+        :data-continuous-band="continuous ? '' : undefined"
         aria-hidden="true"
       />
+      <div
+        v-for="row in continuous ? region.coefficient : 0"
+        :key="`${region.id}-${row}`"
+        class="sys-lane-label"
+        :style="{ ...box(1, region.y + row - 1, 1, 1), background: bandColor(region.equationIndex, region.variable) }"
+        aria-hidden="true"
+      >{{ region.variable }}</div>
     </template>
 
     <div
+      v-if="!continuous"
       class="sys-heading sys-heading--staging"
       :style="box(0, geometry.stagingHeadingRow, geometry.columns, 1)"
       aria-hidden="true"
@@ -235,5 +250,25 @@ const ghostLabels = computed(() => props.ghosts.map((train, index) => {
   color: var(--ui-primary);
   font-weight: 700;
   font-size: max(10px, calc(var(--cell-size) * 0.45));
+}
+</style>
+
+<style scoped>
+.sys-region[data-continuous-band] {
+  background-color: color-mix(in srgb, var(--band-color) 8%, var(--mt-bg-elevated));
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--band-color) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--band-color) 70%, transparent) 1px, transparent 1px);
+  border: 1px solid var(--band-color);
+}
+.sys-region[data-continuous-band].sys-region--active { outline-offset: -3px; }
+.sys-lane-label {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  color: #141922;
+  font-weight: 700;
+  font-size: max(9px, calc(var(--cell-size) * 0.5));
+  pointer-events: none;
 }
 </style>

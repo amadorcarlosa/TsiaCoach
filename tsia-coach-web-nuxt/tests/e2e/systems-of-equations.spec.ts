@@ -7,7 +7,7 @@ async function openSystems(page: Page) {
   await page.getByRole('tab', { name: 'Systems of Equations Playground', exact: true }).click()
   const panel = page.getByRole('tabpanel', { name: 'Systems of Equations Playground', exact: true })
   await expect(panel).toBeVisible()
-  await expect(panel.locator('[data-piece-id]')).toHaveCount(4)
+  await expect(panel.locator('[data-piece-id]')).toHaveCount(0)
   return panel
 }
 
@@ -15,7 +15,7 @@ const readout = (panel: Locator) => panel.getByRole('region', { name: 'Equations
 const status = (panel: Locator) => panel.locator('[data-systems-status]')
 
 async function destination(panel: Locator, label: string) {
-  await panel.getByRole('group', { name: 'Rod destination' }).getByRole('button', { name: label, exact: true }).click()
+  await panel.getByRole('combobox', { name: 'Rod destination', exact: true }).selectOption({ label })
 }
 
 /** Adds a rod to the current destination and returns the new piece. */
@@ -46,6 +46,11 @@ async function settleScroll(page: Page) {
 async function menuOn(page: Page, rod: Locator) {
   const surface = rod.locator('[data-rod-surface]').first()
   await surface.scrollIntoViewIfNeeded()
+  // Keep the board below the sticky header after inspecting feedback below it.
+  await surface.evaluate(el => {
+    const viewport = el.closest('.systems-viewport')
+    if (viewport) window.scrollBy(0, viewport.getBoundingClientRect().top - 120)
+  })
   await settleScroll(page)
   await surface.click({ button: 'right' })
   const menu = page.getByRole('menu')
@@ -113,6 +118,7 @@ test.describe('systems of equations playground', () => {
     await expect(page.getByRole('dialog')).toContainText('The equation keeps its area.')
     await page.getByRole('dialog').getByRole('button', { name: 'Redistribute', exact: true }).click()
     await expect(panel.getByText('Equation 1: 34 of 34 cells. Both groups form rectangles.')).toBeVisible()
+    await panel.getByText('Shape and agreement feedback', { exact: true }).click()
     await expect(panel.getByText('Both x groups are rectangles, but their lengths disagree (3 and 8).')).toBeVisible()
 
     await command(page, await pieceIn(panel, 'equation-1:x'), 'Test candidate in other equation', 'Build candidate')
@@ -123,7 +129,7 @@ test.describe('systems of equations playground', () => {
   test('long variable: a 10-and-4 train repeats into rows of 14', async ({ playground, page }) => {
     void playground
     const panel = await openSystems(page)
-    await panel.getByRole('group', { name: 'Problem' }).getByRole('button', { name: '2x + y = 32, x + 3y = 26' }).click()
+    await panel.getByRole('combobox', { name: 'Problem', exact: true }).selectOption('longVariable')
     await expect(readout(panel).getByText('Equation 1: 2x + y = 32', { exact: true })).toBeVisible()
 
     await destination(panel, 'Eq 1: x (2 rows)')
@@ -177,11 +183,10 @@ test.describe('systems of equations playground', () => {
     await settleScroll(page)
     await page.mouse.click(lane.x + lane.width - 20, lane.y + 10, { button: 'right' })
     await page.getByRole('menu').getByRole('menuitem', { name: /Add rods here/ }).click()
-    await expect(panel.getByRole('group', { name: 'Rod destination' }).getByRole('button', { name: 'Eq 2: y (2 rows)' }))
-      .toHaveAttribute('aria-pressed', 'true')
+    await expect(panel.getByRole('combobox', { name: 'Rod destination', exact: true })).toHaveValue('equation-2:y')
 
     // Switching problems is refused while the board has work on it.
-    await panel.getByRole('group', { name: 'Problem' }).getByRole('button', { name: '2x + y = 32, x + 3y = 26' }).click()
+    await panel.getByRole('combobox', { name: 'Problem', exact: true }).selectOption('longVariable')
     await expect(panel.getByText('Clear the board and delete captured steps before switching problems.')).toBeVisible()
     await expect(readout(panel).getByText('Equation 1: 3x + 5y = 34', { exact: true })).toBeVisible()
   })
@@ -214,4 +219,24 @@ test.describe('systems of equations playground', () => {
       await page.keyboard.press('Escape')
     })
   }
+})
+
+
+test('systems opens as one compact grid with adjacent coefficient row bands', async ({ playground, page }) => {
+  void playground
+  const panel = await openSystems(page)
+  const regions = panel.locator('[data-continuous-band]')
+  await expect(regions).toHaveCount(4)
+  await expect(panel.locator('.sys-lane-label')).toHaveCount(14)
+  const boxes = await regions.evaluateAll(elements => elements.map(el => {
+    const box = el.getBoundingClientRect()
+    return { top: box.top, bottom: box.bottom, left: box.left, width: box.width }
+  }))
+  expect(boxes[0]!.bottom).toBeCloseTo(boxes[1]!.top, 0)
+  expect(boxes[2]!.bottom).toBeCloseTo(boxes[3]!.top, 0)
+  expect(boxes.every(box => box.left === boxes[0]!.left && box.width === boxes[0]!.width)).toBe(true)
+  const viewport = await panel.locator('.systems-viewport').boundingBox()
+  expect(boxes[3]!.bottom).toBeLessThan(viewport!.y + viewport!.height)
+  await expect(panel.locator('.sys-details')).not.toHaveAttribute('open')
+  await page.screenshot({ path: `${shots}/continuous-grid.png` })
 })

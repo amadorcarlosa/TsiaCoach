@@ -82,12 +82,12 @@ describe('systems schema and geometry', () => {
       ['equation-1:x', 3, 24], ['equation-1:y', 5, 24], ['equation-2:x', 4, 24], ['equation-2:y', 2, 24],
     ])
     const [a, b, c, d] = geometry.variableRegions
-    // Heading, x lanes, separator, y lanes, then the next heading.
-    expect([a!.y, b!.y, c!.y, d!.y]).toEqual([1, 5, 11, 16])
-    expect(geometry.staging.y).toBe(19)
-    expect(geometry.rows).toBe(23)
-    expect(geometry.columns).toBe(28)
-    expect(geometry.variableRegions.every(item => item.x === 4)).toBe(true)
+    // Adjacent x/y lanes, with one blank row between equations.
+    expect([a!.y, b!.y, c!.y, d!.y]).toEqual([0, 3, 9, 13])
+    expect(geometry.staging.y).toBe(16)
+    expect(geometry.rows).toBe(20)
+    expect(geometry.columns).toBe(26)
+    expect(geometry.variableRegions.every(item => item.x === 2)).toBe(true)
   })
 })
 
@@ -369,4 +369,13 @@ describe('systems level files', () => {
     ] }
     expect(validateLevelDocument(JSON.parse(JSON.stringify(bad)), adapter(development)).allowed).toBe(false)
   })
+})
+
+
+it('preserves the spaced geometry of previously saved systems levels', () => {
+  const legacy = { ...development, layout: undefined }
+  const geometry = systemsGeometry(legacy)
+  expect(geometry.variableRegions.map(region => region.y)).toEqual([1, 5, 11, 16])
+  expect(geometry.staging.y).toBe(19)
+  expect(geometry.columns).toBe(28)
 })
