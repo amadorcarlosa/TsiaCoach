@@ -71,7 +71,7 @@ export type AddendChoice = {
 
 export type FactorShape = {
   rows: number
-  columns: CuisenaireRodValue
+  columns: number
 }
 
 export type FactorChoice = {
@@ -171,9 +171,9 @@ export type ScenePolicy = {
   /** Opt in to cancelling one positive and one negative rod as a zero pair. */
   allowZeroPairCancellation?: boolean
   /**
-   * Make a train and Clone keep material in the region it came from. Boards
-   * whose regions carry meaning (systems groups) opt in; others keep the
-   * plain rule that a result must fit some region.
+   * Joins, clones and factor arrangements stay in their source region.
+   * Factors search nearest free positions there. Boards whose regions carry
+   * meaning opt in; others retain their existing placement behavior.
    */
   regionBoundEdits?: boolean
   /** Planner for 'board-transform' actions. Absent boards reject them. */

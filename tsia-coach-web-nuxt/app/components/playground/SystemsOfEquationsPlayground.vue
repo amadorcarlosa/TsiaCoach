@@ -23,6 +23,7 @@ import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { trainView } from '~/components/rod/scene/train-view'
 import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
 import SystemsBoard from '~/components/systems/SystemsBoard.vue'
+import SystemsAreaSummaries from '~/components/systems/SystemsAreaSummaries.vue'
 import { evaluateSystem } from '~/components/systems/systems.evaluate'
 import { agreementFeedback, equationFeedback, groupFeedback, systemFeedback } from '~/components/systems/systems.feedback'
 import { systemsFixtures, type SystemsFixtureId } from '~/components/systems/systems.fixtures'
@@ -242,6 +243,12 @@ const camera = useBoardCamera({
   beforeChange: cancelViewGestures,
 })
 const cellSize = camera.cellSize
+const boardScrollTop = ref(0)
+
+function onBoardScroll() {
+  boardScrollTop.value = boardViewport.value?.scrollTop ?? 0
+  cancelViewGestures()
+}
 
 function onBoardPointerDown(event: PointerEvent) {
   if (!camera.onPointerDown(event)) marquee.onPointerDown(event)
@@ -472,7 +479,7 @@ function onRemove(): void {
     @board-pointer-move="camera.onPointerMove"
     @board-pointer-end="camera.onPointerEnd"
     @board-keydown="camera.onKeydown"
-    @board-scroll="cancelViewGestures"
+    @board-scroll="onBoardScroll"
     @board-lost-pointer-capture="onBoardLostPointerCapture"
     @board-pointer-down="onBoardPointerDown"
     @choose-rod="onChoose"
@@ -603,6 +610,16 @@ function onRemove(): void {
           </template>
         </SystemsBoard>
       </div>
+    </template>
+
+    <template #board-aside>
+      <SystemsAreaSummaries
+        :config="config"
+        :evaluation="evaluation"
+        :cell-size="cellSize"
+        :padding-y="boardPaddingY"
+        :scroll-top="boardScrollTop"
+      />
     </template>
 
     <template #menu>

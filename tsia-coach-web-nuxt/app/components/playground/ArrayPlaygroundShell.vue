@@ -127,30 +127,41 @@ const emit = defineEmits<{
 
     <slot name="before-board" />
 
-    <!-- The viewport handles keyboard panning only when it itself has focus. -->
-    <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
     <div
-      :ref="setBoardViewport"
-      class="array-shell-viewport"
-      :class="[viewportClass, {
-        'marquee-enabled': !editingDisabled,
-        'array-shell-viewport--navigable': navigable,
-        'array-shell-viewport--panning': panMode,
-        'array-shell-viewport--scrollable': scrollable && !phonePortrait,
-        'array-shell-viewport--clipped': scrollable && phonePortrait,
-      }]"
-      :tabindex="navigable ? 0 : -1"
-      :role="navigable ? 'region' : undefined"
-      :aria-label="navigable ? 'Board workspace. Use arrow keys to pan.' : undefined"
-      @pointermove="emit('boardPointerMove', $event)"
-      @pointerup="emit('boardPointerEnd', $event)"
-      @pointercancel="emit('boardPointerEnd', $event)"
-      @keydown="emit('boardKeydown', $event)"
-      @scroll="emit('boardScroll')"
-      @pointerdown.capture="emit('boardPointerDown', $event)"
-      @lostpointercapture="emit('boardLostPointerCapture', $event)"
+      class="array-shell-workspace"
+      :class="{ 'array-shell-workspace--with-aside': $slots['board-aside'] }"
     >
-      <slot name="board" />
+      <!-- The viewport handles keyboard panning only when it itself has focus. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
+      <div
+        :ref="setBoardViewport"
+        class="array-shell-viewport"
+        :class="[viewportClass, {
+          'marquee-enabled': !editingDisabled,
+          'array-shell-viewport--navigable': navigable,
+          'array-shell-viewport--panning': panMode,
+          'array-shell-viewport--scrollable': scrollable && !phonePortrait,
+          'array-shell-viewport--clipped': scrollable && phonePortrait,
+        }]"
+        :tabindex="navigable ? 0 : -1"
+        :role="navigable ? 'region' : undefined"
+        :aria-label="navigable ? 'Board workspace. Use arrow keys to pan.' : undefined"
+        @pointermove="emit('boardPointerMove', $event)"
+        @pointerup="emit('boardPointerEnd', $event)"
+        @pointercancel="emit('boardPointerEnd', $event)"
+        @keydown="emit('boardKeydown', $event)"
+        @scroll="emit('boardScroll')"
+        @pointerdown.capture="emit('boardPointerDown', $event)"
+        @lostpointercapture="emit('boardLostPointerCapture', $event)"
+      >
+        <slot name="board" />
+      </div>
+      <div
+        v-if="$slots['board-aside']"
+        class="array-shell-board-aside"
+      >
+        <slot name="board-aside" />
+      </div>
     </div>
 
     <slot name="menu" />
@@ -233,4 +244,16 @@ const emit = defineEmits<{
 .array-shell-viewport--navigable:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 2px; }
 .array-shell-viewport--panning { cursor: grab; }
 .array-shell-viewport--panning :deep(*) { cursor: inherit; }
+
+.array-shell-workspace--with-aside {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(112px, 18vw, 164px);
+  gap: 8px;
+}
+
+.array-shell-board-aside {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
 </style>

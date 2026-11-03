@@ -9,8 +9,7 @@ import type {
     SceneAction,
     SceneApplyResult,
     ScenePolicy,
-    SceneResult,
-    TrainPart
+    SceneResult
 } from '~/components/rod/scene/rod.scene.types'
 import { layeredRoleOf, validateScene } from '~/components/rod/scene/rod-scene.placement'
 import { signedAddendPairs } from '~/components/rod/scene/addend-groupings'
@@ -30,7 +29,7 @@ import {
     trainSignedTotal,
     trainUniformSign,
 } from '~/components/rod/scene/rod-arithmetic'
-import { factorShapes } from '~/components/rod/scene/factor-groupings'
+import { factorParts, factorShapes } from '~/components/rod/scene/factor-groupings'
 import {
     areaGroupParts,
     areaGroupReading,
@@ -415,6 +414,8 @@ export function useRodScene(policy: ScenePolicy) {
                     return reject('Factor arrangements are available in Array.')
                 }
 
+                const homes = selected.map(train => homeRegion(policy, train))
+
                 for (const train of selected) {
                     if (!train.parts.length) {
                         return reject('This train has no parts.')
@@ -432,7 +433,7 @@ export function useRodScene(policy: ScenePolicy) {
 
                     const total = trainMagnitude(train)
 
-                    const candidates = factorShapes(total)
+                    const candidates = factorShapes(total, policy.regionBoundEdits)
                     const requested = action.shape
 
                     const shape = requested
@@ -450,15 +451,71 @@ export function useRodScene(policy: ScenePolicy) {
                         )
                     }
 
-                    train.parts = Array.from(
-                        { length: shape.rows },
-                        (_, row): TrainPart => ({
-                            value: shape.columns,
-                            ...signField(sign),
-                            orientation: 'horizontal',
-                            offset: { x: 0, y: row },
-                        }),
-                    )
+                    train.parts = factorParts(shape).map(part => ({ ...part, ...signField(sign) }))
+                }
+
+                if (policy.regionBoundEdits) {
+                    for (const [index, train] of selected.entries()) {
+                        const region = homes[index]
+                        const bounds = trainBounds(train)
+                        const shape = `${bounds.depth} rows of ${bounds.width}`
+                        if (!region) return reject('Select a train entirely inside one compatible region.')
+                        if (
+                            !train.parts.every(part => region.orientations.includes(part.orientation)) ||
+                            bounds.width > region.width ||
+                            bounds.depth > region.depth
+                        ) {
+                            return reject(
+                                `${shape} cannot fit in this region. ` +
+                                `This arrangement requires an uninterrupted area at least ${bounds.width} columns wide and ${bounds.depth} rows high.`,
+                            )
+                        }
+                    }
+
+                    // Remove every selected source before searching; reserve each
+                    // replacement, backtracking if it blocks a later selection.
+                    const fixed = current.filter(train => !selectedIds.has(train.id))
+                    const placed: RodTrain[] = []
+                    function place(index: number): boolean {
+                        if (index === selected.length) return validateScene([...fixed, ...placed], policy).allowed
+                        const train = selected[index]!
+                        const region = homes[index]!
+                        const bounds = trainBounds(train)
+                        const offsets = offsetsByDistance({
+                            minX: region.x - bounds.x,
+                            maxX: region.x + region.width - bounds.x - bounds.width,
+                            minY: region.y - bounds.y,
+                            maxY: region.y + region.depth - bounds.y - bounds.depth,
+                        })
+                        function* candidates() {
+                            yield { x: 0, y: 0 }
+                            yield* offsets
+                        }
+                        for (const offset of candidates()) {
+                            const candidate = {
+                                ...train,
+                                anchor: { x: train.anchor.x + offset.x, y: train.anchor.y + offset.y },
+                            }
+                            if (!trainFitsRegion(candidate, region)) continue
+                            if (!validateScene([...fixed, ...placed, candidate], policy).allowed) continue
+                            placed.push(candidate)
+                            if (place(index + 1)) return true
+                            placed.pop()
+                        }
+                        return false
+                    }
+
+                    if (!place(0)) {
+                        const bounds = trainBounds(selected[0]!)
+                        return reject(
+                            selected.length === 1
+                                ? `${bounds.depth} rows of ${bounds.width} cannot fit in this region. ` +
+                                  `The region is large enough, but existing rods block every valid ${bounds.width} by ${bounds.depth} placement.`
+                                : 'Cannot arrange these factors together. No collision-free placement exists for all selected trains within their original regions.',
+                        )
+                    }
+                    const replacements = new Map(placed.map(train => [train.id, train]))
+                    return validate(current.map(train => replacements.get(train.id) ?? train))
                 }
 
                 const result = validate(current)
@@ -677,7 +734,7 @@ export function useRodScene(policy: ScenePolicy) {
         const train = trains.value.find(train => train.id === id)
         if (!train || trainSignKind(train) === 'mixed') return []
 
-        return factorShapes(trainMagnitude(train)).map(shape => ({
+        return factorShapes(trainMagnitude(train), policy.regionBoundEdits).map(shape => ({
             shape,
             result: check([id], {
                 type: 'regroup-factors',

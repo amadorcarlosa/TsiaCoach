@@ -80,6 +80,95 @@ async function pieceIn(panel: Locator, regionId: string) {
 }
 
 test.describe('systems of equations playground', () => {
+  test('regroups a lower-row 25-cell train into a 5 by 5 rectangle in the same region', async ({ playground, page }) => {
+    void playground
+    const panel = await openSystems(page)
+    await destination(panel, 'Eq 1: y (5 rows)')
+    const first = await add(panel, 'ten')
+    const second = await add(panel, 'ten')
+    const five = await add(panel, 'five')
+    await first.locator('[data-rod-surface]').click()
+    await second.locator('[data-rod-surface]').click({ modifiers: ['Shift'] })
+    await five.locator('[data-rod-surface]').click({ modifiers: ['Shift'] })
+    const join = await menuOn(page, five)
+    await join.getByRole('menuitem', { name: 'Make a train', exact: true }).click()
+    const train = panel.locator('[data-piece-id]')
+    await expect(train).toHaveCount(1)
+    const id = await train.getAttribute('data-piece-id')
+    await train.focus()
+    for (let row = 0; row < 4; row++) await train.press('ArrowDown')
+    const region = panel.locator('[data-systems-region="equation-1:y"]')
+    const before = (await train.boundingBox())!
+    const bounds = (await region.boundingBox())!
+    expect(before.y).toBeGreaterThan(bounds.y + bounds.height / 2)
+
+    const menu = await menuOn(page, train)
+    const factors = menu.getByRole('menuitem', { name: 'Regroup to factors', exact: true })
+    await expect(factors).not.toHaveAttribute('aria-disabled', 'true')
+    await factors.hover()
+    await page.getByRole('menuitem', { name: '5 rows of 5', exact: true }).click()
+    await expect(train).toHaveAttribute('data-piece-id', id!)
+    await expect(train.locator('[data-part-value="5"]')).toHaveCount(5)
+    const after = (await train.boundingBox())!
+    const updatedRegion = (await region.boundingBox())!
+    expect(Math.abs(after.y - updatedRegion.y)).toBeLessThan(2)
+    expect(after.x).toBeGreaterThanOrEqual(updatedRegion.x - 1)
+    expect(after.x + after.width).toBeLessThanOrEqual(updatedRegion.x + updatedRegion.width + 1)
+    expect(after.y + after.height).toBeLessThanOrEqual(updatedRegion.y + updatedRegion.height + 1)
+    const summary = panel.getByRole('region', { name: 'Equation 1 area summary', exact: true })
+    await expect(summary).toContainText('y area: 25')
+    await expect(summary).toContainText('Total area: 25')
+
+    const regroup = await menuOn(page, train)
+    await regroup.getByRole('menuitem', { name: 'Regroup to factors', exact: true }).hover()
+    const tall = page.getByRole('menuitem', { name: /^25 rows of 1/ })
+    await expect(tall).toHaveAttribute('aria-disabled', 'true')
+    await expect(tall).toContainText('at least 1 columns wide and 25 rows high')
+    await page.getByRole('menuitem', { name: '1 row of 25', exact: true }).click()
+    await expect(train.locator('[data-part-value="10"]')).toHaveCount(2)
+    await expect(train.locator('[data-part-value="5"]')).toHaveCount(1)
+    await expect(summary).toContainText('Total area: 25')
+  })
+
+  test('shows live per-equation areas outside the scrolling board', async ({ playground, page }) => {
+    void playground
+    const panel = await openSystems(page)
+    const first = panel.getByRole('region', { name: 'Equation 1 area summary', exact: true })
+    const second = panel.getByRole('region', { name: 'Equation 2 area summary', exact: true })
+    await expect(first).toContainText('Total area: 0')
+    await expect(second).toContainText('Total area: 0')
+    await destination(panel, 'Eq 1: x (3 rows)')
+    const three = await add(panel, 'three')
+    await command(page, three, 'Repeat row into this group', 'Repeat row')
+    await destination(panel, 'Eq 1: y (5 rows)')
+    const five = await add(panel, 'five')
+    await command(page, five, 'Repeat row into this group', 'Repeat row')
+    await expect(first).toContainText('x area: 9')
+    await expect(first).toContainText('y area: 25')
+    await expect(first).toContainText('Total area: 34')
+    await destination(panel, 'Eq 1: x (3 rows)')
+    await add(panel, 'three')
+    await expect(first).toContainText('x area: 12')
+    await expect(first).toContainText('Total area: 37')
+    await expect(second).toContainText('Total area: 0')
+    await panel.getByRole('button', { name: 'Remove selected rod', exact: true }).click()
+    await expect(first).toContainText('Total area: 34')
+
+    const viewport = panel.locator('.systems-viewport')
+    expect(await first.evaluate(el => el.closest('.systems-viewport') === null)).toBe(true)
+    await panel.getByLabel('Zoom', { exact: true }).selectOption('2')
+    await viewport.evaluate(el => { el.scrollLeft = 0; el.scrollTop = 0 })
+    await settleScroll(page)
+    const before = (await first.boundingBox())!
+    await viewport.evaluate(el => { el.scrollLeft = el.scrollWidth; el.scrollTop = 60 })
+    expect(await viewport.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+    await expect.poll(async () => Math.round((await first.boundingBox())!.y))
+      .toBe(Math.round(before.y - 60))
+    expect((await first.boundingBox())!.x).toBe(before.x)
+    const region = (await panel.locator('[data-systems-region="equation-1:x"]').boundingBox())!
+    expect(Math.abs((await first.boundingBox())!.y - region.y)).toBeLessThan(2)
+  })
+
   test('builds x=8, y=2, tests it against equation 2, then finds the solution', async ({ playground, page }) => {
     void playground
     const panel = await openSystems(page)

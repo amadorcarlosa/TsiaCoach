@@ -41,7 +41,7 @@ export function useFactorMenuChoice(
       label: 'Regroup to factors',
       children: choices.map(({ shape }) => ({
         kind: 'action',
-        label: `${shape.rows} rows of ${rowName}${shape.columns}`,
+        label: `${shape.rows} ${shape.rows === 1 ? 'row' : 'rows'} of ${rowName}${shape.columns}`,
         action: {
           type: 'regroup-factors',
           shape,

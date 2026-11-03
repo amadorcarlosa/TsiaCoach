@@ -116,19 +116,30 @@ const content = computed(() => ({
   },
 }))
 
-function closeForViewportChange(): void {
+function closeForViewportChange(event: Event): void {
+  if (!props.request) return
+
+  const target = event.target
+
+  // Captured menu and submenu scrolling must not dismiss the menu.
+  if (target instanceof Element && target.closest('[role="menu"]')) return
+
+  emit('close')
+}
+
+function closeForResize(): void {
   if (props.request) emit('close')
 }
 
 onMounted(() => {
-  // Capture also catches scrolling inside nested containers.
+  // Capture also catches scrolling inside external nested containers.
   window.addEventListener('scroll', closeForViewportChange, true)
-  window.addEventListener('resize', closeForViewportChange)
+  window.addEventListener('resize', closeForResize)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', closeForViewportChange, true)
-  window.removeEventListener('resize', closeForViewportChange)
+  window.removeEventListener('resize', closeForResize)
 })
 </script>
 
