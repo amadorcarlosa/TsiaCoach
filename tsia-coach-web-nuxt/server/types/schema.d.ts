@@ -79,26 +79,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["FoundryDeploymentResponse"][];
-                    };
-                };
-            };
-        };
+        get: operations["GetModels"];
         put?: never;
         post?: never;
         delete?: never;
@@ -116,24 +97,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["RunAgent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -149,24 +113,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["RunJevDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -182,24 +129,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["CoachAttempt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -450,6 +380,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AgentRequest: {
+            model: string;
+            instructions: string;
+            prompt: string;
+            history: components["schemas"]["TurnDto"][];
+        };
+        AgentResponse: {
+            text: string;
+            model: string;
+            /** Format: int32 */
+            inputTokens: number | string;
+            /** Format: int32 */
+            outputTokens: number | string;
+        };
+        /** @enum {unknown} */
+        AgentRole: "user" | "assistant";
         AlgebraTileDefinitionResponse: {
             term: components["schemas"]["AlgebraTileTerm"];
             sign: components["schemas"]["AlgebraTileSign"];
@@ -559,6 +505,58 @@ export interface components {
             scaffoldId: string;
             entryStepId: string;
         };
+        CoachMoveResponse: components["schemas"]["CoachMoveResponseAskProbeResponse"] | components["schemas"]["CoachMoveResponseRouteToStepResponse"] | components["schemas"]["CoachMoveResponseDiagnoseDifferenceResponse"] | components["schemas"]["CoachMoveResponseSuggestScaffoldResponse"] | components["schemas"]["CoachMoveResponseExplainWhyResponse"] | components["schemas"]["CoachMoveResponseAnswerQuestionResponse"];
+        CoachMoveResponseAnswerQuestionResponse: {
+            /** @enum {string} */
+            type?: "answerQuestion";
+            stepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseAskProbeResponse: {
+            /** @enum {string} */
+            type?: "askProbe";
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseDiagnoseDifferenceResponse: {
+            /** @enum {string} */
+            type?: "diagnoseDifference";
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseExplainWhyResponse: {
+            /** @enum {string} */
+            type?: "explainWhy";
+            provenanceFactIds: string[];
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseRouteToStepResponse: {
+            /** @enum {string} */
+            type?: "routeToStep";
+            stepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
+        CoachMoveResponseSuggestScaffoldResponse: {
+            /** @enum {string} */
+            type?: "suggestScaffold";
+            suggestedStepId: string;
+            message: string;
+            focusPhraseIds: string[];
+        };
+        /** @enum {unknown} */
+        CoachTurnEvent: "helpRequested" | "probeAnswered" | "diagnosisRequested" | "explainCorrect" | "stepQuestionAsked";
+        CoachTurnRequest: {
+            event: components["schemas"]["CoachTurnEvent"];
+            answer?: null | string;
+            stepId?: null | string;
+            question?: null | string;
+        };
+        CoachTurnResponse: {
+            move: components["schemas"]["CoachMoveResponse"];
+        };
         DerivationOperationResponse: components["schemas"]["DerivationOperationResponseScaleByResponse"] | components["schemas"]["DerivationOperationResponseIncrementByResponse"];
         DerivationOperationResponseIncrementByResponse: {
             /** @enum {string} */
@@ -600,6 +598,10 @@ export interface components {
             semanticEntityId: string;
             /** Format: int32 */
             value: number | string;
+        };
+        JevRequest: {
+            state: components["schemas"]["JsonElement"];
+            instructions: string;
         };
         JsonElement: unknown;
         LatentMathProvenanceResponse: {
@@ -707,6 +709,11 @@ export interface components {
             mathObjectId: string;
             mathNodeId: null | string;
             characterSpan: components["schemas"]["CharacterSpanResponse"];
+        };
+        ModelMessage: {
+            message: string;
+            model: string;
+            role: components["schemas"]["AgentRole"];
         };
         PhraseSpanResponse: {
             id: string;
@@ -1104,6 +1111,11 @@ export interface components {
             /** Format: int32 */
             length: number | string;
         };
+        TurnDto: components["schemas"]["UserMessage"] | components["schemas"]["ModelMessage"];
+        UserMessage: {
+            message: string;
+            role: components["schemas"]["AgentRole"];
+        };
         /** @enum {unknown} */
         VendorName: "anthropic" | "openAI" | "deepSeek" | "openRouter";
     };
@@ -1115,6 +1127,161 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundryDeploymentResponse"][];
+                };
+            };
+        };
+    };
+    RunAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RunJevDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JevRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CoachAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoachTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoachTurnResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Client Closed Request */
+            499: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     GetRodCatalog: {
         parameters: {
             query?: never;

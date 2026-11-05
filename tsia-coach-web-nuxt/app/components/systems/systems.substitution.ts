@@ -3,6 +3,7 @@ import type { RodTrain, TrainPart } from '~/components/rod/scene/rod.scene.types
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { partFootprint } from '~/components/rod/scene/part-footprint'
 import { evaluateSystem } from './systems.evaluate'
+import { rowParts } from './systems.operations'
 import { systemsGeometry } from './systems.geometry'
 import { variableIds, type SystemsBoardConfig, type VariableId } from './systems.schema'
 
@@ -36,43 +37,51 @@ export function substituteSystem(config: SystemsBoardConfig, sources: readonly D
         lanes[bounds.y - region.y]!.push({ x: bounds.x, value: part.value })
       }
     }
-    const complete = !prototyping && lanes.every(lane => lane.length === 1) &&
-      new Set(lanes.map(lane => lane[0]?.value)).size === 1 &&
-      new Set(lanes.map(lane => lane[0]?.x)).size === 1
-    return { region, lanes, complete, prototyping }
+    // Scene validation has already ruled out overlaps. A lane is contiguous
+    // when its occupied length equals the span from its first to last cell.
+    const spans = lanes.map(lane => {
+      if (!lane.length) return null
+      const x = Math.min(...lane.map(part => part.x))
+      const end = Math.max(...lane.map(part => part.x + part.value))
+      const length = lane.reduce((sum, part) => sum + part.value, 0)
+      return { x, length, contiguous: end - x === length }
+    })
+    const complete = !prototyping &&
+      spans.every(span => span?.contiguous && span.length === spans[0]?.length && span.x === spans[0]?.x)
+    return { region, spans, complete, prototyping }
   })
 
   for (const variable of variableIds) {
     const groups = rows.filter(row => row.region.variable === variable)
     const completed = groups.filter(group => group.complete)
     if (!completed.length) continue
-    const value = completed[0]!.lanes[0]![0]!.value
-    if (completed.some(group => group.lanes[0]![0]!.value !== value)) {
+    const value = completed[0]!.spans[0]!.length
+    if (completed.some(group => group.spans[0]!.length !== value)) {
       lines.push(`Cannot propagate ${variable}: the completed learner regions show different values.`)
       continue
     }
     candidates[variable] = value
     const origin = completed[0]!
     lines.push(`${variable} = ${value} established from Equation ${origin.region.equationIndex + 1}.`)
-    for (const { region, lanes, complete, prototyping } of groups) {
+    for (const { region, spans, complete, prototyping } of groups) {
       if (complete) continue
-      const occupied = lanes.filter(lane => lane.length)
-      const start = occupied[0]?.[0]?.x ?? region.x
-      if (prototyping || occupied.some(lane => lane.length !== 1 || lane[0]!.value !== value || lane[0]!.x !== start)) {
+      const occupied = spans.filter(span => span !== null)
+      const start = occupied[0]?.x ?? region.x
+      if (prototyping || start + value > region.x + region.width || occupied.some(span => !span.contiguous || span.length !== value || span.x !== start)) {
         lines.push(`Equation ${region.equationIndex + 1}'s ${variable} region contains different or extra learner rods. Nothing there was replaced.`)
         continue
       }
-      lanes.forEach((lane, index) => {
-        if (lane.length) return
+      spans.forEach((span, index) => {
+        if (span) return
         suggestions.push({
           id: `suggested:${region.id}:${index}`,
           anchor: { x: start, y: region.y + index },
-          parts: [{ value, orientation: 'horizontal', offset: { x: 0, y: 0 } }],
+          parts: rowParts(value),
         })
       })
       lines.push(`Equation ${region.equationIndex + 1}'s ${region.coefficient}${variable} region was completed using the same value (${region.coefficient} × ${value} = ${region.coefficient * value}).`)
     }
   }
-  if (!Object.keys(candidates).length) lines.push('Complete a coefficient region with exactly one equal-length rod in each aligned row to establish a variable value.')
+  if (!Object.keys(candidates).length) lines.push('Complete a coefficient region with equal-length, contiguous material in each aligned row to establish a variable value.')
   return result()
 }

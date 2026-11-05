@@ -95,3 +95,25 @@ describe('completed coefficient region propagation', () => {
     expect(result.evaluation.valid && result.evaluation.satisfied).toBe(true)
   })
 })
+
+it('propagates x = 14 as a 10 + 4 train and completes the long-variable system', () => {
+  const config = systemsFixtures.longVariable.config
+  const [x, y, target] = systemsGeometry(config).variableRegions
+  const sources: RodTrain[] = [0, 1].map(row => ({
+    id: `x-${row}`,
+    anchor: { x: x!.x, y: x!.y + row },
+    parts: [
+      { value: 10, orientation: 'horizontal', offset: { x: 0, y: 0 } },
+      { value: 4, orientation: 'horizontal', offset: { x: 10, y: 0 } },
+    ],
+  }))
+  sources.push({
+    id: 'y',
+    anchor: { x: y!.x, y: y!.y },
+    parts: [{ value: 4, orientation: 'horizontal', offset: { x: 0, y: 0 } }],
+  })
+  const result = substituteSystem(config, sources)
+  expect(result.candidates).toEqual({ x: 14, y: 4 })
+  expect(result.suggestions.find(train => trainFitsRegion(train, target!))?.parts.map(part => part.value)).toEqual([10, 4])
+  expect(result.evaluation.valid && result.evaluation.satisfied).toBe(true)
+})
