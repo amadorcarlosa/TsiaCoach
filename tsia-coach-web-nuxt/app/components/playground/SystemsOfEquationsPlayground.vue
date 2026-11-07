@@ -18,10 +18,12 @@ import SceneRodLayer from '~/components/rod/scene/SceneRodLayer.vue'
 import { baseRodMenuChoices, deleteMenuChoice, orientationMenuChoices } from '~/components/rod/scene/rod-menu-choices'
 import type { BoardTransform, RodTrain, SceneResult, ScenePolicy } from '~/components/rod/scene/rod.scene.types'
 import type { SceneMenuChoice, SceneMenuCommand, SceneMenuRequest } from '~/components/rod/scene/scene-menu.types'
-import { copyScene, type SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
+import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { trainView } from '~/components/rod/scene/train-view'
 import { validateSnapshot } from '~/components/rod/scene/validate-snapshot'
+import SystemsProblemEditor from '~/components/systems/SystemsProblemEditor.vue'
+import { systemsBoardConfigSchema } from '~/components/systems/systems.schema'
 import SystemsBoard from '~/components/systems/SystemsBoard.vue'
 import { substituteSystem } from '~/components/systems/systems.substitution'
 import SystemsAreaSummaries from '~/components/systems/SystemsAreaSummaries.vue'
@@ -186,20 +188,29 @@ function clearScene(): void {
  * Switching problems reinterprets every lane, so it is refused while rods or
  * captured steps exist rather than silently giving old rods a new meaning.
  */
-function setProblem(id: SystemsFixtureId): void {
-  if (blocked.value || id === fixtureId.value) return
-  const current = JSON.stringify(copyScene(scene.trains.value))
-  const untouched = current === '[]'
-  if (!untouched || (authoringPanel.value?.stepCount() ?? 0) > 0) {
+function applyProblem(target: SystemsBoardConfig): void {
+  if (blocked.value || editingDisabled.value) return
+  const parsed = systemsBoardConfigSchema.safeParse(target)
+  if (!parsed.success) {
+    problemMessage.value = 'Check the equation coefficients, totals and row capacity.'
+    return
+  }
+  if (scene.trains.value.length || (authoringPanel.value?.stepCount() ?? 0) > 0) {
     problemMessage.value = 'Clear the board and delete captured steps before switching problems.'
     return
   }
   cancelViewGestures()
-  config.value = copyConfig(systemsFixtures[id].config)
-  fixtureId.value = id
+  config.value = copyConfig(parsed.data)
+  fixtureId.value = (Object.keys(systemsFixtures) as SystemsFixtureId[])
+    .find(id => JSON.stringify(systemsFixtures[id].config) === JSON.stringify(config.value)) ?? null
   replaceScene([])
-  problemMessage.value = `Problem changed to ${systemsFixtures[id].label}.`
+  problemMessage.value = `Problem changed to ${config.value.system.equations.map(equationText).join(', ')}.`
   void camera.reset()
+}
+
+function setProblem(id: SystemsFixtureId): void {
+  if (id === fixtureId.value) return
+  applyProblem(systemsFixtures[id].config)
 }
 
 // An imported level brings its own problem; the import replaces the whole
@@ -540,7 +551,7 @@ function onRemove(): void {
               value=""
               disabled
             >
-              Imported problem
+              Custom / imported problem
             </option>
             <option
               v-for="(fixture, id) in systemsFixtures"
@@ -573,6 +584,11 @@ function onRemove(): void {
           </div>
         </details>
       </div>
+      <SystemsProblemEditor
+        :config="config"
+        :disabled="blocked || editingDisabled"
+        @apply="applyProblem"
+      />
       <p
         v-if="problemMessage"
         class="sys-note"
