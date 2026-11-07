@@ -26,6 +26,11 @@ export type SceneMenuCommand =
   | 'systems-arrange-rows'
   | 'systems-redistribute'
   | 'systems-test-candidate'
+  | 'systems-count-exchange'
+  | 'systems-count-arrange'
+  | 'systems-count-add-x'
+  | 'systems-count-add-y'
+  | 'systems-count-select-exchange'
   | 'region-add-here'
   | 'region-select-group'
 

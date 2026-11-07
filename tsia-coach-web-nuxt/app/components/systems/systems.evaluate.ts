@@ -4,7 +4,8 @@ import { partFootprint } from '~/components/rod/scene/part-footprint'
 import { partSign } from '~/components/rod/scene/rod-arithmetic'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { systemsGeometry, type VariableRegion } from './systems.geometry'
-import type { SystemsBoardConfig, VariableId } from './systems.schema'
+import { strategyOf, type SystemsBoardConfig, type VariableId } from './systems.schema'
+import { evaluateCountSystem, type CountEvaluation } from './systems.count-evaluate'
 
 /**
  * Pure snapshot-to-constraint evaluation: no DOM, no Vue state, no mutation.
@@ -110,7 +111,20 @@ function evaluateGroup(region: VariableRegion, snapshot: Snapshot): GroupEvaluat
   return { ...base, status: 'rectangle', length: rowWidths[0]!, start: lanes[0]![0]! }
 }
 
+export type BoardEvaluation =
+  | { strategy: 'row-length'; evaluation: SystemEvaluation }
+  | { strategy: 'rod-count'; evaluation: CountEvaluation }
+
+/** Explicit dispatch: a board is read only under its own strategy. */
+export function evaluateBoard(config: SystemsBoardConfig, snapshot: Snapshot): BoardEvaluation {
+  return strategyOf(config) === 'rod-count'
+    ? { strategy: 'rod-count', evaluation: evaluateCountSystem(config, snapshot) }
+    : { strategy: 'row-length', evaluation: evaluateSystem(config, snapshot) }
+}
+
 export function evaluateSystem(config: SystemsBoardConfig, snapshot: Snapshot): SystemEvaluation {
+  // Row lengths would misread upright rod counts; refuse rather than guess.
+  if (strategyOf(config) === 'rod-count') return { valid: false, reason: 'This board counts rods; read it with the rod-count evaluation.' }
   const geometry = systemsGeometry(config)
 
   // Untrusted input is refused, never counted: overlapping material would

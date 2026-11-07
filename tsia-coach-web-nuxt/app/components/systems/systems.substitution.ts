@@ -5,12 +5,16 @@ import { partFootprint } from '~/components/rod/scene/part-footprint'
 import { evaluateSystem } from './systems.evaluate'
 import { rowParts } from './systems.operations'
 import { systemsGeometry } from './systems.geometry'
-import { variableIds, type SystemsBoardConfig, type VariableId } from './systems.schema'
+import { strategyOf, variableIds, type SystemsBoardConfig, type VariableId } from './systems.schema'
 
 /** Only complete learner regions establish values; generated rows are never sources. */
 export function substituteSystem(config: SystemsBoardConfig, sources: readonly DeepReadonly<RodTrain>[]) {
-  const geometry = systemsGeometry(config)
   const suggestions: RodTrain[] = []
+  // Rod-count boards derive Equation 2 from counts, not row-length propagation.
+  if (strategyOf(config) === 'rod-count') {
+    return { candidates: {}, suggestions, lines: [] as string[], evaluation: evaluateSystem(config, sources) }
+  }
+  const geometry = systemsGeometry(config)
   const candidates: Partial<Record<VariableId, number>> = {}
   const lines: string[] = []
   const sourceEvaluation = evaluateSystem(config, sources)

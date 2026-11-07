@@ -7,7 +7,8 @@ import { copyScene } from '~/components/rod/scene/scene-snapshot'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { evaluateSystem } from './systems.evaluate'
 import { systemsGeometry, type SystemsGeometry, type VariableRegion } from './systems.geometry'
-import type { SystemsBoardConfig, VariableId } from './systems.schema'
+import { strategyOf, type SystemsBoardConfig, type VariableId } from './systems.schema'
+import { planCountTransform, type CountPlanDetail, type CountTransformName } from './systems.count-operations'
 
 /**
  * Pure planners for the systems context-menu commands. They read a snapshot
@@ -15,7 +16,8 @@ import type { SystemsBoardConfig, VariableId } from './systems.schema'
  * or scene state. The scene runs them again at commit, against current data.
  */
 
-export type SystemsTransformName = 'repeat-row' | 'arrange-rows' | 'redistribute' | 'test-candidate'
+export type RowLengthTransformName = 'repeat-row' | 'arrange-rows' | 'redistribute' | 'test-candidate'
+export type SystemsTransformName = RowLengthTransformName | CountTransformName
 
 export type SystemsTransform = BoardTransform & { name: SystemsTransformName }
 
@@ -29,6 +31,8 @@ export type SystemsPlan = {
   conserves: boolean
   /** Canonical inputs, for the stale-preview check. */
   key: string
+  /** Rod-count plans only: which rods are exchanged, moved and added. */
+  detail?: CountPlanDetail
 }
 
 export type SystemsPlanResult = { allowed: true; plan: SystemsPlan } | { allowed: false; reason: string }
@@ -151,10 +155,12 @@ export function planSystemsTransform(
   ids: readonly string[],
   transform: BoardTransform,
 ): SystemsPlanResult {
-  const geometry = systemsGeometry(config)
   // The key names the command, not the expectation it is checked against.
   const command: BoardTransform = { name: transform.name, ...(transform.params ? { params: { ...transform.params } } : {}) }
-  const result = plan(config, geometry, trains, ids, command)
+  // Each strategy reads material its own way; neither plans the other's commands.
+  const result: SystemsPlanResult = strategyOf(config) === 'rod-count'
+    ? planCountTransform(config, trains, ids, command)
+    : plan(config, systemsGeometry(config), trains, ids, command)
   if (result.allowed && transform.expected !== undefined && transform.expected !== result.plan.key) {
     return reject(systemsReasons.stale)
   }

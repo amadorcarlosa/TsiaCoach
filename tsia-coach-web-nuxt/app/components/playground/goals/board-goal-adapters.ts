@@ -10,7 +10,8 @@ import { occupiedCells, matchesRectangle, matchesExactFraction, type GoalRegion 
 import { contains, partFootprint } from '~/components/rod/scene/part-footprint'
 import { partSignedValue } from '~/components/rod/scene/rod-arithmetic'
 import { systemsGeometry } from '~/components/systems/systems.geometry'
-import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
+import { strategyOf, type SystemsBoardConfig } from '~/components/systems/systems.schema'
+import { countLayout } from '~/components/systems/systems.count-layout'
 
 type Pair = GoalTarget & { numeratorCapacity: number; denominatorCapacity: number; read: (scene: SceneSnapshot) => { numerator: number; denominator: number } }
 const regionTypes = ['empty-region', 'region-total', 'occupied-area', 'filled-rectangle'] as const
@@ -108,6 +109,13 @@ export function createMathTablaGoalAdapter(config: { centralColumns: number; cen
  * an occupied-area goal is not a claim that the system holds.
  */
 export function createSystemsGoalAdapter(config: SystemsBoardConfig) {
+  if (strategyOf(config) === 'rod-count') {
+    // Only Equation 1 holds learner rods; Equation 2 is derived, so it has no goals.
+    const { upper } = countLayout(config)
+    return createAdapter([{
+      id: upper.id, label: 'Equation 1 rods', x: upper.x, y: upper.y, width: upper.width, depth: upper.depth,
+    }])
+  }
   const geometry = systemsGeometry(config)
   return createAdapter(geometry.variableRegions.map(region => ({
     id: region.id, label: region.label, x: region.x, y: region.y, width: region.width, depth: region.depth,

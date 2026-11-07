@@ -35,6 +35,40 @@ export const systemsFixtures = {
       regionGapRows: 1,
     },
   },
+  /** Artboards 1-8: candidates (21,1), (13,4), (5,7). */
+  rodCountReference: {
+    label: 'Rod counts: 3x + 8y = 71, 9x + 4y = 73',
+    config: {
+      layout: 'continuous',
+      staging: false,
+      strategy: 'rod-count',
+      system: {
+        equations: [
+          { id: 'equation-1', coefficients: { x: 3, y: 8 }, targetArea: 71 },
+          { id: 'equation-2', coefficients: { x: 9, y: 4 }, targetArea: 73 },
+        ],
+      },
+      laneColumns: 26,
+      regionGapRows: 2,
+    },
+  },
+  /** Exchanges three 4-rods for two 6-rods: (7,1) then (4,3). */
+  rodCountSmall: {
+    label: 'Rod counts: 4x + 6y = 34, 5x + 2y = 26',
+    config: {
+      layout: 'continuous',
+      staging: false,
+      strategy: 'rod-count',
+      system: {
+        equations: [
+          { id: 'equation-1', coefficients: { x: 4, y: 6 }, targetArea: 34 },
+          { id: 'equation-2', coefficients: { x: 5, y: 2 }, targetArea: 26 },
+        ],
+      },
+      laneColumns: 11,
+      regionGapRows: 2,
+    },
+  },
 } as const satisfies Record<string, { label: string; config: SystemsBoardConfig }>
 
 export type SystemsFixtureId = keyof typeof systemsFixtures

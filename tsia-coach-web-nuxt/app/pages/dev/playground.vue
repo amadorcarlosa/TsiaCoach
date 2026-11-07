@@ -92,6 +92,13 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
           :cancel-version="readCancelVersion"
         />
       </template>
+      <template #rodCountSystemsPlayground>
+        <SystemsOfEquationsPlayground
+          strategy="rod-count"
+          :active="activeTab === 'rodCountSystemsPlayground'"
+          :cancel-version="readCancelVersion"
+        />
+      </template>
     </UTabs>
   </div>
 </template>

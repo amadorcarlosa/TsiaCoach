@@ -41,7 +41,10 @@ export const boardDescriptorSchema = z.discriminatedUnion('kind', [
     activity: z.literal('fraction-multiplication').optional(),
   }).strict() }).strict(),
   // The whole problem travels with the rods: a snapshot without its
-  // equations is not a reproducible activity.
+  // equations is not a reproducible activity. A rod-count board also carries
+  // its strategy (and generation seed); its Equation 2 check is derived from
+  // the saved Equation 1 rods, never saved. Same forward-only policy as
+  // materialRole: older files lack the field and keep the row-length reading.
   z.object({ kind: z.literal('systems'), config: systemsBoardConfigSchema }).strict(),
 ])
 export const levelDocumentSchema = z.object({ version: z.literal(1), board: boardDescriptorSchema, steps: z.array(stepSchema) }).strict()

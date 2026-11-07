@@ -2,12 +2,15 @@ import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import type { SceneResult } from '~/components/rod/scene/rod.scene.types'
 import type { GoalAdapter, Validation } from '../goals/goal.types'
 import { levelDocumentSchema, type BoardDescriptor, type LevelDocumentV1 } from './level-document.schema'
-import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
+import { strategyOf, type SystemsBoardConfig } from '~/components/systems/systems.schema'
 import { equationText } from '~/components/systems/systems.geometry'
 
 /** Field-by-field, so key order in a hand-written file never matters. */
 function sameSystem(a: SystemsBoardConfig, b: SystemsBoardConfig): boolean {
-  return a.laneColumns === b.laneColumns && a.regionGapRows === b.regionGapRows &&
+  // The strategy is part of the board's identity: the same rods mean row
+  // lengths on one board and rod counts on the other.
+  return strategyOf(a) === strategyOf(b) &&
+    a.laneColumns === b.laneColumns && a.regionGapRows === b.regionGapRows &&
     a.system.equations.every((equation, index) => {
       const other = b.system.equations[index]
       return other !== undefined && equation.id === other.id && equation.targetArea === other.targetArea &&
@@ -36,7 +39,8 @@ export function sameBoard(a: BoardDescriptor, b: BoardDescriptor): boolean {
 /** Names a board's kind and configuration, e.g. "an array board (100 columns, 100 rows)". */
 function describeBoard(board: BoardDescriptor): string {
   if (board.kind === 'systems') {
-    return `a systems of equations board (${board.config.system.equations.map(equationText).join('; ')}, ` +
+    const strategy = strategyOf(board.config) === 'rod-count' ? 'rod-count ' : ''
+    return `a ${strategy}systems of equations board (${board.config.system.equations.map(equationText).join('; ')}, ` +
       `${board.config.laneColumns} columns per row)`
   }
   const settings = Object.entries(board.config)

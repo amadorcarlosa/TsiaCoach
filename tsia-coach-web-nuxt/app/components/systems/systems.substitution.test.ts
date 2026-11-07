@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RodTrain, TrainPart } from '~/components/rod/scene/rod.scene.types'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
+import type { SystemsBoardConfig } from './systems.schema'
+import { rowParts } from './systems.operations'
 import { substituteSystem } from './systems.substitution'
 import { systemsFixtures } from './systems.fixtures'
 import { systemsGeometry } from './systems.geometry'
@@ -115,5 +117,27 @@ it('propagates x = 14 as a 10 + 4 train and completes the long-variable system',
   const result = substituteSystem(config, sources)
   expect(result.candidates).toEqual({ x: 14, y: 4 })
   expect(result.suggestions.find(train => trainFitsRegion(train, target!))?.parts.map(part => part.value)).toEqual([10, 4])
+  expect(result.evaluation.valid && result.evaluation.satisfied).toBe(true)
+})
+
+
+it.each([14, 27, 65])('substitutes arbitrary configured equations with variable length %i', x => {
+  const y = 6
+  const config: SystemsBoardConfig = {
+    layout: 'continuous' as const, staging: false, laneColumns: 100, regionGapRows: 1,
+    system: { equations: [
+      { id: 'custom-a', coefficients: { x: 3, y: 2 }, targetArea: 3 * x + 2 * y },
+      { id: 'custom-b', coefficients: { x: 2, y: 5 }, targetArea: 2 * x + 5 * y },
+    ] },
+  }
+  const sources = systemsGeometry(config).variableRegions.filter(region => region.equationIndex === 0)
+    .flatMap(region => Array.from({ length: region.coefficient }, (_, lane): RodTrain => ({
+      id: `${region.id}-${lane}`, anchor: { x: region.x, y: region.y + lane },
+      parts: rowParts(region.variable === 'x' ? x : y),
+    })))
+  const result = substituteSystem(config, sources)
+  expect(result.candidates).toEqual({ x, y })
+  expect(result.suggestions).toHaveLength(7)
+  expect(result.suggestions.every(train => train.parts.every(part => part.value >= 1 && part.value <= 10))).toBe(true)
   expect(result.evaluation.valid && result.evaluation.satisfied).toBe(true)
 })

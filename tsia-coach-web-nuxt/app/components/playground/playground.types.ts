@@ -9,6 +9,7 @@ export const playgroundTabs = [
   { id: 'fractionModelPlayground', label: 'Fraction Rod Playground' },
   { id: 'mathTablaPlayground', label: 'MathTabla Playground' },
   { id: 'systemsPlayground', label: 'Systems of Equations Playground' },
+  { id: 'rodCountSystemsPlayground', label: 'Rod Count Systems' },
   { id: 'baseTenPlayground', label: 'Base ten' },
   { id: 'algebraTilePlayground', label: 'Algebra tiles' },
 ] as const
