@@ -1,8 +1,9 @@
 import { computed } from 'vue'
 import type { useRodScene } from './useRodScene'
 import type { SceneMenuChoice } from '~/components/rod/scene/scene-menu.types'
+import type { AreaGroupReading } from '~/components/tabla/area-grouping'
 
-const label = 'Regroup selected area'
+const defaultLabel = 'Regroup selected area'
 
 /**
  * A submenu of its own, independent of the factor menus. regroup-factors can
@@ -11,6 +12,9 @@ const label = 'Regroup selected area'
  */
 export function useAreaGroupingMenuChoice(
   scene: ReturnType<typeof useRodScene>,
+  label = defaultLabel,
+  /** A board's note on a reading, such as "target y grouping". */
+  note?: (reading: AreaGroupReading, active: boolean) => string | undefined,
 ) {
   return computed<SceneMenuChoice>(() => {
     const ids = [...scene.selection.value]
@@ -26,16 +30,18 @@ export function useAreaGroupingMenuChoice(
 
     // Start with a single rectangle: combining loose rods is a separate,
     // explicit action, not something a grouping choice should do implicitly.
-    if (ids.length > 1) {
+    // Several rods are offered only where the board allows rectangles; the
+    // scene returns no choices otherwise.
+    const choices = scene.getAreaGroupingChoices(ids.length === 1 ? ids[0]! : ids)
+    if (ids.length > 1 && !choices.length) {
+      const fallback = scene.check(ids, { type: 'regroup-area', grouping: 'columns' })
       return {
         kind: 'submenu',
         label,
         children: [],
-        disabledReason: 'Select one filled rectangle to regroup its area.',
+        disabledReason: fallback.allowed ? 'Select one filled rectangle to regroup its area.' : fallback.reason,
       }
     }
-
-    const choices = scene.getAreaGroupingChoices(ids[0]!)
     const fallback = scene.check(ids, { type: 'regroup-area', grouping: 'columns' })
 
     if (!choices.length) {
@@ -56,7 +62,9 @@ export function useAreaGroupingMenuChoice(
       label,
       children: choices.map(({ reading, active }) => ({
         kind: 'action',
-        label: `${reading.label} (${reading.arrangement})`,
+        label: note
+          ? [`${reading.label} — ${reading.arrangement}`, note(reading, active)].filter(Boolean).join(' · ')
+          : `${reading.label} (${reading.arrangement})`,
         action: { type: 'regroup-area', grouping: reading.grouping },
         checked: active,
       })),

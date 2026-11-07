@@ -4,7 +4,7 @@ import GridSurface from '~/components/grid/surface/GridSurface.vue'
 import CuisenaireRod from '~/components/rod/cuisenaire/CuisenaireRod.vue'
 import { arrayRodDimensions } from '~/components/rod/array/array-rod.types'
 import { cuisenaireRodPalette, type CuisenaireRodValue } from '~/components/rod/rod.types'
-import type { RodTrain } from '~/components/rod/scene/rod.scene.types'
+import type { Rectangle, RodTrain } from '~/components/rod/scene/rod.scene.types'
 import { trainFootprints } from '~/components/rod/scene/part-footprint'
 import type { CountEvaluation } from './systems.count-evaluate'
 import { countLayout } from './systems.count-layout'
@@ -24,9 +24,18 @@ const props = withDefaults(defineProps<{
   derived: readonly RodTrain[]
   preview?: CountPlanDetail | null
   viewportPadding?: string
+  /** Says which counts Equation 2 shows when they are not the current ones. */
+  lowerLabel?: string
+  /** The open conversion's material, outlined with its area. */
+  workspace?: (Rectangle & { label: string }) | null
+  /** Proposed group boundaries over the workspace rectangle. */
+  partitions?: readonly Rectangle[]
 }>(), {
   preview: null,
   viewportPadding: '16px',
+  lowerLabel: '',
+  workspace: null,
+  partitions: () => [],
 })
 
 const layout = computed(() => countLayout(props.config))
@@ -119,6 +128,15 @@ const ghosts = computed(() => props.preview
       {{ waitingText }}
     </p>
 
+    <p
+      v-if="lowerLabel && derived.length"
+      class="count-lower-label"
+      data-systems-lower-label
+      :style="box(layout.lower.x, layout.lower.y, layout.lower.width, 1)"
+    >
+      {{ lowerLabel }}
+    </p>
+
     <div
       :key="lowerKey"
       class="count-derived"
@@ -155,6 +173,25 @@ const ghosts = computed(() => props.preview
       data-systems-unassigned
       :title="part.reason === 'orientation' ? 'Lying rod: stand it upright to count it' : 'Unassigned material'"
       :style="box(part.footprint.x, part.footprint.y, part.footprint.width, part.footprint.depth)"
+      aria-hidden="true"
+    />
+
+    <div
+      v-if="workspace"
+      class="count-workspace"
+      data-systems-conversion-area
+      :style="box(workspace.x, workspace.y, workspace.width, workspace.depth)"
+      aria-hidden="true"
+    >
+      <span class="count-workspace-label">{{ workspace.label }}</span>
+    </div>
+
+    <div
+      v-for="(band, index) in partitions"
+      :key="`partition-${index}`"
+      class="count-partition"
+      data-systems-partition
+      :style="box(band.x, band.y, band.width, band.depth)"
       aria-hidden="true"
     />
 
@@ -223,6 +260,51 @@ const ghosts = computed(() => props.preview
 }
 
 .count-derived { position: absolute; inset: 0; pointer-events: none; }
+.count-lower-label {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  margin: 0;
+  padding-inline: 4px;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--mt-text);
+  font-size: max(10px, calc(var(--cell-size) * 0.5));
+  font-weight: 700;
+  line-height: var(--cell-size);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.count-workspace {
+  position: absolute;
+  z-index: 3;
+  margin: -3px;
+  padding: 0;
+  pointer-events: none;
+  border: 3px dashed var(--ui-primary);
+  border-radius: 4px;
+  box-sizing: content-box;
+}
+.count-partition {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 2px dashed var(--mt-text);
+  border-radius: 2px;
+}
+.count-workspace-label {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ui-primary);
+  color: var(--ui-bg, #fff);
+  font-size: max(10px, calc(var(--cell-size) * 0.45));
+  font-weight: 700;
+  white-space: nowrap;
+}
 .count-derived-rod {
   position: absolute;
   opacity: 0.72;

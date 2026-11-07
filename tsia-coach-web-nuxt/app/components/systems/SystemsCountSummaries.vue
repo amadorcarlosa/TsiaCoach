@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { LowerDisplay } from '~/composables/useSystemsCountActivity'
 import type { CountEvaluation } from './systems.count-evaluate'
 import { areaOutcome, substitutionLines } from './systems.count-feedback'
 import { countLayout } from './systems.count-layout'
@@ -10,6 +11,10 @@ import type { SystemsBoardConfig } from './systems.schema'
 const props = defineProps<{
   config: SystemsBoardConfig
   evaluation: CountEvaluation
+  /** Which counts Equation 2 shows, and how to label them. */
+  display: LowerDisplay
+  /** The open conversion's workspace summary, if any. */
+  conversion?: string
   cellSize: number
   paddingY: number
   scrollTop: number
@@ -26,11 +31,29 @@ const summaries = computed(() => {
     }
     const base = { id: equation.id, index, style, title: index === 0 ? 'Equation 1' : 'Equation 2 check', equation: equationText(equation) }
     if (!evaluation.valid) return { ...base, lines: [] as string[], status: evaluation.reason, state: 'neutral' as const }
+    const display = props.display
+    if (index === 1 && display.kind !== 'current') {
+      if (!display.counts || !display.check) {
+        return { ...base, lines: [] as string[], status: 'Waiting for whole x and y rods in Equation 1.', state: 'neutral' as const }
+      }
+      // A retained or confirmed check: truthfully labelled, never a new candidate.
+      const lines = [display.label, ...substitutionLines(equation.coefficients, display.counts, display.check)]
+      const holds = display.check.satisfied
+      return {
+        ...base,
+        lines,
+        status: holds ? '✓ Holds' : `✕ Target ${display.check.target} · ${areaOutcome(display.check)}`,
+        state: display.kind === 'previous' ? 'neutral' as const : holds ? 'correct' as const : 'incorrect' as const,
+      }
+    }
     const check = index === 0 ? evaluation.upper : evaluation.lower
     if (!check) {
       return { ...base, lines: [] as string[], status: 'Waiting for whole x and y rods in Equation 1.', state: 'neutral' as const }
     }
     const lines = substitutionLines(equation.coefficients, evaluation.counts, check, index === 0 ? evaluation.upper.unassigned : 0)
+    if (index === 0 && props.conversion) {
+      return { ...base, lines: ['Confirmed candidate', ...lines, props.conversion], status: '✓ Holds: confirmed', state: 'correct' as const }
+    }
     let status: string
     let state: 'neutral' | 'correct' | 'incorrect'
     if (index === 0) {

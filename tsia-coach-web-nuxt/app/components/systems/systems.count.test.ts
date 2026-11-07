@@ -9,7 +9,7 @@ import { evaluateBoard, evaluateSystem } from './systems.evaluate'
 import { evaluateCountSystem } from './systems.count-evaluate'
 import { countHint, countPhase, countStatus, substitutionLines } from './systems.count-feedback'
 import { countLayout, derivedLowerTrains, unitTrain } from './systems.count-layout'
-import { exchangeSelection, planCountTransform } from './systems.count-operations'
+import { conversionSource, decodePlacements, defaultPlacements, encodePlacements, exchangeSelection, planCountTransform } from './systems.count-operations'
 import { systemsFixtures } from './systems.fixtures'
 import { planSystemsTransform } from './systems.operations'
 import { systemsBoardConfigSchema, type SystemsBoardConfig } from './systems.schema'
@@ -57,9 +57,10 @@ function sceneWith(config: SystemsBoardConfig, trains: RodTrain[]) {
 function exchange(config: SystemsBoardConfig, scene: ReturnType<typeof useRodScene>) {
   const selection = exchangeSelection(config, scene.trains.value)
   if (!('ids' in selection)) throw new Error(selection.reason)
-  const planned = planSystemsTransform(config, scene.trains.value, selection.ids, { name: 'count-exchange' })
+  const params = encodePlacements(defaultPlacements(config, scene.trains.value, selection.ids))
+  const planned = planSystemsTransform(config, scene.trains.value, selection.ids, { name: 'count-exchange', params })
   if (!planned.allowed) throw new Error(planned.reason)
-  return scene.apply(selection.ids, { type: 'board-transform', transform: { name: 'count-exchange', expected: planned.plan.key } })
+  return scene.apply(selection.ids, { type: 'board-transform', transform: { name: 'count-exchange', params, expected: planned.plan.key } })
 }
 
 describe('rod-count schema', () => {
@@ -131,7 +132,7 @@ describe('rod-count layout and evaluation', () => {
     expect(evaluation.candidateIndex).toBe(0)
     expect(evaluation.lower).toMatchObject({ xAddend: 189, yAddend: 4, total: 193, difference: 120 })
     expect(countPhase(evaluation, { previewing: false, selectedUnits: 0 })).toBe('reviewing')
-    expect(countStatus(reference, evaluation, 'reviewing')).toMatch(/120 cells excess.*not a common solution.*8 3-rods for 3 8-rods/)
+    expect(countStatus(reference, evaluation, 'reviewing')).toMatch(/120 cells excess.*not a common solution.*8 3-rods into 3 8-rods/)
   })
 
   it('recognises an intermediate candidate and explains the guided start', () => {
@@ -175,17 +176,21 @@ describe('rod-count exchange', () => {
     const scene = sceneWith(reference, build(reference, 21, 1))
     const totals: number[] = []
     for (const expected of [{ xCount: 13, yCount: 4 }, { xCount: 5, yCount: 7 }]) {
-      const before = new Set(scene.trains.value.map(train => train.id))
+      const selection = exchangeSelection(reference, scene.trains.value)
+      if (!('ids' in selection)) throw new Error(selection.reason)
+      const untouched = scene.trains.value.filter(train => !selection.ids.includes(train.id)).map(train => JSON.stringify(train))
       const result = exchange(reference, scene)
       expect(result.allowed).toBe(true)
       const evaluation = evaluateCountSystem(reference, scene.trains.value)
       if (!evaluation.valid) throw new Error(evaluation.reason)
       expect(evaluation.counts).toEqual(expected)
       expect(evaluation.upper.total).toBe(71)
-      expect(evaluation.canonical).toBe(true)
+      expect(evaluation.material.unassigned).toHaveLength(0)
       totals.push(evaluation.lower!.total)
-      // Unaffected x rods keep their identity.
-      expect(scene.trains.value.filter(train => before.has(train.id)).length).toBeGreaterThanOrEqual(expected.xCount)
+      // Only the source rods change: everything else keeps its ID and place.
+      const now = scene.trains.value.map(train => JSON.stringify(train))
+      for (const train of untouched) expect(now).toContain(train)
+      expect(scene.trains.value).toHaveLength(untouched.length + 3)
     }
     expect(totals).toEqual([133, 73])
     const solved = evaluateCountSystem(reference, scene.trains.value)
@@ -201,25 +206,50 @@ describe('rod-count exchange', () => {
     expect(evaluation.valid && evaluation.solved).toBe(true)
   })
 
-  it('describes the conserved area in the preview', () => {
+  it('describes the conserved area as an equation bridge', () => {
     const trains = build(reference, 21, 1)
     const ids = trains.slice(13, 21).map(train => train.id)
-    const planned = planCountTransform(reference, trains, ids, { name: 'count-exchange' })
+    const params = encodePlacements(defaultPlacements(reference, trains, ids))
+    const planned = planCountTransform(reference, trains, ids, { name: 'count-exchange', params })
     if (!planned.allowed) throw new Error(planned.reason)
-    expect(planned.plan.lines.slice(0, 4)).toEqual([
-      'Remove 8 x rods (3-rods): 8 × 3 = 24 cells.',
-      'Add 3 y rods (8-rods): 3 × 8 = 24 cells.',
-      'Equation 1 keeps 71 cells: 3(13) + 8(4) = 71.',
-      'Next candidate: x = 13, y = 4. Equation 2 is checked again automatically.',
+    expect(planned.plan.lines).toEqual([
+      '8 × 3 = 24 = 3 × 8',
+      'x: 21 → 13     y: 1 → 4',
+      '3(13) + 8(4) = 71',
     ])
-    expect(planned.plan.detail.added).toHaveLength(3)
+    expect(planned.plan.remove).toEqual(ids)
+    expect(planned.plan.detail.added.map(train => train.anchor)).toEqual([{ x: 20, y: 0 }, { x: 21, y: 0 }, { x: 22, y: 0 }])
     expect(planned.plan.detail.next).toEqual({ xCount: 13, yCount: 4 })
-    expect(planned.plan.conserves).toBe(true)
+  })
+
+  it('requires integer placements for exactly the added y rods, inside Equation 1', () => {
+    const trains = build(reference, 21, 1)
+    const ids = trains.slice(13, 21).map(train => train.id)
+    const plan = (params?: Record<string, number>) => planCountTransform(reference, trains, ids, { name: 'count-exchange', ...(params ? { params } : {}) })
+    expect(plan()).toMatchObject({ allowed: false, reason: expect.stringMatching(/Place exactly 3 y rods/) })
+    expect(plan(encodePlacements([{ x: 20, y: 0 }, { x: 21, y: 0 }]))).toMatchObject({ allowed: false })
+    expect(plan({ count: 3, x0: 20.5, y0: 0, x1: 21, y1: 0, x2: 22, y2: 0 })).toMatchObject({ allowed: false })
+    expect(decodePlacements({ count: 1, x0: 1 })).toBeNull()
+    // A y rod hanging below the band is not a whole y rod in Equation 1.
+    expect(plan(encodePlacements([{ x: 20, y: 0 }, { x: 21, y: 0 }, { x: 40, y: 0 }]))).toMatchObject({ allowed: false })
+  })
+
+  it('counts conversion sources by parts and rejects mixed selections of the same area', () => {
+    const trains = build(reference, 21, 1)
+    expect(conversionSource(reference, trains, trains.slice(13, 21).map(train => train.id))).toMatchObject({
+      allowed: true, next: { xCount: 13, yCount: 4 }, step: { removedX: 8, addedY: 3, preservedArea: 24 },
+    })
+    const parts: TrainPart[] = Array.from({ length: 8 }, (_, index) => ({ value: 3 as CuisenaireRodValue, offset: { x: index, y: 0 }, orientation: 'vertical' }))
+    const joined = [...build(reference, 13, 0), { id: 'eight', anchor: { x: 15, y: 0 }, parts }, unitTrain(23, 0, 8, 'y1')]
+    expect(conversionSource(reference, joined, ['eight'])).toMatchObject({ allowed: true })
+    // 3 + 3 + 3 + 3 + 8 + 4 rods… an 8-rod plus 16 cells of 3-rods is not 8 x rods.
+    expect(conversionSource(reference, trains, [...trains.slice(16, 21), trains[21]!].map(train => train.id)))
+      .toMatchObject({ allowed: false, reason: expect.stringMatching(/only x rods/) })
   })
 
   it('rejects wrong counts, mixed selections and non-candidates', () => {
     const trains = build(reference, 21, 1)
-    const plan = (ids: string[], source = trains) => planCountTransform(reference, source, ids, { name: 'count-exchange' })
+    const plan = (ids: string[], source = trains) => planCountTransform(reference, source, ids, { name: 'count-exchange', params: encodePlacements(defaultPlacements(reference, source, ids)) })
     expect(plan(trains.slice(0, 3).map(train => train.id))).toMatchObject({ allowed: false, reason: expect.stringMatching(/exactly 8 x rods.*3 selected/) })
     expect(plan([...trains.slice(0, 7), trains[21]!].map(train => train.id))).toMatchObject({ allowed: false, reason: expect.stringMatching(/only x rods/) })
     expect(plan(['missing'])).toMatchObject({ allowed: false })
@@ -238,12 +268,13 @@ describe('rod-count exchange', () => {
     const scene = sceneWith(reference, build(reference, 21, 1))
     const selection = exchangeSelection(reference, scene.trains.value)
     if (!('ids' in selection)) throw new Error(selection.reason)
-    const planned = planSystemsTransform(reference, scene.trains.value, selection.ids, { name: 'count-exchange' })
+    const params = encodePlacements(defaultPlacements(reference, scene.trains.value, selection.ids))
+    const planned = planSystemsTransform(reference, scene.trains.value, selection.ids, { name: 'count-exchange', params })
     if (!planned.allowed) throw new Error(planned.reason)
     const y = scene.trains.value.find(train => train.parts[0]!.value === 8)!
     expect(scene.apply([y.id], { type: 'move', delta: { x: 1, y: 0 } }).allowed).toBe(true)
     const before = JSON.stringify(scene.trains.value)
-    const result = scene.apply(selection.ids, { type: 'board-transform', transform: { name: 'count-exchange', expected: planned.plan.key } })
+    const result = scene.apply(selection.ids, { type: 'board-transform', transform: { name: 'count-exchange', params, expected: planned.plan.key } })
     expect(result).toMatchObject({ allowed: false, reason: 'The rods changed. Open the preview again.' })
     expect(JSON.stringify(scene.trains.value)).toBe(before)
   })

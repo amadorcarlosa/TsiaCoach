@@ -1,14 +1,35 @@
-import { computed, ref, watch, type DeepReadonly, type Ref } from 'vue'
+import { computed, ref, shallowRef, watch, type DeepReadonly, type Ref } from 'vue'
 import type { RodPreview } from '~/components/rod/rod.types'
 import type { RodTrain } from '~/components/rod/scene/rod.scene.types'
-import { exchangeStep, type CandidateCounts } from '~/components/systems/systems.candidates'
+import { checkEquation, exchangeStep, type CandidateCounts, type EquationCheck } from '~/components/systems/systems.candidates'
 import { evaluateCountSystem } from '~/components/systems/systems.count-evaluate'
 import { countHint, countPhase, countStatus } from '~/components/systems/systems.count-feedback'
 import { countLayout, derivedLowerTrains, unitTrain } from '~/components/systems/systems.count-layout'
 import { exchangeSelection, planCountTransform, selectedUnitCount } from '~/components/systems/systems.count-operations'
 import { strategyOf, type SystemsBoardConfig, type VariableId } from '~/components/systems/systems.schema'
 import type { useBoardTransformPreview } from './useBoardTransformPreview'
+import { useCountConversionWorkspace } from './useCountConversionWorkspace'
 import type { useRodScene } from './useRodScene'
+
+/**
+ * What Equation 2 shows, and why. The check is always derived from counts;
+ * this says which counts and how truthfully to label them.
+ * - current:   the committed material's own whole-unit counts
+ * - confirmed: a conversion is open; the candidate it started from
+ * - proposed:  as confirmed, and the workspace is ready to apply
+ * - previous:  free editing left unfinished material; the last feasible candidate
+ * - waiting:   no counts to check yet
+ */
+export type LowerDisplayKind = 'current' | 'confirmed' | 'proposed' | 'previous' | 'waiting'
+
+export type LowerDisplay = {
+  kind: LowerDisplayKind
+  counts: CandidateCounts | null
+  check: EquationCheck | null
+  /** A label for the band, empty for ordinary current counts. */
+  label: string
+  proposed: CandidateCounts | null
+}
 
 /**
  * The rod-count activity controller. It stores only what cannot be derived
@@ -21,17 +42,27 @@ export function useSystemsCountActivity(options: {
   scene: ReturnType<typeof useRodScene>
   preview: ReturnType<typeof useBoardTransformPreview>
   blocked: () => boolean
+  /** The committed board can be edited at all (active tab, not portrait). */
+  editable: () => boolean
 }) {
   const { config, scene, preview } = options
   const active = computed(() => strategyOf(config.value) === 'rod-count')
+  const conversion = useCountConversionWorkspace({ config, scene, editable: options.editable })
+  const converting = computed(() => conversion.active.value)
   const layout = computed(() => countLayout(config.value))
   const coefficients = computed(() => config.value.system.equations[0].coefficients)
   const evaluation = computed(() => evaluateCountSystem(config.value, scene.trains.value))
   const selectedUnits = computed(() => active.value
     ? selectedUnitCount(config.value, scene.trains.value, scene.selection.value)
     : 0)
-  const phase = computed(() => countPhase(evaluation.value, { previewing: preview.active.value, selectedUnits: selectedUnits.value }))
-  const status = computed(() => countStatus(config.value, evaluation.value, phase.value, selectedUnits.value))
+  const phase = computed(() => countPhase(evaluation.value, {
+    previewing: preview.active.value,
+    selectedUnits: selectedUnits.value,
+    converting: converting.value,
+  }))
+  const status = computed(() => phase.value === 'converting'
+    ? conversionStatus()
+    : countStatus(config.value, evaluation.value, phase.value, selectedUnits.value))
   const step = computed(() => exchangeStep(coefficients.value.x, coefficients.value.y))
   const message = ref('')
 
@@ -45,10 +76,60 @@ export function useSystemsCountActivity(options: {
 
   const counts = computed<CandidateCounts>(() => evaluation.value.valid ? evaluation.value.counts : { xCount: 0, yCount: 0 })
 
-  /** Equation 2 for the same counts. Decorative, never scene data or saved. */
-  const derived = computed<RodTrain[]>(() => active.value && evaluation.value.valid && evaluation.value.clean
-    ? derivedLowerTrains(config.value, counts.value)
+  // The last feasible committed candidate, scoped to this problem. A transient
+  // display aid, never saved: refreshed only from committed material.
+  const previous = shallowRef<{ config: SystemsBoardConfig; counts: CandidateCounts } | null>(null)
+  watch([config, evaluation], ([target, current]) => {
+    if (previous.value && previous.value.config !== target) previous.value = null
+    if (current.valid && current.candidate) previous.value = { config: target, counts: { ...current.candidate } }
+  }, { immediate: true })
+  /** Forget the previous candidate: reset, import, restore and problem changes. */
+  function forgetPrevious(): void {
+    previous.value = null
+  }
+
+  const describe = (target: CandidateCounts) => `x = ${target.xCount}, y = ${target.yCount}`
+  const lowerOf = (target: CandidateCounts) => checkEquation(config.value.system.equations[1], target)
+
+  const display = computed<LowerDisplay>(() => {
+    const session = conversion.session.value
+    if (session) {
+      const ready = conversion.assessment.value?.ready === true
+      return {
+        kind: ready ? 'proposed' : 'confirmed',
+        counts: session.baselineCounts,
+        check: lowerOf(session.baselineCounts),
+        label: `Confirmed candidate: ${describe(session.baselineCounts)}` + (ready ? ` · Proposed: ${describe(session.next)}` : ''),
+        proposed: ready ? session.next : null,
+      }
+    }
+    const current = evaluation.value
+    if (current.valid && current.clean) {
+      return { kind: 'current', counts: current.counts, check: current.lower, label: '', proposed: null }
+    }
+    if (current.valid && previous.value) {
+      return {
+        kind: 'previous',
+        counts: previous.value.counts,
+        check: lowerOf(previous.value.counts),
+        label: `Previous candidate (${describe(previous.value.counts)}) — current material is unfinished`,
+        proposed: null,
+      }
+    }
+    return { kind: 'waiting', counts: null, check: null, label: '', proposed: null }
+  })
+
+  /** Equation 2 for the displayed counts. Decorative, never scene data or saved. */
+  const derived = computed<RodTrain[]>(() => active.value && display.value.counts
+    ? derivedLowerTrains(config.value, display.value.counts)
     : [])
+
+  function conversionStatus(): string {
+    const session = conversion.session.value
+    const state = conversion.assessment.value
+    if (!session || !state) return ''
+    return `Converting ${state.required} cells from the confirmed candidate ${describe(session.baselineCounts)}. ${state.reason}`
+  }
 
   /** Candidates reached so far: the sequence up to the current one. */
   const history = computed<readonly CandidateCounts[]>(() => {
@@ -107,7 +188,7 @@ export function useSystemsCountActivity(options: {
   }
 
   function addRods(variable: VariableId, count: number): void {
-    if (options.blocked()) return
+    if (options.blocked() || converting.value) return
     makeRoomForX(variable, count)
     const created: string[] = []
     for (let index = 0; index < count; index++) {
@@ -126,7 +207,7 @@ export function useSystemsCountActivity(options: {
 
   /** Removes the rightmost single x or y rod. */
   function removeRod(variable: VariableId): void {
-    if (options.blocked() || !evaluation.value.valid) return
+    if (options.blocked() || converting.value || !evaluation.value.valid) return
     const units = evaluation.value.material.units
     const single = scene.trains.value
       .filter(train => train.parts.length === 1 && units.some(unit => unit.trainId === train.id && unit.variable === variable))
@@ -143,7 +224,7 @@ export function useSystemsCountActivity(options: {
 
   /** Selects the rightmost x rods that make exactly one exchange. */
   function selectForExchange(): boolean {
-    if (options.blocked()) return false
+    if (options.blocked() || converting.value) return false
     const result = exchangeSelection(config.value, scene.trains.value)
     if ('reason' in result) {
       message.value = result.reason
@@ -154,14 +235,29 @@ export function useSystemsCountActivity(options: {
     return true
   }
 
-  // The preview guards editing itself; options.blocked() is also true while
-  // the context menu that opens these is still closing.
-  function openExchange(): void {
-    const opened = preview.open([...scene.selection.value], { name: 'count-exchange' })
+  // The workspace and preview guard editing themselves; options.blocked() is
+  // also true while the context menu that opens these is still closing.
+  /** Opens the editable conversion workspace on the selected x rods. */
+  function beginConversion(): boolean {
+    const opened = conversion.begin([...scene.selection.value])
     message.value = opened.allowed ? '' : opened.reason
+    return opened.allowed
+  }
+
+  function applyConversion() {
+    const result = conversion.apply()
+    message.value = conversion.message.value
+    return result
+  }
+
+  function cancelConversion(reason = 'Conversion cancelled. Nothing changed.'): boolean {
+    const cancelled = conversion.cancel(reason)
+    if (cancelled) message.value = reason
+    return cancelled
   }
 
   function openArrange(): void {
+    if (converting.value) return
     const ids = scene.trains.value.map(train => train.id)
     if (!ids.length) {
       message.value = 'Add x and y rods first.'
@@ -173,10 +269,7 @@ export function useSystemsCountActivity(options: {
   }
 
   /** Availability for menu entries and buttons, from the current selection. */
-  const exchangeAvailability = computed(() => {
-    const planned = planCountTransform(config.value, scene.trains.value, [...scene.selection.value], { name: 'count-exchange' })
-    return planned.allowed ? { allowed: true as const } : planned
-  })
+  const conversionAvailability = computed(() => conversion.availability.value)
   const arrangeAvailability = computed(() => {
     const planned = planCountTransform(config.value, scene.trains.value, scene.trains.value.map(train => train.id), { name: 'count-arrange' })
     return planned.allowed ? { allowed: true as const } : planned
@@ -211,14 +304,20 @@ export function useSystemsCountActivity(options: {
     step,
     message,
     selectedUnits,
+    conversion,
+    converting,
+    display,
+    forgetPrevious,
     initialScene,
     pristine,
     addRods,
     removeRod,
     selectForExchange,
-    openExchange,
+    beginConversion,
+    applyConversion,
+    cancelConversion,
     openArrange,
-    exchangeAvailability,
+    conversionAvailability,
     arrangeAvailability,
     previewDetail,
     previews,

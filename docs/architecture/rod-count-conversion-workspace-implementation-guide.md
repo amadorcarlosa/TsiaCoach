@@ -322,3 +322,27 @@ Run new rectangle/controller tests as well. After focused checks pass, run the e
 ## Definition of done
 
 The learner can select 24 cells, create a rectangle using the normal tools, choose **3 groups of 8**, inspect and manipulate that conversion, then apply it atomically. The lower check stays visible with truthful confirmed/previous labels throughout. Both reference exchanges work, the illustrated intermediate layout is reproducible, and the implementation shares scene, area, menu and camera abstractions with the existing playgrounds.
+
+## Implementation status (November 6, 2026)
+
+Implemented in the Rod Count Systems tab. The single-step exchange preview is gone: exchanges happen only through the workspace. **Arrange x, then y** is still a separate static preview.
+
+| Area | Where |
+| --- | --- |
+| Rectangle creation, transposition, ones, groups larger than 10 | `app/components/rod/scene/rectangle-operations.ts`; scene action `make-rectangle`, policy `allowRectangles` |
+| Protected objects at the action boundary | `ScenePolicy.protectedIds`, checked in `useRodScene` `build()` (targets and unchanged results, including board-transform removals) |
+| Menus | `useRectangleMenuChoice` (**Create rectangle…**, suggested shape first), `rectangleRodMenuChoices` (**Ungroup rectangle**), `useAreaGroupingMenuChoice(scene, 'Group rectangle', note)` |
+| One editing target | `useActiveScene`: interaction, menus, marquee, keyboard, toolbar and tray all bind to it |
+| Workspace lifecycle | `useCountConversionWorkspace` (draft scene, baseline key, begin/apply/cancel, stale cancel), called by `useSystemsCountActivity` |
+| Workspace reading | `systems.count-conversion.ts` `assessConversion` (area, grouping, readiness, placements) |
+| Commit planner | `count-exchange` in `systems.count-operations.ts`: removes only the sources and adds upright y rods at integer `params` placements (`encodePlacements`/`decodePlacements`); `conversionSource` validates the selection by parts |
+| Equation 2 display | `LowerDisplay` in `useSystemsCountActivity`: current, confirmed, proposed, previous or waiting; the previous candidate is a transient, problem-scoped display aid |
+| UI | `SystemsCountConversionTools.vue` (bridge, Apply/Cancel), the workspace outline, the lower-band label and partition preview in `SystemsCountBoard.vue`, labelled summaries |
+
+Lifecycle: capture, replace (reset, restore, import), problem changes, editing becoming unavailable (including leaving the tab) and outside scene changes all cancel the workspace. Camera changes do not.
+
+Tests: `useRodScene.rectangle.test.ts`, `useCountConversionWorkspace.test.ts`, `systems.count.test.ts` and `tests/e2e/rod-count-solver.spec.ts` (mouse, keyboard and touch flows, the reference layout, cancel to the exact baseline, the previous-candidate label, zoom and scroll alignment, lifecycle boundaries). Screenshots are in `output/playwright/rod-count-conversion/`.
+
+Known limits:
+- Rotation is refused when the transposed rectangle has no room. A packed board leaves no room for a 3 × 8 rectangle to turn, but an 8 × 3 rectangle created in the sources' columns can turn upright.
+- Apply requires the y rods to be upright single rods. Rod-count coefficients stay at 9 or less, so groups larger than 10 matter only for exploration.

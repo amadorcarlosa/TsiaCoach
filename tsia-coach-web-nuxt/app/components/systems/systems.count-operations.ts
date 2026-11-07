@@ -121,42 +121,39 @@ export function planCountTransform(
 
   switch (transform.name) {
     case 'count-exchange': {
-      if (!evaluation.candidate) return reject(countReasons.notCandidate)
-      if (evaluation.solved) return reject(countReasons.solved)
-      const step = exchangeStep(a, b)
+      // Replaces only the conversion's source rods with upright y rods at the
+      // validated positions; every other rod keeps its ID and place.
+      const source = conversionSource(config, trains, ids)
+      if (!source.allowed) return reject(source.reason)
+      const { step, next } = source
+      const positions = decodePlacements(transform.params)
+      if (!positions || positions.length !== step.addedY) {
+        return reject(`Place exactly ${plural(step.addedY, 'y rod')} (${b}-rods) to finish the conversion.`)
+      }
+      const added = positions.map(point => unitTrain(point.x, point.y, b))
       const selected = new Set(ids)
-      if (!ids.length || ids.some(id => !trains.some(train => train.id === id))) return reject(countReasons.select)
-
-      const chosen = evaluation.material.units.filter(unit => selected.has(unit.trainId))
-      const chosenParts = trains.filter(train => selected.has(train.id)).reduce((sum, train) => sum + train.parts.length, 0)
-      if (chosen.length !== chosenParts || chosen.some(unit => unit.variable !== 'x')) {
-        return reject(`Select only x rods (${a}-rods) from Equation 1.`)
+      const after = [...trains.filter(train => !selected.has(train.id)), ...added]
+      const result = evaluateCountSystem(config, after)
+      if (
+        !result.valid || result.material.unassigned.length ||
+        result.counts.xCount !== next.xCount || result.counts.yCount !== next.yCount || !result.upper.satisfied
+      ) {
+        return reject('The new y rods must stand upright inside Equation 1.')
       }
-      if (chosen.length !== step.removedX) {
-        return reject(`Select exactly ${plural(step.removedX, 'x rod')} (${a}-rods) to exchange; ${chosen.length} selected.`)
-      }
-      const next = { xCount: evaluation.counts.xCount - step.removedX, yCount: evaluation.counts.yCount + step.addedY }
-      if (next.xCount < 1) return reject(`Exchanging ${plural(step.removedX, 'x rod')} would leave no x rods.`)
-
-      const remaining = evaluation.material.units.filter(unit => !selected.has(unit.trainId))
-      const layout = arrange(config, trains, remaining, selected, next, step.addedY)
-      if (!layout) return reject('These rods cannot be laid out on the board.')
       return {
         allowed: true,
         plan: {
-          remove: [...ids, ...layout.movedFrom],
-          add: [...layout.moved, ...layout.added],
-          title: 'Exchange x rods for equal-area y rods',
+          remove: [...ids],
+          add: added,
+          title: 'Apply conversion',
           lines: [
-            `Remove ${plural(step.removedX, 'x rod')} (${a}-rods): ${step.removedX} × ${a} = ${step.preservedArea} cells.`,
-            `Add ${plural(step.addedY, 'y rod')} (${b}-rods): ${step.addedY} × ${b} = ${step.preservedArea} cells.`,
-            `Equation 1 keeps ${c} cells: ${a}(${next.xCount}) + ${b}(${next.yCount}) = ${c}.`,
-            `Next candidate: x = ${next.xCount}, y = ${next.yCount}. Equation 2 is checked again automatically.`,
-            ...(layout.moved.length ? [`${plural(layout.moved.length, 'rod')} slide over so x rods come first, then y rods.`] : []),
+            `${step.removedX} × ${a} = ${step.preservedArea} = ${step.addedY} × ${b}`,
+            `x: ${source.counts.xCount} → ${next.xCount}     y: ${source.counts.yCount} → ${next.yCount}`,
+            `${a}(${next.xCount}) + ${b}(${next.yCount}) = ${c}`,
           ],
           conserves: true,
           key,
-          detail: { exchanged: [...ids], movedFrom: layout.movedFrom, added: layout.added, moved: layout.moved, next },
+          detail: { exchanged: [...ids], movedFrom: [], added, moved: [], next },
         },
       }
     }
@@ -187,6 +184,76 @@ export function planCountTransform(
     default:
       return reject(countReasons.unknown)
   }
+}
+
+export type ConversionSource =
+  | {
+      allowed: true
+      sourceIds: readonly string[]
+      step: ReturnType<typeof exchangeStep>
+      counts: CandidateCounts
+      next: CandidateCounts
+    }
+  | { allowed: false; reason: string }
+
+/**
+ * Whether these trains can start an exchange: a feasible, unsolved Equation 1
+ * candidate, and whole selected trains made only of x units, exactly one
+ * exchange's worth counted by parts. Never takes part of a train.
+ */
+export function conversionSource(config: SystemsBoardConfig, trains: Snapshot, ids: readonly string[]): ConversionSource {
+  const evaluation = evaluateCountSystem(config, trains)
+  if (!evaluation.valid) return { allowed: false, reason: evaluation.reason }
+  if (evaluation.solved) return { allowed: false, reason: countReasons.solved }
+  if (!evaluation.candidate) return { allowed: false, reason: countReasons.notCandidate }
+  const { x: a, y: b } = config.system.equations[0].coefficients
+  const step = exchangeStep(a, b)
+  const selected = new Set(ids)
+  if (!ids.length || selected.size !== ids.length || ids.some(id => !trains.some(train => train.id === id))) {
+    return { allowed: false, reason: countReasons.select }
+  }
+  const chosen = evaluation.material.units.filter(unit => selected.has(unit.trainId))
+  const chosenParts = trains.filter(train => selected.has(train.id)).reduce((sum, train) => sum + train.parts.length, 0)
+  if (chosen.length !== chosenParts || chosen.some(unit => unit.variable !== 'x')) {
+    return { allowed: false, reason: `Select only x rods (${a}-rods) from Equation 1.` }
+  }
+  if (chosen.length !== step.removedX) {
+    return { allowed: false, reason: `Select exactly ${plural(step.removedX, 'x rod')} (${a}-rods) to exchange; ${chosen.length} selected.` }
+  }
+  const next = { xCount: evaluation.counts.xCount - step.removedX, yCount: evaluation.counts.yCount + step.addedY }
+  if (next.xCount < 1) return { allowed: false, reason: `Exchanging ${plural(step.removedX, 'x rod')} would leave no x rods.` }
+  return { allowed: true, sourceIds: [...ids], step, counts: evaluation.counts, next }
+}
+
+/** Board cells where new upright y rods stand, as board-transform parameters. */
+export function encodePlacements(points: readonly { x: number; y: number }[]): Record<string, number> {
+  return Object.fromEntries([['count', points.length], ...points.flatMap((point, index) => [[`x${index}`, point.x], [`y${index}`, point.y]])])
+}
+
+/** Integer placements only; anything else is rejected rather than coerced. */
+export function decodePlacements(params: Readonly<Record<string, number>> | undefined): { x: number; y: number }[] | null {
+  const count = params?.count
+  if (!params || !Number.isSafeInteger(count) || count! < 0 || count! > 100) return null
+  const points: { x: number; y: number }[] = []
+  for (let index = 0; index < count!; index++) {
+    const x = params[`x${index}`]
+    const y = params[`y${index}`]
+    if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) return null
+    points.push({ x: x!, y: y! })
+  }
+  return points
+}
+
+/**
+ * Where a rectangle-and-group conversion of these sources ends up by default:
+ * the y rods right-aligned in the sources' columns, standing at the top.
+ */
+export function defaultPlacements(config: SystemsBoardConfig, trains: Snapshot, ids: readonly string[]): { x: number; y: number }[] {
+  const { upper } = countLayout(config)
+  const step = exchangeStep(config.system.equations[0].coefficients.x, config.system.equations[0].coefficients.y)
+  const right = Math.max(...trains.filter(train => ids.includes(train.id))
+    .flatMap(train => train.parts.map(part => train.anchor.x + part.offset.x)))
+  return Array.from({ length: step.addedY }, (_, index) => ({ x: right - step.addedY + 1 + index, y: upper.y }))
 }
 
 /**

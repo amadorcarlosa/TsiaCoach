@@ -5,6 +5,8 @@ import type {
     AddendChoice,
     AreaGroupingChoice,
     FactorChoice,
+    FactorShape,
+    RectangleChoice,
     RodTrain,
     SceneAction,
     SceneApplyResult,
@@ -40,6 +42,16 @@ import {
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import { regionAt, trainFitsRegion } from '~/components/rod/scene/scene-regions'
 import { trainOrientation } from '~/components/rod/scene/train-orientation'
+import { trainShape } from '~/components/rod/scene/train-shape'
+import { copyScene } from '~/components/rod/scene/scene-snapshot'
+import {
+    areaGroupTrains,
+    combineTrains,
+    planRectangle,
+    rectangleOnes,
+    rectangleShapes,
+    transposeRectangle,
+} from '~/components/rod/scene/rectangle-operations'
 import { contains, partFootprint, trainBounds, trainFootprints } from '~/components/rod/scene/part-footprint'
 import { offsetsByDistance, onBoardRange } from '~/components/grid/nearest-offsets'
 import {
@@ -130,7 +142,33 @@ export function useRodScene(policy: ScenePolicy) {
         return { allowed: true }
     }
 
+    const protectedReason = 'That rod is outside the conversion and cannot change now.'
+
+    /**
+     * Every action passes this boundary. Protected trains may not be targeted,
+     * and must come out of any candidate exactly as they went in, so a planner
+     * or transform cannot move, regroup or remove them indirectly.
+     */
     function build(
+        ids: readonly string[],
+        action: SceneAction,
+    ): Candidate {
+        const locked = policy.protectedIds?.()
+        if (!locked?.size) return buildAction(ids, action)
+        if (ids.some(id => locked.has(id))) return reject(protectedReason)
+        const result = buildAction(ids, action)
+        if (!result.allowed) return result
+        const before = new Map(trains.value.filter(train => locked.has(train.id))
+            .map(train => [train.id, JSON.stringify(copyScene([train]))]))
+        const after = new Map(result.trains.filter(train => locked.has(train.id))
+            .map(train => [train.id, JSON.stringify(copyScene([train]))]))
+        for (const [id, state] of before) {
+            if (after.get(id) !== state) return reject(protectedReason)
+        }
+        return result
+    }
+
+    function buildAction(
         ids: readonly string[],
         action: SceneAction,
     ): Candidate {
@@ -267,11 +305,14 @@ export function useRodScene(policy: ScenePolicy) {
                 const turned: (TurnedPiece & { inverse: string })[] = []
 
                 for (const train of selected) {
-                    const transformed = orientTrain(
-                        train,
-                        action.orientation,
-                        policy,
-                    )
+                    // A filled rectangle turns as a whole: rows become columns.
+                    const rectangle = policy.allowRectangles && action.orientation !== 'tower' &&
+                        trainShape(train) === 'rectangle'
+                        ? transposeRectangle(train, action.orientation)
+                        : null
+                    const transformed = rectangle
+                        ? { allowed: true as const, value: rectangle }
+                        : orientTrain(train, action.orientation, policy)
                     if (!transformed.allowed) return transformed
 
                     // Slide back inside the region the train started in, or
@@ -385,8 +426,34 @@ export function useRodScene(policy: ScenePolicy) {
                     combined.value,
                 ])
             }
+            case 'make-rectangle': {
+                if (!policy.allowRectangles) {
+                    return reject('This board does not offer rectangles.')
+                }
+                const homes = selected.map(train => homeRegion(policy, train))
+                if (policy.regions && (homes.some(home => !home) || new Set(homes.map(home => home!.id)).size > 1)) {
+                    return reject('Select rods from one area.')
+                }
+                const home = homes[0]
+                const bounds = home ?? { x: 0, y: 0, width: policy.columns, depth: policy.rows }
+                const fixed = current.filter(train => !selectedIds.has(train.id))
+                const planned = planRectangle(selected, action.shape, bounds, train =>
+                    (!home || trainFitsRegion(train, home)) && validateScene([...fixed, train], policy).allowed)
+                if (!planned.allowed) return planned
+                return validate([...fixed, planned.value])
+            }
+
             case 'regroup-ones': {
                 for (const train of selected) {
+                    // A filled rectangle becomes unit cells in place.
+                    const ones = policy.allowRectangles && trainShape(train) === 'rectangle'
+                        ? rectangleOnes(train)
+                        : null
+                    if (ones) {
+                        if (trainSignKind(train) !== 'positive') return reject('Rectangles are available for positive rods only.')
+                        train.parts = ones
+                        continue
+                    }
                     const regrouped = regroupTrainToOnes(train)
                     if (!regrouped.allowed) return regrouped
 
@@ -580,16 +647,22 @@ export function useRodScene(policy: ScenePolicy) {
 
             case 'regroup-area': {
                 if (!policy.allowAreaRegroup) {
-                    return reject('Area grouping is available in MathTabla.')
+                    return reject('This board does not offer area grouping.')
                 }
 
-                if (selected.length !== 1) {
+                // Boards with rectangles also group several rods that
+                // together fill a rectangle exactly, as one new object.
+                const combined = selected.length > 1 && policy.allowRectangles
+                    ? combineTrains(selected)
+                    : null
+                if (selected.length !== 1 && !combined) {
                     return reject(
                         'Select one filled rectangle to regroup its area.',
                     )
                 }
 
-                const train = selected[0]!
+                const train = combined ?? selected[0]!
+                const rest = current.filter(item => !selectedIds.has(item.id))
 
                 // Area grouping has no signed meaning defined yet.
                 if (trainSignKind(train) !== 'positive') {
@@ -607,8 +680,9 @@ export function useRodScene(policy: ScenePolicy) {
                 const rectangle = tiledRectangle(train)
 
                 if (!rectangle) {
-                    return reject(
-                        'Select one object that completely fills a rectangle, ' +
+                    return reject(combined
+                        ? 'The selected rods must fill a rectangle exactly, with no gaps and no overlaps.'
+                        : 'Select one object that completely fills a rectangle, ' +
                         'with no gaps and no overlaps.',
                     )
                 }
@@ -621,6 +695,14 @@ export function useRodScene(policy: ScenePolicy) {
 
                 const parts = areaGroupParts(rectangle, action.grouping)
 
+                // Groups larger than one rod: one independent train per group.
+                if (!parts && policy.allowRectangles) {
+                    const groups = areaGroupTrains(rectangle, action.grouping, train.anchor)
+                    if (!groups) return reject('This area cannot be grouped.')
+                    const result = validate([...rest, ...groups])
+                    return result.allowed ? result : reject(`Cannot regroup this area. ${result.reason}`)
+                }
+
                 if (!parts) {
                     return reject(
                         `A group of ${reading.unitsPerGroup} square units needs ` +
@@ -631,7 +713,7 @@ export function useRodScene(policy: ScenePolicy) {
 
                 train.parts = parts
 
-                const result = validate(current)
+                const result = validate(combined ? [...rest, train] : current)
 
                 return result.allowed
                     ? result
@@ -746,7 +828,9 @@ export function useRodScene(policy: ScenePolicy) {
         const selectsCreatedTrains =
             action.type === 'board-transform' ||
             action.type === 'make-train' ||
-            action.type === 'ungroup'
+            action.type === 'make-rectangle' ||
+            action.type === 'ungroup' ||
+            (action.type === 'regroup-area' && createdIds.length > 0)
 
         const nextSelection = action.type === 'regroup-addends'
             ? new Set(createdIds.slice(0, 1))
@@ -800,8 +884,13 @@ export function useRodScene(policy: ScenePolicy) {
      * Derived from the selected rectangle's own dimensions, never from a
      * denominator: a numerator rectangle may fill only part of a larger whole.
      */
-    function getAreaGroupingChoices(id: string): AreaGroupingChoice[] {
-        const train = trains.value.find(train => train.id === id)
+    function getAreaGroupingChoices(id: string | readonly string[]): AreaGroupingChoice[] {
+        const ids = typeof id === 'string' ? [id] : id
+        const selected = trains.value.filter(train => ids.includes(train.id))
+        if (!selected.length || selected.length !== new Set(ids).size) return []
+        // Several rods count only where the board offers rectangles.
+        if (selected.length > 1 && !policy.allowRectangles) return []
+        const train = selected.length === 1 ? selected[0]! : combineTrains(selected)
         if (!train) return []
 
         const rectangle = tiledRectangle(train)
@@ -811,11 +900,27 @@ export function useRodScene(policy: ScenePolicy) {
 
         return areaGroupReadings(rectangle).map(reading => ({
             reading,
-            result: check([id], {
+            result: check(ids, {
                 type: 'regroup-area',
                 grouping: reading.grouping,
             }),
             active: current === reading.grouping,
+        }))
+    }
+
+    /**
+     * Rectangles the selection could become. `prefer` marks the shapes that
+     * serve the board's purpose; they are listed first and flagged suggested.
+     */
+    function getRectangleChoices(ids: readonly string[], prefer?: (shape: FactorShape) => boolean): RectangleChoice[] {
+        const selected = trains.value.filter(train => ids.includes(train.id))
+        if (!selected.length || selected.length !== new Set(ids).size) return []
+        if (selected.some(train => train.parts.some(part => part.orientation === 'tower'))) return []
+        const area = selected.reduce((sum, train) => sum + train.parts.reduce((total, part) => total + part.value, 0), 0)
+        return rectangleShapes(area, prefer).map(shape => ({
+            shape,
+            suggested: prefer?.(shape) === true,
+            result: check(ids, { type: 'make-rectangle', shape }),
         }))
     }
 
@@ -932,6 +1037,7 @@ export function useRodScene(policy: ScenePolicy) {
         getAddendChoices,
         getFactorChoices,
         getAreaGroupingChoices,
+        getRectangleChoices,
         planZeroPair: planZeroPairFor,
     }
 }

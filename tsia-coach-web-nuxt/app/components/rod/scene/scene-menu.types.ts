@@ -7,6 +7,7 @@ export type SceneMenuAction = Extract<
             'delete' |
             'set-orientation'|
             'make-train' |
+            'make-rectangle' |
             'ungroup' |
             'regroup-ones' |
             'regroup-addends' |
@@ -31,6 +32,9 @@ export type SceneMenuCommand =
   | 'systems-count-add-x'
   | 'systems-count-add-y'
   | 'systems-count-select-exchange'
+  | 'systems-count-convert'
+  | 'systems-count-apply-conversion'
+  | 'systems-count-cancel-conversion'
   | 'region-add-here'
   | 'region-select-group'
 

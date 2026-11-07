@@ -19,7 +19,9 @@ defineProps<{
   step: ExchangeStep
   message: string
   disabled: boolean
-  exchange: SceneResult
+  /** A conversion is open: building controls act on the committed board, so they wait. */
+  converting: boolean
+  convert: SceneResult
   arrange: SceneResult
   generatedProfile: DifficultyProfile | null
 }>()
@@ -29,7 +31,7 @@ const emit = defineEmits<{
   remove: [variable: VariableId]
   hint: []
   selectExchange: []
-  exchange: []
+  convert: []
   arrange: []
   generate: [profile: DifficultyProfile]
 }>()
@@ -56,21 +58,21 @@ const profile = ref<DifficultyProfile>('introductory')
           {{ variable }} rods ({{ coefficients[variable] }}-rods): <strong :data-count="variable">{{ variable === 'x' ? counts.xCount : counts.yCount }}</strong>
         </span>
         <PlaygroundActionButton
-          :disabled="disabled"
+          :disabled="disabled || converting"
           :aria-label="`Add one ${variable} rod`"
           @click="emit('add', variable, 1)"
         >
           + {{ variable }}
         </PlaygroundActionButton>
         <PlaygroundActionButton
-          :disabled="disabled"
+          :disabled="disabled || converting"
           :aria-label="`Add five ${variable} rods`"
           @click="emit('add', variable, 5)"
         >
           +5 {{ variable }}
         </PlaygroundActionButton>
         <PlaygroundActionButton
-          :disabled="disabled"
+          :disabled="disabled || converting"
           :aria-label="`Remove one ${variable} rod`"
           @click="emit('remove', variable)"
         >
@@ -85,20 +87,20 @@ const profile = ref<DifficultyProfile>('introductory')
       aria-label="Exchange"
     >
       <PlaygroundActionButton
-        :disabled="disabled || phase === 'building' || phase === 'solved'"
+        :disabled="disabled || converting || phase === 'building' || phase === 'solved'"
         @click="emit('selectExchange')"
       >
         Select {{ step.removedX }} x rods to exchange
       </PlaygroundActionButton>
       <PlaygroundActionButton
-        :disabled="disabled || !exchange.allowed"
-        :title="exchange.allowed ? undefined : exchange.reason"
-        @click="emit('exchange')"
+        :disabled="disabled || converting || !convert.allowed"
+        :title="convert.allowed ? undefined : convert.reason"
+        @click="emit('convert')"
       >
-        Exchange for {{ step.addedY }} y rods…
+        Convert selected area…
       </PlaygroundActionButton>
       <PlaygroundActionButton
-        :disabled="disabled || !arrange.allowed"
+        :disabled="disabled || converting || !arrange.allowed"
         :title="arrange.allowed ? undefined : arrange.reason"
         @click="emit('arrange')"
       >
@@ -131,6 +133,7 @@ const profile = ref<DifficultyProfile>('introductory')
     <p
       v-if="message"
       class="count-message"
+      aria-live="polite"
       data-systems-count-message
     >
       {{ message }}
@@ -147,7 +150,8 @@ const profile = ref<DifficultyProfile>('introductory')
       >{{ index ? ' → ' : '' }}({{ item.xCount }}, {{ item.yCount }})</span>
     </p>
     <p class="count-note">
-      Solid rods are yours. Equation 2's dashed rods are rebuilt from your counts; they are not saved or editable.
+      Solid rods are yours. Equation 2's dashed rods are rebuilt from your confirmed counts; they are not saved or editable.
+      A conversion edits a copy of the selected rods: other rods stay put until you apply it.
       Grey hatching marks unassigned material that counts toward neither x nor y.
     </p>
 

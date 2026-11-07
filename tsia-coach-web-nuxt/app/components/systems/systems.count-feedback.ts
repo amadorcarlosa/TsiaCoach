@@ -8,7 +8,7 @@ import type { SystemsBoardConfig } from './systems.schema'
  * naming the solution.
  */
 
-export type CountPhase = 'building' | 'reviewing' | 'selecting' | 'previewing' | 'solved' | 'unavailable'
+export type CountPhase = 'building' | 'reviewing' | 'selecting' | 'previewing' | 'converting' | 'solved' | 'unavailable'
 
 const rods = (count: number, value: number) => `${count} ${value}-rod${count === 1 ? '' : 's'}`
 
@@ -31,9 +31,13 @@ export function substitutionLines(
   ]
 }
 
-export function countPhase(evaluation: CountEvaluation, options: { previewing: boolean; selectedUnits: number }): CountPhase {
+export function countPhase(
+  evaluation: CountEvaluation,
+  options: { previewing: boolean; selectedUnits: number; converting?: boolean },
+): CountPhase {
   if (!evaluation.valid || evaluation.analysis.status !== 'solvable') return 'unavailable'
   if (evaluation.solved) return 'solved'
+  if (options.converting) return 'converting'
   if (options.previewing) return 'previewing'
   if (!evaluation.candidate) return 'building'
   return options.selectedUnits > 0 ? 'selecting' : 'reviewing'
@@ -50,7 +54,9 @@ export function countStatus(config: SystemsBoardConfig, evaluation: CountEvaluat
     case 'solved':
       return `Both equations hold with x = ${evaluation.counts.xCount} and y = ${evaluation.counts.yCount}: a common solution.`
     case 'previewing':
-      return 'Review the exchange, then confirm or keep the rods.'
+      return 'Review the arrangement, then confirm or keep the rods.'
+    case 'converting':
+      return 'Convert the selected area, then apply or cancel the conversion.'
     case 'building': {
       const { upper, material } = evaluation
       const parts: string[] = []
@@ -73,7 +79,7 @@ export function countStatus(config: SystemsBoardConfig, evaluation: CountEvaluat
       if (phase === 'selecting') {
         return `${head} Selected ${selectedUnits} of ${step.removedX} x rods to exchange.`
       }
-      return `${head} Exchange ${rods(step.removedX, a)} for ${rods(step.addedY, b)} (${step.preservedArea} cells each way) to reach the next candidate.`
+      return `${head} Convert ${rods(step.removedX, a)} into ${rods(step.addedY, b)} (${step.preservedArea} cells each way) to reach the next candidate.`
     }
     case 'unavailable':
       return ''

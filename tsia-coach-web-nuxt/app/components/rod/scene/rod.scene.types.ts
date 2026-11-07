@@ -79,6 +79,14 @@ export type FactorChoice = {
   result: SceneResult
 }
 
+/** A rectangle the selected material can be rearranged into. */
+export type RectangleChoice = {
+  shape: FactorShape
+  /** Fits the board's target grouping, such as a column per y rod. */
+  suggested: boolean
+  result: SceneResult
+}
+
 export type AreaGroupingChoice = {
   reading: AreaGroupReading
   result: SceneResult
@@ -103,6 +111,9 @@ export type SceneAction =
     | { type: 'clone' }
     | { type: 'delete' }
     | { type: 'make-train' }
+    // Combines every selected object into one filled rectangle of this shape.
+    // The area is unchanged; the cells it covers may change.
+    | { type: 'make-rectangle'; shape: FactorShape }
     | { type: 'regroup-ones' }
     | { type: 'regroup-addends'; pair?: AddendPair }
     | { type: 'regroup-factors'; shape?: FactorShape }
@@ -159,6 +170,18 @@ export type ScenePolicy = {
   allowFactors?: boolean
   /** Opt in to regroup-area; Bar and Fraction scenes have no area to group. */
   allowAreaRegroup?: boolean
+  /**
+   * Opt in to area operations on rectangles: create a rectangle from a
+   * selection, transpose one, regroup one to ones, and group a rectangle into
+   * groups larger than one rod (each group its own train). Off elsewhere.
+   */
+  allowRectangles?: boolean
+  /**
+   * Trains no action may change, move, delete, clone or regroup. Checked at the
+   * action boundary in check() and apply(), so keyboard, menus and planners all
+   * obey it. Replacement (hydration) ignores it.
+   */
+  protectedIds?: () => ReadonlySet<string>
   /** Every part must be horizontal and share the train's anchor row. */
   requireHorizontalAnchorRow?: boolean
   /** Absent in every ordinary scene, which keeps the plain no-overlap rule. */

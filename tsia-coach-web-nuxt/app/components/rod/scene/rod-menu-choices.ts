@@ -16,6 +16,20 @@ export function baseRodMenuChoices(addendChoice: SceneMenuChoice): SceneMenuChoi
   ]
 }
 
+/**
+ * The same shared order for area work: Create rectangle replaces Make a train,
+ * because a conversion combines area, not a linear train.
+ */
+export function rectangleRodMenuChoices(addendChoice: SceneMenuChoice, rectangleChoice: SceneMenuChoice): SceneMenuChoice[] {
+  return [
+    { kind: 'action', label: 'Clone', action: { type: 'clone' } },
+    rectangleChoice,
+    { kind: 'action', label: 'Ungroup rectangle', action: { type: 'ungroup' } },
+    { kind: 'action', label: 'Regroup to ones', action: { type: 'regroup-ones' } },
+    addendChoice,
+  ]
+}
+
 export const deleteMenuChoice: SceneMenuChoice = {
   kind: 'action',
   label: 'Delete',

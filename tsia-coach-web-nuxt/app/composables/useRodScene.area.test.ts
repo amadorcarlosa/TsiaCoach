@@ -260,7 +260,7 @@ describe('regroup-area refusals leave the scene unchanged', () => {
 
     expect(bar.check([id], { type: 'regroup-area', grouping: 'rows' })).toEqual({
       allowed: false,
-      reason: 'Area grouping is available in MathTabla.',
+      reason: 'This board does not offer area grouping.',
     })
 
     expect(bar.apply([id], { type: 'regroup-area', grouping: 'columns' }).allowed).toBe(false)
