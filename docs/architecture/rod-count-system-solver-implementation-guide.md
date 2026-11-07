@@ -3,8 +3,6 @@
 Date: November 6, 2026.
 Status: implementation plan based on the supplied feature specification and Artboards 1–8.
 
-Follow-up: the [editable conversion workspace guide](rod-count-conversion-workspace-implementation-guide.md) specifies the revised rectangle workflow: Create rectangle, choose equal groups, edit with the shared tools, then apply the conversion while retaining the confirmed lower check. It supersedes this guide's single-step exchange preview and automatic exchange packing.
-
 ## Representation contract
 
 For ax + by = c and dx + ey = f, x and y represent counts of rods. Coefficients represent the value of each rod in that equation. The same counts appear in both equation models.
@@ -131,29 +129,3 @@ Run relevant unit tests, lint on touched files, the Nuxt application typecheck a
 ## Completion criterion
 
 The learner can construct a feasible first candidate, see its second-equation check, exchange exactly the smallest equal-area group through the context menu, and reach the common solution one candidate at a time. Generated problems use the same mathematics and fit every displayed state. Both models consistently express variables as counts and coefficients as rod values.
-
-## Implementation status (November 6, 2026)
-
-Implemented in the Systems of Equations playground behind a **Strategy** select (Row lengths / Rod counts).
-
-| Concern | Where |
-| --- | --- |
-| `strategy` and `generation` fields; rod values 1–9, x ≠ y per equation | `systems.schema.ts` |
-| Candidate engine (first candidate, exchange step, iterator, analysis, capacity) | `systems.candidates.ts` |
-| Seeded bounded generation and difficulty profiles | `systems.generator.ts` |
-| Layout, unit classification, canonical slots, derived Equation 2 rods | `systems.count-layout.ts` |
-| Scene evaluation and dispatch (`evaluateBoard`) | `systems.count-evaluate.ts`, `systems.evaluate.ts` |
-| Exchange and arrange planners; exchange selection | `systems.count-operations.ts` (dispatched from `planSystemsTransform`) |
-| Phases, status, progressive hints, substitution lines | `systems.count-feedback.ts` |
-| Controller | `composables/useSystemsCountActivity.ts` |
-| Board, Area panels, activity controls | `SystemsCountBoard.vue`, `SystemsCountSummaries.vue`, `SystemsCountPanel.vue` |
-| Tests | `systems.candidates.test.ts`, `systems.count.test.ts`, `tests/e2e/rod-count-solver.spec.ts` |
-
-Decisions taken during implementation:
-
-- **Membership.** The equation is the band a train lies in; the variable is the rod value. Rod-count equations therefore need different x and y values (4x + 4y is rejected).
-- **Persistence.** Only Equation 1's rods are saved. Counts, candidate index, history, phase, the Equation 2 check and success are all derived from the problem and those rods, so a restored step regenerates the controller exactly. The board config carries `strategy` (and `generation` for generated problems); both are optional, so older files keep the row-length reading without a version bump (same forward-only policy as `materialRole`). Strategy is part of board identity on import.
-- **Equation 2.** Drawn from the current counts whenever Equation 1 holds only whole upright x and y rods (at least one of each), so Artboard 1's 9 + 4 = 13 shows from the start. It is labelled a check, and judged pass/fail, only once Equation 1 holds.
-- **Intermediate candidates.** Any feasible pair is a member of the single sequence, so it is accepted; the hint explains that the guided path starts at the greatest x.
-- **Exchange layout.** The commit removes the selected x rods and lays the band out as x rods then y rods, keeping every rod already in its slot (same ID) and re-adding only rods that must move.
-- **Board width** is `max(widest reachable candidate x + y, floor(c / a) + 1) + 2` columns; area does not decide width.
