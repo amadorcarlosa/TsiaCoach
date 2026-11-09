@@ -30,12 +30,15 @@ const props = withDefaults(defineProps<{
   workspace?: (Rectangle & { label: string }) | null
   /** Proposed group boundaries over the workspace rectangle. */
   partitions?: readonly Rectangle[]
+  /** Conversion interprets its selected sources from the confirmed baseline. */
+  converting?: boolean
 }>(), {
   preview: null,
   viewportPadding: '16px',
   lowerLabel: '',
   workspace: null,
   partitions: () => [],
+  converting: false,
 })
 
 const layout = computed(() => countLayout(props.config))
@@ -61,14 +64,42 @@ const bands = computed(() => props.config.system.equations.map((equation, index)
   }
 }))
 
-const unassigned = computed(() => props.evaluation.valid ? props.evaluation.material.unassigned : [])
+const unassigned = computed(() => !props.converting && props.evaluation.valid ? props.evaluation.material.unassigned : [])
 const lowerKey = computed(() => props.evaluation.valid ? `${props.evaluation.counts.xCount}-${props.evaluation.counts.yCount}` : 'none')
 const lowerSatisfied = computed(() => props.evaluation.valid && props.evaluation.lower?.satisfied === true)
-const upperSatisfied = computed(() => props.evaluation.valid && props.evaluation.upper.satisfied)
+const upperSatisfied = computed(() => props.converting || (props.evaluation.valid && props.evaluation.upper.satisfied))
 const waitingText = computed(() => {
   if (!props.evaluation.valid) return ''
   if (props.derived.length) return ''
   return 'Equation 2 is rebuilt here from your x and y counts once Equation 1 uses only whole, upright x and y rods.'
+})
+
+/**
+ * Where the x rods end and the y rods begin, as a column edge, in each band.
+ * Equation 1 shows it only while every x rod stands left of every y rod;
+ * Equation 2's derived rods always stand that way.
+ */
+const divider = computed(() => {
+  if (!props.evaluation.valid) return null
+  const units = props.evaluation.material.units.filter(unit => unit.footprint.y === layout.value.upper.y)
+  const xs = units.filter(unit => unit.variable === 'x')
+  const ys = units.filter(unit => unit.variable === 'y')
+  const upper = xs.length && ys.length && xs.length + ys.length === props.evaluation.material.units.length
+    ? Math.max(...xs.map(unit => unit.footprint.x + unit.footprint.width))
+    : null
+  const separated = upper !== null && ys.every(unit => unit.footprint.x >= upper)
+  const derivedX = props.derived.filter(train => train.id.startsWith('derived-x'))
+  const derivedY = props.derived.filter(train => train.id.startsWith('derived-y'))
+  const lower = derivedX.length && derivedY.length ? Math.max(...derivedX.map(train => train.anchor.x)) + 1 : null
+  const { upper: top, lower: bottom } = layout.value
+  const segments: { key: string; x: number; y: number; depth: number }[] = []
+  if (separated && lower === upper) {
+    segments.push({ key: 'both', x: upper, y: top.y, depth: bottom.y + bottom.depth - top.y })
+  } else {
+    if (separated) segments.push({ key: 'upper', x: upper, y: top.y, depth: top.depth })
+    if (lower !== null) segments.push({ key: 'lower', x: lower, y: bottom.y, depth: bottom.depth })
+  }
+  return segments
 })
 
 const ghostParts = (trains: readonly RodTrain[], kind: 'added' | 'moved') =>
@@ -187,6 +218,19 @@ const ghosts = computed(() => props.preview
     </div>
 
     <div
+      v-for="segment in divider ?? []"
+      :key="`divider-${segment.key}`"
+      class="count-divider"
+      :data-systems-divider="segment.key"
+      :data-column="segment.x"
+      :style="box(segment.x, segment.y, 0, segment.depth)"
+      aria-hidden="true"
+    >
+      <span class="count-divider-label count-divider-label--x">x</span>
+      <span class="count-divider-label count-divider-label--y">y</span>
+    </div>
+
+    <div
       v-for="(band, index) in partitions"
       :key="`partition-${index}`"
       class="count-partition"
@@ -285,6 +329,28 @@ const ghosts = computed(() => props.preview
   border-radius: 4px;
   box-sizing: content-box;
 }
+.count-divider {
+  position: absolute;
+  z-index: 3;
+  margin-left: -1.5px;
+  width: 3px !important;
+  pointer-events: none;
+  background: var(--count-divider, #e5484d);
+  border-radius: 2px;
+}
+.count-divider-label {
+  position: absolute;
+  top: -16px;
+  padding: 0 3px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  color: #fff;
+  background: var(--count-divider, #e5484d);
+  border-radius: 3px;
+}
+.count-divider-label--x { right: 5px; }
+.count-divider-label--y { left: 5px; }
 .count-partition {
   position: absolute;
   z-index: 3;

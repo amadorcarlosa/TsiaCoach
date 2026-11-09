@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef, watch, type DeepReadonly, type Ref } from 'vue'
 import type { RodPreview } from '~/components/rod/rod.types'
-import type { RodTrain } from '~/components/rod/scene/rod.scene.types'
-import { checkEquation, exchangeStep, type CandidateCounts, type EquationCheck } from '~/components/systems/systems.candidates'
+import type { RodTrain, SceneApplyResult } from '~/components/rod/scene/rod.scene.types'
+import { candidateIndex, checkEquation, exchangeStep, type CandidateCounts, type EquationCheck } from '~/components/systems/systems.candidates'
 import { evaluateCountSystem } from '~/components/systems/systems.count-evaluate'
 import { countHint, countPhase, countStatus } from '~/components/systems/systems.count-feedback'
 import { countLayout, derivedLowerTrains, unitTrain } from '~/components/systems/systems.count-layout'
@@ -74,7 +74,8 @@ export function useSystemsCountActivity(options: {
     hintLevel.value = Math.min(3, hintLevel.value + 1)
   }
 
-  const counts = computed<CandidateCounts>(() => evaluation.value.valid ? evaluation.value.counts : { xCount: 0, yCount: 0 })
+  const counts = computed<CandidateCounts>(() => conversion.session.value?.baselineCounts
+    ?? (evaluation.value.valid ? evaluation.value.counts : { xCount: 0, yCount: 0 }))
 
   // The last feasible committed candidate, scoped to this problem. A transient
   // display aid, never saved: refreshed only from committed material.
@@ -134,10 +135,11 @@ export function useSystemsCountActivity(options: {
   /** Candidates reached so far: the sequence up to the current one. */
   const history = computed<readonly CandidateCounts[]>(() => {
     const current = evaluation.value
-    if (!current.valid || current.candidateIndex < 0) return []
+    if (!current.valid) return []
     const { analysis } = current
     const sequence = analysis.status === 'solvable' || analysis.status === 'no-common-solution' ? analysis.sequence : []
-    return sequence.slice(0, current.candidateIndex + 1)
+    const index = conversion.session.value ? candidateIndex(sequence, conversion.session.value.baselineCounts) : current.candidateIndex
+    return index < 0 ? [] : sequence.slice(0, index + 1)
   })
 
   // ---- Initial scene ---------------------------------------------------------
@@ -189,6 +191,12 @@ export function useSystemsCountActivity(options: {
 
   function addRods(variable: VariableId, count: number): void {
     if (options.blocked() || converting.value) return
+    const created = placeRods(variable, count)
+    if (created.length) scene.select(created)
+  }
+
+  /** Adds rods in "x, then y" order without selecting them. Returns the new IDs. */
+  function placeRods(variable: VariableId, count: number): string[] {
     makeRoomForX(variable, count)
     const created: string[] = []
     for (let index = 0; index < count; index++) {
@@ -199,10 +207,32 @@ export function useSystemsCountActivity(options: {
       }
       created.push(...result.createdIds)
     }
-    if (created.length) {
-      scene.select(created)
-      if (created.length === count) message.value = `Added ${count} ${variable} rod${count === 1 ? '' : 's'} (${valueOf(variable)}-rod${count === 1 ? '' : 's'}).`
+    if (created.length === count) message.value = `Added ${count} ${variable} rod${count === 1 ? '' : 's'} (${valueOf(variable)}-rod${count === 1 ? '' : 's'}).`
+    return created
+  }
+
+  /**
+   * Clone for single upright x and y rods: the copies are added like +x / +y,
+   * so the board keeps "x, then y". Null when the selection holds anything
+   * else, and the caller clones normally. Called from a closing menu, so it
+   * does not wait on options.blocked(); the scene still checks editability.
+   */
+  function cloneInOrder(ids: readonly string[]): SceneApplyResult | null {
+    if (converting.value || !ids.length || !evaluation.value.valid) return null
+    const units = evaluation.value.material.units
+    const variables: VariableId[] = []
+    for (const id of ids) {
+      const train = scene.trains.value.find(item => item.id === id)
+      const unit = units.find(item => item.trainId === id)
+      if (!train || train.parts.length !== 1 || !unit) return null
+      variables.push(unit.variable)
     }
+    const created = (['x', 'y'] as const).flatMap(variable => {
+      const amount = variables.filter(item => item === variable).length
+      return amount ? placeRods(variable, amount) : []
+    })
+    if (!created.length) return { allowed: false, reason: message.value || 'No room to clone the selection.' }
+    return { allowed: true, createdIds: created }
   }
 
   /** Removes the rightmost single x or y rod. */
@@ -314,6 +344,7 @@ export function useSystemsCountActivity(options: {
     removeRod,
     selectForExchange,
     beginConversion,
+    cloneInOrder,
     applyConversion,
     cancelConversion,
     openArrange,

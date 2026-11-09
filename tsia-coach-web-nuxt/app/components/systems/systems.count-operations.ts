@@ -2,7 +2,7 @@ import type { DeepReadonly } from 'vue'
 import type { BoardTransform, RodTrain } from '~/components/rod/scene/rod.scene.types'
 import { copyScene } from '~/components/rod/scene/scene-snapshot'
 import { trainFitsRegion } from '~/components/rod/scene/scene-regions'
-import { exchangeStep, type CandidateCounts } from './systems.candidates'
+import { checkEquation, exchangeStep, type CandidateCounts } from './systems.candidates'
 import { evaluateCountSystem } from './systems.count-evaluate'
 import { canonicalSlots, countLayout, unitTrain, type CountUnit } from './systems.count-layout'
 import type { SystemsBoardConfig, VariableId } from './systems.schema'
@@ -197,32 +197,45 @@ export type ConversionSource =
   | { allowed: false; reason: string }
 
 /**
- * Whether these trains can start an exchange: a feasible, unsolved Equation 1
- * candidate, and whole selected trains made only of x units, exactly one
- * exchange's worth counted by parts. Never takes part of a train.
+ * Whether these trains can start an exchange. Selected whole x rods may
+ * already be lying down for conversion; only that explicit selection gets
+ * its source meaning back. All other material must remain whole upright
+ * units, and the reconstructed source counts must satisfy Equation 1.
+ * This never changes ordinary scene classification or takes part of a train.
  */
 export function conversionSource(config: SystemsBoardConfig, trains: Snapshot, ids: readonly string[]): ConversionSource {
   const evaluation = evaluateCountSystem(config, trains)
   if (!evaluation.valid) return { allowed: false, reason: evaluation.reason }
   if (evaluation.solved) return { allowed: false, reason: countReasons.solved }
-  if (!evaluation.candidate) return { allowed: false, reason: countReasons.notCandidate }
   const { x: a, y: b } = config.system.equations[0].coefficients
   const step = exchangeStep(a, b)
   const selected = new Set(ids)
   if (!ids.length || selected.size !== ids.length || ids.some(id => !trains.some(train => train.id === id))) {
     return { allowed: false, reason: countReasons.select }
   }
-  const chosen = evaluation.material.units.filter(unit => selected.has(unit.trainId))
-  const chosenParts = trains.filter(train => selected.has(train.id)).reduce((sum, train) => sum + train.parts.length, 0)
-  if (chosen.length !== chosenParts || chosen.some(unit => unit.variable !== 'x')) {
+  const chosen = trains.filter(train => selected.has(train.id)).flatMap(train => train.parts)
+  if (chosen.some(part => part.value !== a || part.orientation === 'tower')) {
     return { allowed: false, reason: `Select only x rods (${a}-rods) from Equation 1.` }
   }
   if (chosen.length !== step.removedX) {
     return { allowed: false, reason: `Select exactly ${plural(step.removedX, 'x rod')} (${a}-rods) to exchange; ${chosen.length} selected.` }
   }
-  const next = { xCount: evaluation.counts.xCount - step.removedX, yCount: evaluation.counts.yCount + step.addedY }
+  if (evaluation.material.unassigned.some(part => !selected.has(part.trainId))) {
+    return { allowed: false, reason: countReasons.notCandidate }
+  }
+  const remaining = evaluation.material.units.filter(unit => !selected.has(unit.trainId))
+  const counts = {
+    xCount: remaining.filter(unit => unit.variable === 'x').length + chosen.length,
+    yCount: remaining.filter(unit => unit.variable === 'y').length,
+  }
+  const [first, second] = config.system.equations
+  if (counts.xCount < 1 || counts.yCount < 1 || !checkEquation(first, counts).satisfied) {
+    return { allowed: false, reason: countReasons.notCandidate }
+  }
+  if (checkEquation(second, counts).satisfied) return { allowed: false, reason: countReasons.solved }
+  const next = { xCount: counts.xCount - step.removedX, yCount: counts.yCount + step.addedY }
   if (next.xCount < 1) return { allowed: false, reason: `Exchanging ${plural(step.removedX, 'x rod')} would leave no x rods.` }
-  return { allowed: true, sourceIds: [...ids], step, counts: evaluation.counts, next }
+  return { allowed: true, sourceIds: [...ids], step, counts, next }
 }
 
 /** Board cells where new upright y rods stand, as board-transform parameters. */

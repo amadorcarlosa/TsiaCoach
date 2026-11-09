@@ -199,7 +199,15 @@ const conversion = count.conversion
 // One editing target: the committed scene, or the conversion draft while one
 // is open. Every tool (tray, toolbar, menus, marquee, keyboard, touch) binds
 // to it, so none can stay attached to the other scene.
-const editing = useActiveScene(() => conversion.active.value ? conversion.draft : scene)
+const activeScene = useActiveScene(() => conversion.active.value ? conversion.draft : scene)
+// On the committed rod-count board, cloning x or y rods adds them like +x / +y
+// so the y rods slide right and the board stays "x, then y".
+const editing: typeof activeScene = {
+  ...activeScene,
+  apply: (ids, action) => (action.type === 'clone' && countMode.value && !conversion.active.value
+    ? count.cloneInOrder(ids)
+    : null) ?? activeScene.apply(ids, action),
+}
 
 const controls = useRodPlaygroundInteraction({
   scene: editing,
@@ -456,6 +464,13 @@ function onBoardClick(point: Point): void {
 
 function onChoose(value: CuisenaireRodValue): void {
   if (blocked.value) return
+  // On the committed rod-count board an x or y rod from the tray is added like
+  // +x / +y, so the y rods slide right and the board stays "x, then y".
+  const { x: a, y: b } = config.value.system.equations[0].coefficients
+  if (countMode.value && !count.converting.value && a !== b && (value === a || value === b)) {
+    count.addRods(value === a ? 'x' : 'y', 1)
+    return
+  }
   // During a conversion new rods are draft experiments, never committed.
   const result = editing.apply([], { type: 'create', value, regionId: activeRegion.value })
   if (result.allowed) editing.select(result.createdIds)
@@ -756,7 +771,7 @@ function onRemove(): void {
     :blocked="blocked"
     :can-orient="orientation => !blocked && checkSelected({ type: 'set-orientation', orientation }).allowed"
     :editing-disabled="editingDisabled"
-    :message="scene.message.value"
+    :message="editing.message.value"
     :orientations="orientations"
     :phone-portrait="phonePortrait"
     :piece-count="renderedPieces.length"
@@ -911,6 +926,7 @@ function onRemove(): void {
           :config="config"
           :cell-size="cellSize"
           :evaluation="count.evaluation.value"
+          :converting="conversion.active.value"
           :derived="count.derived.value"
           :preview="count.previewDetail.value"
           :lower-label="count.display.value.label"

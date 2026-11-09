@@ -214,6 +214,10 @@ An explicit **Arrange x, then y** after a completed exchange may compact the com
 
 ## Mathematical and commit validation
 
+Conversion entry also accepts a complete selection of x rods that the learner has already laid horizontally. Reconstruct source counts from those selected whole coefficient-valued rods plus the remaining upright units. Require exactly one exchange's source units, no unassigned material outside the selection, positive counts and exact Equation 1 equality. Reject towers, fragments, mixed selections and a source pair already solving both equations. This recovery is local to explicit conversion intent; ordinary scene classification remains strict.
+
+For such a session, the baseline counts, confirmed summaries and history must use those validated source counts rather than the unfinished scene's raw classifier counts. Hide unassigned-material hatching over the editable conversion material. Cancel restores the actual horizontal source arrangement byte-for-byte; it must not manufacture an upright arrangement.
+
 For Equation 1 `a*x + b*y = c`, reuse `exchangeStep`:
 
 ```text

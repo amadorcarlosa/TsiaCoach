@@ -115,7 +115,7 @@ describe('conversion workspace', () => {
     expect(workspace.begin(ids).allowed).toBe(false)
     expect(workspace.active.value).toBe(false)
     expect(scene.apply([ids[0]!], { type: 'set-orientation', orientation: 'horizontal' }).allowed).toBe(true)
-    // The selected eight are complete, but a ninth lying x rod outside the
+    // The selected eight are complete, but a ninth unfinished x rod outside the
     // selection must still prevent us claiming a feasible source candidate.
     expect(scene.apply(['x0'], { type: 'set-orientation', orientation: 'tower' }).allowed).toBe(true)
     expect(workspace.begin(ids).allowed).toBe(false)

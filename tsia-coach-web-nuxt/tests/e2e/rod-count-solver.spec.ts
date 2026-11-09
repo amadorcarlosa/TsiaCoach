@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
+import { systemsFixtures } from '../../app/components/systems/systems.fixtures'
 import { test, expect, type Playground } from './fixtures/playground-fixture'
 
 const shots = 'output/playwright/rod-count-solver'
@@ -163,6 +164,71 @@ async function convertOnce(page: Page, panel: Locator, p: Playground, mode: Mode
 }
 
 test.describe('rod-count systems solver', () => {
+  test('opens conversion for the already horizontal rods in the learner arrangement', async ({ playground: p, page }) => {
+    const panel = await openRodCounts(page)
+    // Load the screenshot's valid physical arrangement through the real file
+    // boundary: 13 upright x rods, eight lying x rods, one upright y rod.
+    const rod = (id: string, x: number, y: number, value: number, orientation: string) => ({
+      id, anchor: { x, y }, parts: [{ value, orientation, offset: { x: 0, y: 0 } }],
+    })
+    const trains = [
+      ...Array.from({ length: 13 }, (_, index) => rod(`standing-${index}`, 2 + index, 0, 3, 'vertical')),
+      ...Array.from({ length: 8 }, (_, index) => rod(`lying-${index}`, 18, index, 3, 'horizontal')),
+      rod('existing-y', 25, 0, 8, 'vertical'),
+    ]
+    const document = {
+      version: 1,
+      board: { kind: 'systems', config: systemsFixtures.rodCountReference.config },
+      steps: [{ id: 'prepared', title: 'Prepared conversion', prompt: '', trains, goal: null }],
+    }
+    await panel.getByLabel('Import level', { exact: true }).setInputFiles({
+      name: 'prepared-conversion.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document)),
+    })
+    await panel.getByRole('group', { name: 'Replace level confirmation', exact: true }).getByRole('button', { name: 'Replace', exact: true }).click()
+    await expect(panel.locator('[data-systems-unassigned]')).toHaveCount(8)
+
+    for (let index = 0; index < 8; index++) {
+      const source = panel.locator(`[data-piece-id="lying-${index}"]`)
+      const surface = await reveal(page, source)
+      await surface.click({ modifiers: index ? ['Control'] : [] })
+    }
+    await expect(selected(panel)).toHaveCount(8)
+    const baseline = await pieces(panel)
+    let menu = await openMenu(page, p, selected(panel).first(), 'mouse')
+    await expect(menu.getByRole('menuitem', { name: 'Create rectangle…', exact: true })).toHaveCount(1)
+    await choose(page, menu.getByRole('menuitem', { name: /^Convert selected area/ }), 'mouse')
+    await expect(workspace(panel)).toBeVisible()
+    menu = await openMenu(page, p, selected(panel).first(), 'mouse')
+    await expect(menu.getByRole('menuitem', { name: 'Make a train', exact: true })).toHaveCount(0)
+    await chooseInSubmenu(page, menu, 'Create rectangle…', /^3 columns × 8 rows — 24 cells \(suggested\)/, 'mouse')
+    await expect(selected(panel)).toHaveCount(1)
+    await expect.poll(() => p.geometry(selected(panel).first())).toMatchObject({ width: 3, depth: 8 })
+    await expect(lowerLabel(panel)).toHaveText('Confirmed candidate: x = 21, y = 1')
+    await expect.poll(() => counts(panel)).toEqual(['21', '1'])
+    await expect(summary(panel, 1)).toContainText('63 + 8 = 71')
+    await expect(summary(panel, 1)).not.toContainText('unassigned')
+    await expect(summary(panel, 2)).toContainText('189 + 4 = 193')
+    await expect(panel.locator('[data-systems-unassigned]')).toHaveCount(0)
+    await page.screenshot({ path: `${conversionShots}/horizontal-sources-rectangle.png` })
+
+    // Cancelling restores the learner's layout, not a fabricated upright one.
+    await workspace(panel).getByRole('button', { name: 'Cancel conversion', exact: true }).click()
+    expect(await pieces(panel)).toEqual(baseline)
+    await expect(selected(panel)).toHaveCount(8)
+    menu = await openMenu(page, p, selected(panel).first(), 'mouse')
+    await choose(page, menu.getByRole('menuitem', { name: /^Convert selected area/ }), 'mouse')
+    menu = await openMenu(page, p, selected(panel).first(), 'mouse')
+    await chooseInSubmenu(page, menu, 'Create rectangle…', /^3 columns × 8 rows — 24 cells \(suggested\)/, 'mouse')
+    menu = await openMenu(page, p, selected(panel).first(), 'mouse')
+    await chooseInSubmenu(page, menu, 'Group rectangle', /^3 groups of 8 — vertical columns · target y grouping/, 'mouse', 'menuitemcheckbox')
+    await expect(workspace(panel)).toHaveAttribute('data-ready', 'true')
+    await workspace(panel).getByRole('button', { name: 'Apply conversion', exact: true }).click()
+    await expect.poll(() => counts(panel)).toEqual(['13', '4'])
+    await expect(summary(panel, 2)).toContainText('117 + 16 = 133')
+    await expect(selected(panel)).toHaveCount(3)
+    await page.screenshot({ path: `${conversionShots}/horizontal-sources-applied.png` })
+  })
+
   test('walks 3x + 8y = 71, 9x + 4y = 73 through (21,1), (13,4), (5,7) in the conversion workspace', async ({ playground: p, page }) => {
     const panel = await openRodCounts(page)
 
@@ -363,6 +429,53 @@ test.describe('rod-count systems solver', () => {
     await expect(panel.locator('[data-systems-derived]')).toHaveCount(22)
     await expect(status(panel)).toHaveAttribute('data-phase', 'building')
     await page.screenshot({ path: `${conversionShots}/previous-candidate.png` })
+  })
+
+  test('a tray x rod joins the x block and bumps the y rods right', async ({ playground: _p, page }) => {
+    const panel = await openRodCounts(page)
+    const left = (id: string) => panel.locator(`[data-piece-id="${id}"]`).evaluate(el => parseFloat((el as HTMLElement).style.left))
+    const startY = await left('start-y')
+    expect(await left('start-x')).toBeLessThan(startY)
+    await panel.getByRole('button', { name: /^Choose (3|three) rod$/i }).click()
+    await expect.poll(() => counts(panel)).toEqual(['2', '1'])
+    // The y rod slid one column right; the new x rod took its old place.
+    await expect.poll(() => left('start-y')).toBeGreaterThan(startY)
+    const added = panel.locator('.draggable-rod--selected')
+    await expect(added).toHaveCount(1)
+    expect(await added.evaluate(el => parseFloat((el as HTMLElement).style.left))).toBe(startY)
+    // A y rod from the tray goes after the y block.
+    await panel.getByRole('button', { name: /^Choose (8|eight) rod$/i }).click()
+    await expect.poll(() => counts(panel)).toEqual(['2', '2'])
+    expect(await selected(panel).evaluate(el => parseFloat((el as HTMLElement).style.left))).toBeGreaterThan(await left('start-y'))
+    await page.screenshot({ path: `${conversionShots}/tray-bumps-y.png` })
+  })
+
+  test('a red divider marks where x rods end and y rods begin in both equations', async ({ playground: _p, page }) => {
+    const panel = await openRodCounts(page)
+    const divider = panel.locator('[data-systems-divider]')
+    await expect(divider).toHaveCount(1)
+    await expect(divider).toHaveAttribute('data-systems-divider', 'both')
+    await expect(divider).toHaveAttribute('data-column', '3')
+    await panel.getByRole('button', { name: 'Add five x rods', exact: true }).click()
+    await expect(divider).toHaveAttribute('data-column', '8')
+    await panel.locator('[data-count-band="1"]').evaluate(el => el.scrollIntoView({ block: 'center' }))
+    await settleScroll(page)
+    await page.screenshot({ path: `${conversionShots}/divider.png` })
+  })
+
+  test('Clone from the context menu keeps x rods before y rods', async ({ playground: p, page }) => {
+    const panel = await openRodCounts(page)
+    const left = (id: string) => panel.locator(`[data-piece-id="${id}"]`).evaluate(el => parseFloat((el as HTMLElement).style.left))
+    const startY = await left('start-y')
+    const menu = await openMenu(page, p, panel.locator('[data-piece-id="start-x"]'), 'mouse')
+    await choose(page, menu.getByRole('menuitem', { name: 'Clone', exact: true }), 'mouse')
+    await expect.poll(() => counts(panel)).toEqual(['2', '1'])
+    await expect.poll(() => left('start-y')).toBeGreaterThan(startY)
+    const xs = await panel.locator('[data-piece-id]').evaluateAll(elements => elements
+      .filter(el => (el as HTMLElement).dataset.pieceId !== 'start-y')
+      .map(el => parseFloat((el as HTMLElement).style.left)))
+    expect(Math.max(...xs)).toBeLessThan(await left('start-y'))
+    await page.screenshot({ path: `${conversionShots}/clone-bumps-y.png` })
   })
 
   test('marks residual material unassigned and never treats it as a count (Artboard 2)', async ({ playground, page }) => {

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { LowerDisplay } from '~/composables/useSystemsCountActivity'
 import type { CountEvaluation } from './systems.count-evaluate'
+import { checkEquation } from './systems.candidates'
 import { areaOutcome, substitutionLines } from './systems.count-feedback'
 import { countLayout } from './systems.count-layout'
 import { equationText } from './systems.geometry'
@@ -46,14 +47,20 @@ const summaries = computed(() => {
         state: display.kind === 'previous' ? 'neutral' as const : holds ? 'correct' as const : 'incorrect' as const,
       }
     }
+    if (index === 0 && props.conversion && display.counts) {
+      const check = checkEquation(equation, display.counts)
+      return {
+        ...base,
+        lines: ['Confirmed candidate', ...substitutionLines(equation.coefficients, display.counts, check), props.conversion],
+        status: '✓ Holds: confirmed',
+        state: 'correct' as const,
+      }
+    }
     const check = index === 0 ? evaluation.upper : evaluation.lower
     if (!check) {
       return { ...base, lines: [] as string[], status: 'Waiting for whole x and y rods in Equation 1.', state: 'neutral' as const }
     }
     const lines = substitutionLines(equation.coefficients, evaluation.counts, check, index === 0 ? evaluation.upper.unassigned : 0)
-    if (index === 0 && props.conversion) {
-      return { ...base, lines: ['Confirmed candidate', ...lines, props.conversion], status: '✓ Holds: confirmed', state: 'correct' as const }
-    }
     let status: string
     let state: 'neutral' | 'correct' | 'incorrect'
     if (index === 0) {
