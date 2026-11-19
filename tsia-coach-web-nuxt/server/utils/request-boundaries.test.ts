@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 type Handler = (event: unknown) => Promise<unknown>
 const fetch = vi.fn()
 
-describe('Effect H3 request boundaries', () => {
+// Each test imports a route handler on demand, which is slow under full-suite parallel load.
+describe('Effect H3 request boundaries', { timeout: 30_000 }, () => {
   beforeEach(() => {
     fetch.mockReset()
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)

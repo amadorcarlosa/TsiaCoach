@@ -212,6 +212,26 @@ describe('sample item attempt store', () => {
     expect(store.attemptProjection?.attemptId).toBe('attempt-1')
   })
 
+  it('startedAttempt_NotifiesObserversThatReadBeforeItResolved', async () => {
+    const started = createDeferred<AttemptProjection>()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/practice-items') return [makePrompt('item-1', ['a-1', 'a-2'])]
+      if (url === '/api/attempts') return started.promise
+      throw new Error(`Unexpected API call: ${url}`)
+    }))
+
+    const store = useSampleItemsStore(context)
+    const loading = store.load()
+    await vi.waitFor(() => expect(store.attemptSessions['item-1']).toBeDefined())
+    expect(store.attemptProjection).toBeNull()
+
+    started.resolve(beforeCheckProjection('item-1', 'attempt-1'))
+    await loading
+
+    expect(store.attemptProjection?.attemptId).toBe('attempt-1')
+    expect(JSON.stringify(context.snapshot())).toContain('attempt-1')
+  })
+
   it('load_DoesNotDuplicateHydratedAttempt', async () => {
     const serverContext = createWorkflowContext()
 

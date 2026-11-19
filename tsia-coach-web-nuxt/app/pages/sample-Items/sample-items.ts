@@ -181,7 +181,8 @@ function createSampleItemsWorkflow(context: WorkflowContext) {
     }
 
     attemptSessions.value[itemId] = created
-    return created
+    // Return the stored reactive proxy; writes through the raw object are not observed.
+    return attemptSessions.value[itemId]!
   }
 
   function setSessionSubmissionState(itemId: string, state: SubmissionState) {

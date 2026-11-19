@@ -4,7 +4,7 @@ import { telemetryProxyPolicy } from '#server/effect/telemetry-proxy'
 
 describe('OTLP configuration and browser boundary', () => {
   const env = { OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example', OTEL_EXPORTER_OTLP_HEADERS: 'x-otlp-api-key=private%3Dkey' }
-  const browserRequest = { origin: 'https://app.example', requestOrigin: 'https://app.example', contentType: 'application/x-protobuf', bytes: 128 }
+  const browserRequest = { enabled: true, origin: 'https://app.example', requestOrigin: 'https://app.example', contentType: 'application/x-protobuf', bytes: 128 }
 
   it('accepts bounded sampling configuration without breaking startup on invalid input', () => {
     expect(telemetrySamplingRatio('0.1')).toBe(0.1)
@@ -34,6 +34,10 @@ describe('OTLP configuration and browser boundary', () => {
       status: 200, upstream: { url: 'https://collector.example/v1/traces', headers: { 'x-otlp-api-key': 'private=key' }, timeoutMillis: 5_000 },
     })
     expect(telemetryProxyPolicy(browserRequest, {})).toEqual({ status: 204 })
+  })
+
+  it('does not forward when browser telemetry is disabled, even with a configured collector', () => {
+    expect(telemetryProxyPolicy({ ...browserRequest, enabled: false }, env)).toEqual({ status: 204 })
   })
 
   it('rejects cross-origin, unsupported content and oversized batches', () => {

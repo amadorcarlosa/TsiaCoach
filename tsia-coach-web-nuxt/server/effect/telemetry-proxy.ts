@@ -4,11 +4,14 @@ export const telemetryBodyLimit = 1024 * 1024
 
 /** Fixed destination, fixed signal; browser headers cannot select an upstream. */
 export function telemetryProxyPolicy(input: {
+  enabled: boolean
   origin: string | undefined
   requestOrigin: string
   contentType: string | undefined
   bytes: number
 }, env: TelemetryEnvironment) {
+  // Browser export is opt-in; a configured server collector alone must not open this proxy.
+  if (!input.enabled) return { status: 204 } as const
   if (input.origin !== input.requestOrigin) return { status: 403 } as const
   if (input.contentType?.split(';')[0]?.trim() !== 'application/x-protobuf') return { status: 415 } as const
   if (input.bytes > telemetryBodyLimit) return { status: 413 } as const

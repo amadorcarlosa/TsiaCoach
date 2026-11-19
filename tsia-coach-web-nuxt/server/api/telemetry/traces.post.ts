@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
     return
   }
   const policy = telemetryProxyPolicy({
+    enabled: useRuntimeConfig(event).public.telemetryEnabled === true,
     origin: getHeader(event, 'origin'),
     requestOrigin: getRequestURL(event).origin,
     contentType: getHeader(event, 'content-type'),
