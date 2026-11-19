@@ -1,6 +1,9 @@
 <script setup lang="ts" generic="Action">
+import { createResourceScope } from '~/effect/scoped-resource'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { ManipulativeChoice } from './manipulative.types'
+
+const resources = createResourceScope()
 
 const props = defineProps<{
   x: number
@@ -40,15 +43,16 @@ function keydown(event: KeyboardEvent): void {
 
 onMounted(async () => {
   await nextTick()
+  if (resources.closed) return
   // Keep the menu on screen near the requested point.
   const bounds = element.value!.getBoundingClientRect()
   left.value = Math.max(8, Math.min(props.x, window.innerWidth - bounds.width - 8))
   top.value = Math.max(8, Math.min(props.y, window.innerHeight - bounds.height - 8))
   element.value?.querySelector('button')?.focus()
-  window.addEventListener('pointerdown', outside, true)
+  resources.listen(window, 'pointerdown', outside, true)
 })
 
-onBeforeUnmount(() => window.removeEventListener('pointerdown', outside, true))
+onBeforeUnmount(resources.close)
 </script>
 
 <template>

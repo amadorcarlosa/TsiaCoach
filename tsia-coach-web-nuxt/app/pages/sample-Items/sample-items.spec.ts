@@ -6,7 +6,7 @@ import {
   it,
   vi
 } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { createWorkflowContext, type WorkflowContext } from '~/effect/registry'
 import { useSampleItemsStore } from './sample-items'
 import {
   AttemptPhaseKinds,
@@ -19,6 +19,8 @@ import {
   SubmissionStates,
   coachingCardView
 } from './sample-items-ui'
+
+let context: WorkflowContext
 
 type FetchOptions = {
   method?: string
@@ -161,10 +163,11 @@ function createDeferred<T>() {
 
 describe('sample item attempt store', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
+    context = createWorkflowContext()
   })
 
   afterEach(() => {
+    context.dispose()
     vi.unstubAllGlobals()
   })
 
@@ -193,16 +196,16 @@ describe('sample item attempt store', () => {
 
     vi.stubGlobal('$fetch', fetchMock)
 
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
     await store.load()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/practice-items')
-    expect(fetchMock).toHaveBeenCalledWith('/api/attempts', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/practice-items', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/attempts', expect.objectContaining({
       method: 'POST',
       body: {
         practiceItemId: 'item-1'
       }
-    })
+    }))
     expect(store.selectedItemId).toBe('item-1')
     expect(store.loadState).toBe(LoadStates.Loaded)
     expect(store.attemptProjection).not.toBeNull()
@@ -210,8 +213,7 @@ describe('sample item attempt store', () => {
   })
 
   it('load_DoesNotDuplicateHydratedAttempt', async () => {
-    const serverPinia = createPinia()
-    setActivePinia(serverPinia)
+    const serverContext = createWorkflowContext()
 
     const initialFetch = vi.fn(async (url: string) => {
       if (url === '/api/practice-items') {
@@ -227,11 +229,11 @@ describe('sample item attempt store', () => {
 
     vi.stubGlobal('$fetch', initialFetch)
 
-    const serverStore = useSampleItemsStore()
+    const serverStore = useSampleItemsStore(serverContext)
     await serverStore.load()
 
-    const serializedState = JSON.parse(JSON.stringify(serverPinia.state.value))
-    expect(serializedState.sampleItems.attemptSessions['item-1']).toMatchObject({
+    const serializedState = JSON.parse(JSON.stringify(serverContext.snapshot()))
+    expect(serializedState.find((entry: { key: string }) => entry.key === 'tsia:sampleItems.attemptSessions').value['item-1']).toMatchObject({
       attemptId: 'attempt-1',
       projection: {
         attemptId: 'attempt-1',
@@ -239,15 +241,14 @@ describe('sample item attempt store', () => {
       }
     })
 
-    const clientPinia = createPinia()
-    clientPinia.state.value = serializedState
-    setActivePinia(clientPinia)
+    const clientContext = createWorkflowContext({ snapshot: serializedState })
+    serverContext.dispose()
     const secondFetch = vi.fn(async () => {
       throw new Error('Should not call API when hydrated')
     })
 
     vi.stubGlobal('$fetch', secondFetch)
-    const clientStore = useSampleItemsStore()
+    const clientStore = useSampleItemsStore(clientContext)
     await clientStore.load()
 
     expect(secondFetch).not.toHaveBeenCalled()
@@ -259,10 +260,34 @@ describe('sample item attempt store', () => {
         practiceItemId: 'item-1'
       }
     })
+    clientContext.dispose()
+  })
+
+  it('isolates concurrent SSR initializations and retains one feature instance per app', async () => {
+    const makeContext = (id: string) => createWorkflowContext({
+      fetch: async <A>(url: string) => (url === '/api/practice-items'
+        ? [makePrompt(id, ['a-1'])]
+        : beforeCheckProjection(id, 'attempt-' + id)) as A,
+    })
+    const first = makeContext('first')
+    const second = makeContext('second')
+    try {
+      const a = useSampleItemsStore(first)
+      const b = useSampleItemsStore(second)
+      await Promise.all([a.load(), b.load()])
+      expect(a.selectedItemId).toBe('first')
+      expect(b.selectedItemId).toBe('second')
+      expect(JSON.stringify(first.snapshot())).not.toContain('attempt-second')
+      expect(useSampleItemsStore(first)).toBe(a)
+      expect(useSampleItemsStore(second)).toBe(b)
+      a.focus({ kind: 'phrase', id: 'first-phrase-1' })
+      expect(useSampleItemsStore(first).focusTarget?.id).toBe('first-phrase-1')
+      expect(b.focusTarget).toBeNull()
+    } finally { first.dispose(); second.dispose() }
   })
 
   it('selectItem_StartsAtMostOneAttemptPerItem', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
     const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1']), makePrompt('item-2', ['b-1'])]
@@ -291,7 +316,7 @@ describe('sample item attempt store', () => {
   })
 
   it('selectItem_ReusesExistingAttemptAndHistory', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
     const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
         return [makePrompt('item-1', ['a-1', 'a-2'])]
@@ -318,7 +343,7 @@ describe('sample item attempt store', () => {
   })
 
   it('concurrentSelectItem_DeduplicatesAttemptStart', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
 
     const deferred = createDeferred<AttemptProjection>()
 
@@ -359,7 +384,7 @@ describe('sample item attempt store', () => {
   })
 
   it('submitSelectedAnswer_PostsOnlySelectedAnswerId', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
     let capturedBody: Record<string, unknown> | null = null
 
     const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
@@ -389,7 +414,7 @@ describe('sample item attempt store', () => {
   })
 
   it('selectingAfterIncorrect_PreservesProjectionAndHidesOldFeedback', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
 
     const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
@@ -424,7 +449,7 @@ describe('sample item attempt store', () => {
   })
 
   it('correctProjection_LocksSelectionAndResubmission', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
 
     const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
@@ -459,7 +484,7 @@ describe('sample item attempt store', () => {
   })
 
   it('failedCheck_PreservesLastServerProjectionAndAllowsRetry', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
 
     const fetchMock = vi.fn(async (url: string, _options?: FetchOptions) => {
       if (url === '/api/practice-items') {
@@ -504,7 +529,7 @@ describe('sample item attempt store', () => {
   })
 
   it('focusForItem_WaitsForTargetItemSession', async () => {
-    const store = useSampleItemsStore()
+    const store = useSampleItemsStore(context)
     const deferred = createDeferred<AttemptProjection>()
 
     const fetchMock = vi.fn(async (url: string, options?: FetchOptions) => {
@@ -635,7 +660,7 @@ async function createCoachingHarness(options: CoachingHarnessOptions = {}) {
 
   vi.stubGlobal('$fetch', fetchMock)
 
-  const store = useSampleItemsStore()
+  const store = useSampleItemsStore(context)
   await store.load()
 
   return { store, fetchMock, coachCalls }
@@ -643,10 +668,11 @@ async function createCoachingHarness(options: CoachingHarnessOptions = {}) {
 
 describe('sample item coaching store', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
+    context = createWorkflowContext()
   })
 
   afterEach(() => {
+    context.dispose()
     vi.unstubAllGlobals()
   })
 

@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, getCurrentScope, onBeforeUnmount, onMounted, onScopeDispose, ref, type Ref } from 'vue'
 import type { ZoneRect } from '~/utils/drag-geometry'
 
@@ -12,6 +13,7 @@ interface ZoneRegistration {
 }
 
 export function useDropZones(boardEl: Ref<HTMLElement | null>) {
+  const resources = createResourceScope()
   const registrations = new Map<string, ZoneRegistration>()
   const zoneRects = ref<ZoneRect[]>([])
   let resizeObserver: ResizeObserver | null = null
@@ -113,17 +115,17 @@ export function useDropZones(boardEl: Ref<HTMLElement | null>) {
     measure()
 
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => measure())
+      resizeObserver = resources.acquire(() => new ResizeObserver(() => measure()), observer => observer.disconnect())
       observeRegisteredElements()
     }
   })
 
-  onBeforeUnmount(() => {
-    resizeObserver?.disconnect()
+  resources.defer(() => {
     resizeObserver = null
     registrations.clear()
     zoneRects.value = []
   })
+  onBeforeUnmount(resources.close)
 
   return {
     registerZone,

@@ -1,4 +1,13 @@
 <script setup lang="ts">
+import { copyText, readStoredText, writeStoredText } from '~/effect/browser-io'
+import { createResourceScope } from '~/effect/scoped-resource'
+import { runBrowserEffect } from '~/effect/runtime'
+
+const resources = createResourceScope()
+const copiedTimer = resources.timer()
+const clipboardAbort = new AbortController()
+resources.defer(() => clipboardAbort.abort())
+let dragResources: ReturnType<typeof createResourceScope> | undefined
 /**
  * Cuisenaire rod canvas.
  *
@@ -163,9 +172,11 @@ function beginDrag(event: PointerEvent, length: number, vertical: boolean, rodId
     moved: false,
   }
   if (rodId !== null) selectedRodId.value = rodId
-  window.addEventListener('pointermove', onDragMove)
-  window.addEventListener('pointerup', onDragEnd)
-  window.addEventListener('pointercancel', cleanupDrag)
+  dragResources?.close()
+  dragResources = createResourceScope()
+  dragResources.listen(window, 'pointermove', onDragMove)
+  dragResources.listen(window, 'pointerup', onDragEnd)
+  dragResources.listen(window, 'pointercancel', cleanupDrag)
   // No preventDefault here: it would suppress the click and dblclick that
   // select and rotate. Text selection is blocked in CSS instead.
 }
@@ -226,9 +237,8 @@ function onDragEnd() {
 
 function cleanupDrag() {
   drag.value = null
-  window.removeEventListener('pointermove', onDragMove)
-  window.removeEventListener('pointerup', onDragEnd)
-  window.removeEventListener('pointercancel', cleanupDrag)
+  dragResources?.close()
+  dragResources = undefined
 }
 
 // ---------------------------------------------------------------- keyboard & edits
@@ -392,9 +402,10 @@ async function copy(kind: 'json' | 'link') {
     ? boardJson.value
     : `${location.origin}${location.pathname}${encodeHash()}`
   try {
-    await navigator.clipboard.writeText(text)
+    await runBrowserEffect(copyText(text), { signal: clipboardAbort.signal, name: 'clipboard.copy' })
+    if (resources.closed) return
     copied.value = kind
-    setTimeout(() => { copied.value = null }, 1500)
+    copiedTimer.schedule(() => { copied.value = null }, 1500)
   } catch {
     copied.value = null
   }
@@ -403,7 +414,7 @@ async function copy(kind: 'json' | 'link') {
 onMounted(() => {
   if (!decodeHash(location.hash)) {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = readStoredText(STORAGE_KEY)
       if (!stored || !decodeHash(stored)) loadStaircaseWithRebuild()
     } catch {
       loadStaircaseWithRebuild()
@@ -411,13 +422,11 @@ onMounted(() => {
   }
   jsonDraft.value = boardJson.value
   hydrated.value = true
-  window.addEventListener('keydown', onKey)
+  resources.listen(window, 'keydown', onKey)
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKey)
-  cleanupDrag()
-})
+resources.defer(cleanupDrag)
+onBeforeUnmount(resources.close)
 
 // Persist only after the stored or default layout has been applied, so a
 // first render never overwrites a saved board with an empty one.
@@ -425,7 +434,7 @@ const hydrated = ref(false)
 watch([rods, cols, rows, unitLines], () => {
   if (!hydrated.value) return
   jsonDraft.value = boardJson.value
-  try { localStorage.setItem(STORAGE_KEY, encodeHash()) } catch { /* convenience only */ }
+  writeStoredText(STORAGE_KEY, encodeHash())
 }, { deep: true })
 
 function rodStyle(rod: Pick<Rod, 'length' | 'x' | 'y' | 'vertical'>) {

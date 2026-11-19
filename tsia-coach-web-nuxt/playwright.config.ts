@@ -1,19 +1,21 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: externalBaseURL ?? 'http://127.0.0.1:3000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     contextOptions: {
       reducedMotion: 'reduce',
     },
   },
-  webServer: [
+  webServer: externalBaseURL ? undefined : [
     {
       command: 'dotnet run --project ../TsiaCoach.WebApi/TsiaCoach.WebApi.csproj --no-build --urls http://127.0.0.1:5145',
       url: 'http://127.0.0.1:5145/health',
@@ -33,12 +35,6 @@ export default defineConfig({
       env: {
         NUXT_API_URL: 'http://127.0.0.1:5145',
       },
-    },
-    {
-      command: 'pnpm dev --host 127.0.0.1 --port 3000',
-      url: 'http://127.0.0.1:3117/dev/rod-tabla-playground',
-      reuseExistingServer: true,
-      timeout: 120_000,
     },
   ],
   projects: [

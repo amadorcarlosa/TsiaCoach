@@ -1,5 +1,7 @@
-import { defineStore } from 'pinia'
-import { computed, ref, shallowRef } from 'vue'
+import { Effect } from 'effect'
+import { workflowField, workflowFacade, workflowFeature, useWorkflowContext, type WorkflowContext } from '~/effect/registry'
+import { workflowRequest, executeWorkflow } from '~/effect/workflows/transport'
+import { computed } from 'vue'
 import type { PracticeItemPrompt } from '#shared/types/sample-items'
 import type {
   ScaffoldSession,
@@ -35,19 +37,20 @@ function statusCodeOf(error: unknown): number | null {
   return candidate.statusCode ?? candidate.status ?? candidate.response?.status ?? null
 }
 
-export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
-  const attemptId = ref<string | null>(null)
-  const session = ref<ScaffoldSession | null>(null)
-  const practiceItem = ref<PracticeItemPrompt | null>(null)
-  const loadState = ref<ScaffoldSessionLoadState>(ScaffoldSessionLoadStates.Idle)
-  const loadError = ref<string | null>(null)
-  const checking = ref(false)
-  const checkError = ref<string | null>(null)
-  const loadInFlight = shallowRef<Promise<void> | null>(null)
+function createScaffoldSessionWorkflow(context: WorkflowContext) {
+  const attemptId = workflowField<string | null>(context, 'scaffoldSession.attemptId', null)
+  const session = workflowField<ScaffoldSession | null>(context, 'scaffoldSession.session', null)
+  const practiceItem = workflowField<PracticeItemPrompt | null>(context, 'scaffoldSession.practiceItem', null)
+  const loadState = workflowField<ScaffoldSessionLoadState>(context, 'scaffoldSession.loadState', ScaffoldSessionLoadStates.Idle)
+  const loadError = workflowField<string | null>(context, 'scaffoldSession.loadError', null)
+  const checking = workflowField(context, 'scaffoldSession.checking', false)
+  const checkError = workflowField<string | null>(context, 'scaffoldSession.checkError', null)
+  const loadInFlight = new Map<string, Promise<void>>()
+  let loadGeneration = 0
   /** The coach's last reply on the current step. Cleared when the step changes. */
-  const coachReply = ref<string | null>(null)
-  const asking = ref(false)
-  const askError = ref<string | null>(null)
+  const coachReply = workflowField<string | null>(context, 'scaffoldSession.coachReply', null)
+  const asking = workflowField(context, 'scaffoldSession.asking', false)
+  const askError = workflowField<string | null>(context, 'scaffoldSession.askError', null)
 
   const completedPercent = computed(() => {
     if (!session.value || Number(session.value.totalStepCount) === 0) {
@@ -78,47 +81,45 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
       return
     }
 
-    if (loadInFlight.value) {
-      return await loadInFlight.value
-    }
-
+    const existing = loadInFlight.get(nextAttemptId)
+    if (existing && attemptId.value === nextAttemptId) return existing
+    const generation = ++loadGeneration
     attemptId.value = nextAttemptId
     loadState.value = ScaffoldSessionLoadStates.Loading
     loadError.value = null
     checkError.value = null
+    coachReply.value = null
+    askError.value = null
+    asking.value = false
+    checking.value = false
 
-    const pending = (async () => {
-      try {
-        const loadedSession = await $fetch<ScaffoldSession>(
-          `/api/attempts/${encodeURIComponent(nextAttemptId)}/scaffold-sessions`,
-          { method: 'POST' },
-        )
-        const loadedItem = await $fetch<PracticeItemPrompt>(
-          `/api/practice-items/${encodeURIComponent(loadedSession.practiceItemId)}`,
-        )
-
-        session.value = loadedSession
-        practiceItem.value = loadedItem
-        loadState.value = ScaffoldSessionLoadStates.Loaded
-      }
-      catch (error) {
+    const pending = executeWorkflow('ScaffoldSessions.load', Effect.gen(function* () {
+      const loadedSession = yield* workflowRequest<ScaffoldSession>(
+        context, `/api/attempts/${encodeURIComponent(nextAttemptId)}/scaffold-sessions`,
+        { method: 'POST' },
+      )
+      if (generation !== loadGeneration) return
+      const loadedItem = yield* workflowRequest<PracticeItemPrompt>(
+        context, `/api/practice-items/${encodeURIComponent(loadedSession.practiceItemId)}`,
+      )
+      if (generation !== loadGeneration || attemptId.value !== nextAttemptId) return
+      session.value = loadedSession
+      practiceItem.value = loadedItem
+      loadState.value = ScaffoldSessionLoadStates.Loaded
+    }).pipe(
+      Effect.catch(error => Effect.sync(() => {
+        if (generation !== loadGeneration) return
         session.value = null
         practiceItem.value = null
         loadState.value = ScaffoldSessionLoadStates.Error
         loadError.value = statusCodeOf(error) === 409
           ? UNAUTHORIZED_MESSAGE
           : 'The walkthrough could not be loaded. Return to practice and try again.'
-      }
-    })()
-
-    loadInFlight.value = pending
-
-    try {
-      await pending
-    }
-    finally {
-      loadInFlight.value = null
-    }
+      })),
+      Effect.ensuring(Effect.sync(() => { loadInFlight.delete(nextAttemptId) })),
+    ))
+    loadInFlight.set(nextAttemptId, pending)
+    await pending
   }
 
   async function submit(submission: ScaffoldStepSubmission) {
@@ -129,29 +130,34 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
 
     checking.value = true
     checkError.value = null
+    const generation = loadGeneration
 
     try {
-      const next = await $fetch<ScaffoldSession>(
-        `/api/scaffold-sessions/${encodeURIComponent(current.sessionId)}/checks`,
-        {
-          method: 'POST',
-          body: submission,
-        },
-      )
-      const currentStepId = current.state.type === 'active' ? current.state.currentStep.id : null
-      const nextStepId = next.state.type === 'active' ? next.state.currentStep.id : null
-      if (nextStepId !== currentStepId) {
-        coachReply.value = null
-        askError.value = null
-      }
-      session.value = next
+      await executeWorkflow('ScaffoldSessions.check', Effect.gen(function* () {
+        const next = yield* workflowRequest<ScaffoldSession>(
+          context, `/api/scaffold-sessions/${encodeURIComponent(current.sessionId)}/checks`,
+          {
+            method: 'POST',
+            body: submission,
+          },
+        )
+        if (generation !== loadGeneration || session.value?.sessionId !== current.sessionId) return
+        const currentStepId = current.state.type === 'active' ? current.state.currentStep.id : null
+        const nextStepId = next.state.type === 'active' ? next.state.currentStep.id : null
+        if (nextStepId !== currentStepId) {
+          coachReply.value = null
+          askError.value = null
+        }
+        session.value = next
+      }))
     }
     catch {
+      if (generation !== loadGeneration) return
       session.value = current
       checkError.value = 'Your response could not be checked. Please try again.'
     }
     finally {
-      checking.value = false
+      if (generation === loadGeneration) checking.value = false
     }
   }
 
@@ -169,35 +175,43 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
 
     asking.value = true
     askError.value = null
+    const generation = loadGeneration
+    const capturedStepId = current.state.currentStep.id
+    const capturedAttemptId = attemptId.value
 
     try {
-      const turn = await $fetch<CoachTurnResponse>(
-        `/api/attempts/${encodeURIComponent(attemptId.value)}/coach`,
-        {
-          method: 'POST',
-          body: {
-            event: CoachTurnEvents.StepQuestionAsked,
-            stepId: current.state.currentStep.id,
-            question: trimmed,
+      await executeWorkflow('ScaffoldSessions.askCoach', Effect.gen(function* () {
+        const turn = yield* workflowRequest<CoachTurnResponse>(
+          context, `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
+          {
+            method: 'POST',
+            body: {
+              event: CoachTurnEvents.StepQuestionAsked,
+              stepId: capturedStepId,
+              question: trimmed,
+            },
           },
-        },
-      )
-      coachReply.value = isAnswerQuestionMove(turn.move) ? turn.move.message : null
-      if (!coachReply.value) {
-        askError.value = 'The coach could not answer that. Try asking another way.'
-      }
+        )
+        if (generation !== loadGeneration || session.value?.state.type !== 'active'
+          || session.value.state.currentStep.id !== capturedStepId) return
+        coachReply.value = isAnswerQuestionMove(turn.move) ? turn.move.message : null
+        if (!coachReply.value) {
+          askError.value = 'The coach could not answer that. Try asking another way.'
+        }
+      }))
     }
     catch (error) {
+      if (generation !== loadGeneration) return
       askError.value = statusCodeOf(error) === 429
         ? 'The coach is busy. Try again in a moment.'
         : 'The coach could not answer right now. Try again.'
     }
     finally {
-      asking.value = false
+      if (generation === loadGeneration) asking.value = false
     }
   }
 
-  return {
+  return workflowFacade({
     attemptId,
     session,
     practiceItem,
@@ -212,5 +226,9 @@ export const useScaffoldSessionStore = defineStore('scaffold-session', () => {
     load,
     submit,
     askCoach,
-  }
-})
+  })
+}
+
+export function useScaffoldSessionStore(context: WorkflowContext = useWorkflowContext()) {
+  return workflowFeature(context, 'scaffoldSession', () => createScaffoldSessionWorkflow(context))
+}

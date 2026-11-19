@@ -1,29 +1,23 @@
-import { z } from 'zod'
+import { Schema } from 'effect'
+import { integer, nonnegativeInteger, positiveInteger, schema, trimmedId, type Infer } from '#shared/effect/schema'
 
-const nonnegativeInteger = z.number().int().min(0)
-// Signed boards accept negative region totals; the board adapter decides.
-const integer = z.number().int()
-const positiveInteger = z.number().int().min(1)
-const id = z.string().trim().min(1)
-export const goalConditionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('fraction-exact'), pairId: id, numerator: nonnegativeInteger, denominator: positiveInteger }).strict(),
-  z.object({ type: z.literal('empty-pair'), pairId: id }).strict(),
-  z.object({ type: z.literal('empty-region'), regionId: id }).strict(),
-  z.object({ type: z.literal('region-total'), regionId: id, value: integer }).strict(),
-  z.object({ type: z.literal('occupied-area'), regionId: id, cells: nonnegativeInteger }).strict(),
-  z.object({ type: z.literal('filled-rectangle'), regionId: id, x: nonnegativeInteger, y: nonnegativeInteger, columns: positiveInteger, rows: positiveInteger }).strict(),
-])
-export const authoringGoalSchema = z.object({
-  type: z.literal('all'), conditions: z.array(goalConditionSchema).min(1),
-}).strict()
-export type GoalCondition = z.infer<typeof goalConditionSchema>
-/** Conditions combine with AND. null means no goal authored, never success.
- * Fractions compare raw totals (2/3 rejects 4/6); no equivalence goal exists.
- * Empty pairs require BOTH tracks empty. Region totals sum signed rod values:
- * +10 and -10 total 0 but still occupy their cells, so they fail empty-region.
- * Negative region totals parse only on boards whose adapter allows them.
- * Occupied area counts distinct ground cells: a tower occupies one cell.
- * Rectangles require exactly their cells, without holes or extra cells.
- * Rectangle coordinates are region-relative; unconstrained regions are ignored.
+export const goalConditionSchema = schema(Schema.Union([
+  Schema.Struct({ type: Schema.Literal('fraction-exact'), pairId: trimmedId, numerator: nonnegativeInteger, denominator: positiveInteger }),
+  Schema.Struct({ type: Schema.Literal('empty-pair'), pairId: trimmedId }),
+  Schema.Struct({ type: Schema.Literal('empty-region'), regionId: trimmedId }),
+  Schema.Struct({ type: Schema.Literal('region-total'), regionId: trimmedId, value: integer }),
+  Schema.Struct({ type: Schema.Literal('occupied-area'), regionId: trimmedId, cells: nonnegativeInteger }),
+  Schema.Struct({ type: Schema.Literal('filled-rectangle'), regionId: trimmedId, x: nonnegativeInteger, y: nonnegativeInteger, columns: positiveInteger, rows: positiveInteger }),
+]), { strict: true })
+
+export const authoringGoalSchema = schema(Schema.Struct({
+  type: Schema.Literal('all'),
+  conditions: Schema.Array(goalConditionSchema.schema).check(Schema.isMinLength(1)),
+}), { strict: true })
+
+export type GoalCondition = Infer<typeof goalConditionSchema>
+/** Conditions combine with AND. Null means no authored goal, never success.
+ * Fractions compare raw totals; occupied area counts distinct ground cells.
+ * Signed-region and rectangle constraints are enforced by the board adapter.
  */
-export type AuthoringGoal = z.infer<typeof authoringGoalSchema>
+export type AuthoringGoal = Infer<typeof authoringGoalSchema>

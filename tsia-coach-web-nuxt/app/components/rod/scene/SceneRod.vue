@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { createResourceScope } from '~/effect/scoped-resource'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import DraggableRod from '../movement/DraggableRod.vue'
 import type { DragProps } from '../rod.types'
@@ -19,12 +20,12 @@ const emit = defineEmits<{
 
 const rod = ref<InstanceType<typeof DraggableRod> | null>(null)
 
-let timer: ReturnType<typeof setTimeout> | undefined
+const resources = createResourceScope()
+const timer = resources.timer()
 let touch: { id: number; x: number; y: number } | null = null
 
 function clearLongPress(): void {
-  clearTimeout(timer)
-  timer = undefined
+  timer.clear()
   touch = null
 }
 
@@ -80,7 +81,7 @@ function onPointerDown(event: PointerEvent): void {
     y: event.clientY,
   }
 
-  timer = setTimeout(() => requestMenu(element), 550)
+  timer.schedule(() => requestMenu(element), 550)
 }
 
 function onPointerMove(event: PointerEvent): void {
@@ -100,7 +101,8 @@ watch(() => props.disabled, disabled => {
   if (disabled) clearLongPress()
 })
 
-onBeforeUnmount(clearLongPress)
+resources.defer(clearLongPress)
+onBeforeUnmount(resources.close)
 </script>
 
 <template>

@@ -1,4 +1,5 @@
-import { readonly, ref } from 'vue'
+import { getCurrentScope, onScopeDispose, readonly, ref } from 'vue'
+import { createResourceScope } from '~/effect/scoped-resource'
 import type { useLevelAuthoring } from './useLevelAuthoring'
 import type { AuthoringResult } from '~/components/playground/authoring.types'
 import type { Validation } from '~/components/playground/goals/goal.types'
@@ -26,6 +27,9 @@ type Options = {
   adoptBoard?: BoardAdoption
 }
 export function useLevelFiles(options: Options) {
+  const resources = createResourceScope()
+  let readController: AbortController | undefined
+  if (getCurrentScope()) onScopeDispose(() => { readController?.abort(); resources.close() })
   const preview = ref<ImportPreview | null>(null)
   const message = ref('')
   const exportQuestion = ref<'dirty' | 'uncaptured' | null>(null)
@@ -81,15 +85,21 @@ export function useLevelFiles(options: Options) {
   }
   function cancelImport(): void {
     readVersion++
+    readController?.abort()
+    readController = undefined
     prepared = null
     preview.value = null
     message.value = ''
   }
   async function selectFile(file: File): Promise<AuthoringResult> {
     const version = ++readVersion
+    readController?.abort()
+    readController = undefined
     if (file.size > MAX_LEVEL_FILE_BYTES) return report({ allowed: false, reason: 'Level files must be 2 MiB or smaller.' })
+    const controller = new AbortController()
+    readController = controller
     try {
-      const input = await readLevelFile(file)
+      const input = await readLevelFile(file, controller.signal)
       if (version !== readVersion) return { allowed: false, reason: 'File reading cancelled.' }
       return prepareImport(input)
     } catch (error) {
@@ -119,7 +129,8 @@ export function useLevelFiles(options: Options) {
     // Saved-only reads metadata and saved trains; it never captures/cancels/replaces.
     const parsed = validateLevelDocument({ version: 1, board: options.adapter.board, steps: authoring.steps.value }, options.adapter)
     if (!parsed.allowed) return report(parsed)
-    ;(options.download ?? downloadLevel)(parsed.value)
+    if (options.download) options.download(parsed.value)
+    else downloadLevel(parsed.value, resources)
     exportQuestion.value = null
     return report({ allowed: true })
   }

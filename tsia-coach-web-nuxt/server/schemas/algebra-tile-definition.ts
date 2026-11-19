@@ -1,16 +1,17 @@
-import { z } from 'zod'
+import { Schema } from 'effect'
+import { schema, type Infer } from '#shared/effect/schema'
 
-export const AlgebraTileDefinitionSchema = z.object({
-  term: z.enum(['one', 'x', 'y', 'xSquared', 'ySquared', 'xy']),
-  sign: z.enum(['positive', 'negative']),
-  coefficient: z.union([z.literal(1), z.literal(-1)]),
-  shape: z.enum(['square', 'rectangle']),
-  dimensions: z.object({
-    width: z.enum(['one', 'x', 'y']),
-    height: z.enum(['one', 'x', 'y']),
+const tile = Schema.Struct({
+  term: Schema.Literals(['one', 'x', 'y', 'xSquared', 'ySquared', 'xy']),
+  sign: Schema.Literals(['positive', 'negative']),
+  coefficient: Schema.Literals([1, -1]),
+  shape: Schema.Literals(['square', 'rectangle']),
+  dimensions: Schema.Struct({
+    width: Schema.Literals(['one', 'x', 'y']),
+    height: Schema.Literals(['one', 'x', 'y']),
   }),
-}).refine(tile => tile.coefficient === (tile.sign === 'positive' ? 1 : -1), {
-  message: 'Tile sign and coefficient must agree.',
 })
-
-export type AlgebraTileDefinition = z.infer<typeof AlgebraTileDefinitionSchema>
+export const AlgebraTileDefinitionSchema = schema(tile.check(Schema.makeFilter<typeof tile.Type>(
+  value => value.coefficient === (value.sign === 'positive' ? 1 : -1) || 'Tile sign and coefficient must agree.',
+)))
+export type AlgebraTileDefinition = Infer<typeof AlgebraTileDefinitionSchema>

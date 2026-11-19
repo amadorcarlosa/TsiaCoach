@@ -1,26 +1,13 @@
-import type { components } from '#server/types/schema'
-import { startAttempt } from '#server/utils/attempts'
+import { Effect, Schema } from 'effect'
+import { StartAttemptRequestSchema, startAttemptEffect } from '#server/utils/attempts'
+import { requestBody } from '#server/effect/input'
+import { httpError } from '#server/effect/errors'
+import { runServerEffect } from '#server/effect/runtime'
 
-type StartAttemptRequest = components['schemas']['StartAttemptRequest']
-
-/**
- * POST /api/attempts
- *
- * Starts an attempt session for a practice item.
- */
-export default defineEventHandler(async (event) => {
-  const body = await readBody<unknown>(event)
-
-  if (
-    !body
-    || typeof body !== 'object'
-    || typeof (body as Partial<StartAttemptRequest>).practiceItemId !== 'string'
-  ) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A practice item ID is required.',
-    })
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const body = yield* requestBody(event)
+  if (!Schema.is(StartAttemptRequestSchema)(body)) {
+    return yield* Effect.fail(httpError({ statusCode: 400, statusMessage: 'A practice item ID is required.' }))
   }
-
-  return await startAttempt(event, { practiceItemId: body.practiceItemId })
-})
+  return yield* startAttemptEffect(event, { practiceItemId: body.practiceItemId })
+})))

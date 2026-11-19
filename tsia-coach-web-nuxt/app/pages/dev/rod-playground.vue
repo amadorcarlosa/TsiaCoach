@@ -1,4 +1,13 @@
 <script setup lang="ts">
+import { copyText, readStoredText, writeStoredText } from '~/effect/browser-io'
+import { createResourceScope } from '~/effect/scoped-resource'
+import { runBrowserEffect } from '~/effect/runtime'
+
+const resources = createResourceScope()
+const copiedTimer = resources.timer()
+const clipboardAbort = new AbortController()
+resources.defer(() => clipboardAbort.abort())
+let dragResources: ReturnType<typeof createResourceScope> | undefined
 /**
  * Cuisenaire rod playground.
  *
@@ -283,9 +292,11 @@ function beginDrag(
     moved: false,
   }
   if (rodId !== null) selectedRodId.value = rodId
-  window.addEventListener('pointermove', onDragMove)
-  window.addEventListener('pointerup', onDragEnd)
-  window.addEventListener('pointercancel', onDragCancel)
+  dragResources?.close()
+  dragResources = createResourceScope()
+  dragResources.listen(window, 'pointermove', onDragMove)
+  dragResources.listen(window, 'pointerup', onDragEnd)
+  dragResources.listen(window, 'pointercancel', onDragCancel)
   // No preventDefault here: it would suppress the click that selects.
   // Text selection is blocked in CSS instead.
 }
@@ -362,9 +373,8 @@ function onDragCancel() {
 
 function cleanupDrag() {
   drag.value = null
-  window.removeEventListener('pointermove', onDragMove)
-  window.removeEventListener('pointerup', onDragEnd)
-  window.removeEventListener('pointercancel', onDragCancel)
+  dragResources?.close()
+  dragResources = undefined
 }
 
 // ---------------------------------------------------------------- keyboard
@@ -522,9 +532,10 @@ async function copy(kind: 'json' | 'link') {
     ? boardJson.value
     : `${location.origin}${location.pathname}${encodeHash()}`
   try {
-    await navigator.clipboard.writeText(text)
+    await runBrowserEffect(copyText(text), { signal: clipboardAbort.signal, name: 'clipboard.copy' })
+    if (resources.closed) return
     copied.value = kind
-    setTimeout(() => { copied.value = null }, 1500)
+    copiedTimer.schedule(() => { copied.value = null }, 1500)
   } catch {
     copied.value = null
   }
@@ -539,7 +550,7 @@ function reset() {
 onMounted(() => {
   if (!decodeHash(location.hash)) {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = readStoredText(STORAGE_KEY)
       if (!stored || !decodeHash(stored)) defaultLayout()
     } catch {
       defaultLayout()
@@ -548,20 +559,18 @@ onMounted(() => {
   activeTrackId.value = tracks.value[0]?.id ?? null
   jsonDraft.value = boardJson.value
   hydrated.value = true
-  window.addEventListener('keydown', onKey)
+  resources.listen(window, 'keydown', onKey)
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKey)
-  cleanupDrag()
-})
+resources.defer(cleanupDrag)
+onBeforeUnmount(resources.close)
 
 // Persist only after the stored or default layout has been applied, so a
 // first render never overwrites a saved board with an empty one.
 watch([tracks, markers, boardUnits], () => {
   if (!hydrated.value) return
   jsonDraft.value = boardJson.value
-  try { localStorage.setItem(STORAGE_KEY, encodeHash()) } catch { /* convenience only */ }
+  writeStoredText(STORAGE_KEY, encodeHash())
 }, { deep: true })
 </script>
 

@@ -1,14 +1,9 @@
-import { startScaffoldSession } from '#server/utils/scaffold-sessions'
+import { Effect } from 'effect'
+import { startScaffoldSessionEffect } from '#server/utils/scaffold-sessions'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-export default defineEventHandler(async (event) => {
-  const attemptId = getRouterParam(event, 'attemptId')
-
-  if (!attemptId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'An attempt ID is required.',
-    })
-  }
-
-  return await startScaffoldSession(event, attemptId)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const attemptId = yield* routeParameter(event, 'attemptId', 'An attempt ID is required.')
+  return yield* startScaffoldSessionEffect(event, attemptId)
+})))

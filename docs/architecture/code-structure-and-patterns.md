@@ -1,10 +1,10 @@
 # TsiaCoach Code Structure and Patterns
 
-Updated October 21, 2026.
+Updated November 19, 2026.
 
 TsiaCoach combines math practice, guided coaching, and interactive manipulatives. Its central architectural rule is that the server determines answer correctness and scaffold progress, while the browser manages presentation and hands-on interaction. Authored practice items and coaching policies constrain the choices available to the AI coach.
 
-This guide explains the current C# and Nuxt implementation, the patterns that repeat across it, and where to make common changes.
+This guide explains the current C# and Nuxt implementation, the patterns that repeat across it, and where to make common changes. The [Effect migration and operations guide](effect-migration.md) documents the TypeScript service runtime, Atom hydration, browser I/O, and Aspire/OpenTelemetry configuration.
 
 ## Application structure
 
@@ -28,7 +28,9 @@ flowchart TD
 | `TsiaCoach.WebApi` | Exposes HTTP endpoints, coordinates domain operations, stores runtime state, and calls AI providers. |
 | `TsiaCoach.Common` | Contains shared infrastructure such as `UnionAttribute`. |
 | `TsiaCoach.ServiceDefaults` | Supplies shared service infrastructure for health and observability. |
-| `tsia-coach-web-nuxt/app` | Contains Vue pages, components, composables, and browser interactions. |
+| `tsia-coach-web-nuxt/app` | Contains Vue pages, Atom feature workflows, Effect browser I/O, components, and scene composables. |
+| `tsia-coach-web-nuxt/server/effect` | Supplies request-scoped backend services, typed transport, H3 execution, and telemetry. |
+| `tsia-coach-web-nuxt/shared/effect` | Contains Effect Schema adapters and shared trace/configuration/privacy utilities. |
 | `tsia-coach-web-nuxt/server` | Implements Nuxt server routes, API forwarding, and transport validation. |
 | `tsia-coach-web-nuxt/shared` | Provides contracts and type helpers shared by Nuxt code. |
 | `TsiaCoach.WebApi.Tests` | Tests domain behavior and API contracts, alongside coaching and provider behavior. |
@@ -95,7 +97,7 @@ Browser code generally calls relative `/api/...` routes. Nuxt receives those req
 
 This pattern is often called a backend for frontend, or BFF. It gives browser code one application origin and puts backend address resolution and forwarding on the Nuxt server.
 
-The route files are usually small. For example, `server/api/attempts.post.ts` reads and checks the request body, then delegates to `server/utils/attempts.ts`. That utility resolves configuration, forwards the request, and preserves backend problem responses. A connection failure becomes a 502.
+The route files are usually small. For example, `server/api/attempts.post.ts` reads and checks the request body, then delegates to `server/utils/attempts.ts`. Feature utilities construct Effect programs using the request-scoped backend service. `runServerEffect` executes them with tracing and cancellation, while the central transport resolves configuration and preserves backend problem responses. A connection failure becomes a 502. Backend GET retries are bounded; mutation and paid AI POSTs are not automatically retried. Application-owned request, catalog, and playground validation uses Effect Schema.
 
 Types in `server/types/schema.d.ts` describe the OpenAPI contract. Files in `shared/types` give those contracts shorter names and add helpers. Some frontend types, including scaffold submission alternatives, are also declared manually, so backend changes still require checking the corresponding TypeScript definitions.
 
@@ -103,7 +105,9 @@ Sources: [attempts.post.ts](C:/Users/amado/code/TsiaCoach/tsia-coach-web-nuxt/se
 
 ## Frontend state and interaction have separate owners
 
-The frontend uses Pinia stores for feature workflows and Vue composables for reusable behavior. The scaffold session store owns loading, submission, coaching requests, errors, and the latest server projection. It updates progress from the server response.
+The frontend uses Effect Atom Vue for its two feature workflows and Vue composables for reusable scene/rendering behavior. The scaffold session workflow owns loading, submission, coaching requests, errors, and the latest server projection. It updates progress from the server response. The exported `useSampleItemsStore` and `useScaffoldSessionStore` names remain for caller compatibility; Pinia is no longer a runtime dependency.
+
+Each SSR Nuxt app receives a separate Atom registry, and the browser retains one registry for its application lifetime. Explicit keyed initializers preserve SSR-created attempt/session IDs. Declared safe state fields are dehydrated after rendering and restored before client reads, preventing duplicate initialization POSTs. Server rendering uses live registry-backed refs because Atom Vue subscriptions do not remain active through asynchronous SSR setup; client components use the official Atom Vue bindings. See the [hydration implementation details](effect-migration.md#atom-state-ssr-and-hydration).
 
 Interactive boards use a more local division:
 
@@ -117,7 +121,7 @@ Interactive boards use a more local division:
 
 A scene policy supplies constraints such as board dimensions, allowed regions, and whether editing is available. Passing those constraints into a composable allows related boards to reuse behavior with different rules.
 
-File loading follows the same boundary discipline. `validateLevelDocument` checks the document schema, board compatibility, duplicate IDs, every step snapshot, and goals before returning data for use. Imported scenes pass through validation rather than becoming trusted scene state immediately.
+File loading follows the same boundary discipline. `validateLevelDocument` checks the document schema, board compatibility, duplicate IDs, every step snapshot, and goals before returning data for use. Imported scenes pass through validation rather than becoming trusted scene state immediately. Effect browser I/O services handle reads, downloads, storage, and clipboard operations; component-owned Effect scopes release acquired listeners, timers, observers, animations, and object URLs. Pure mathematics remains independent of the runtime.
 
 Sources: [scaffold-session.ts](C:/Users/amado/code/TsiaCoach/tsia-coach-web-nuxt/app/pages/scaffolds/scaffold-session.ts), [useRodScene.ts](C:/Users/amado/code/TsiaCoach/tsia-coach-web-nuxt/app/composables/useRodScene.ts), and [level-document.ts](C:/Users/amado/code/TsiaCoach/tsia-coach-web-nuxt/app/components/playground/files/level-document.ts).
 
@@ -148,7 +152,7 @@ Sources: [CoachingTurnService.cs](C:/Users/amado/code/TsiaCoach/TsiaCoach.WebApi
 
 1. The student selects an answer on the sample item page.
 2. Frontend code submits the answer ID to the Nuxt attempt-check route.
-3. The Nuxt utility forwards the request to the C# API.
+3. The Nuxt route executes an Effect feature service, whose central transport forwards the request and W3C trace context to the C# API.
 4. The API resolves the attempt and practice item.
 5. The store calls `Attempt.Append`, which enforces the attempt rules and evaluates answer membership.
 6. The store saves the replacement attempt in memory.
@@ -161,9 +165,15 @@ An incorrect answer can then lead to a separate diagnosis request. Coaching and 
 
 Domain and API tests cover evaluation, state transitions, session authorization, coaching validation, and endpoint responses. API tests use TUnit infrastructure; the repository selects Microsoft Testing Platform in `global.json`.
 
-Frontend tests are commonly colocated with the code they cover. Vitest runs unit and component tests, a separate integration configuration covers manipulative contract tests, and Playwright covers browser flows under `tests/e2e`.
+Frontend tests are commonly colocated with the code they cover. Vitest runs unit and component tests, a separate integration configuration covers manipulative contract tests, and Playwright covers browser flows under `tests/e2e`. Atom tests cover concurrent SSR isolation, settled SSR rendering, client hydration, retained workflow state, and stale/cancelled requests. The Aspire smoke configuration runs the real browser-to-C# flow against discovered endpoints and checks actual browser trace export; it starts no duplicate services.
 
 The frontend scripts encode an important dependency: `dev`, `build`, and `generate` run `test:sync` first. That command runs both unit and contract suites. Starting frontend development therefore also runs tests, and contract-test setup can affect startup.
+
+## Distributed observability
+
+Aspire orchestrates the existing C# API and Nuxt service. Nuxt owns one set of OpenTelemetry providers and connects Effect spans/logs to those providers; its metrics service uses the same meter provider. Explicit H3 and outbound request instrumentation carries W3C trace context to the already-instrumented C# API. Nuxt exports HTTP/protobuf OTLP while the C# resource retains its existing gRPC export.
+
+Browser traces use a same-origin Nuxt proxy. Collector credentials and private addresses stay server-side, and only the browser export-enable boolean is public. Telemetry privacy filters retain operation metadata and correlation while excluding student/provider content. See [Effect telemetry and Aspire](effect-migration.md#telemetry-and-aspire) for lifecycle, production configuration, and verification commands.
 
 ## Where to make common changes
 
@@ -177,6 +187,6 @@ The frontend scripts encode an important dependency: `dev`, `build`, and `genera
 | Change level files | File schema, document validator, and authoring composables | Invalid imports, snapshot validation, save and load tests. |
 | Add durable persistence | Attempt and scaffold session stores and service registration | Atomic updates, concurrency, history preservation, restart behavior. |
 
-For a first reading, follow `AppHost.cs`, `Program.cs`, `PracticeItem.cs`, `Attempt.cs`, and `AttemptEndpoints.cs`, then trace the Nuxt forwarding utility and feature store. For board work, start with `MathTablaPlayground.vue` and follow its composable imports.
+For a first reading, follow `AppHost.cs`, `Program.cs`, `PracticeItem.cs`, `Attempt.cs`, and `AttemptEndpoints.cs`, then trace the Nuxt Effect service and Atom workflow. For board work, start with `MathTablaPlayground.vue` and follow its composable imports.
 
-Related repository documents: [Student Coaching Diagnostics](C:/Users/amado/code/TsiaCoach/docs/architecture/student-coaching-diagnostics.md), [Parity Ladder Path](C:/Users/amado/code/TsiaCoach/docs/scaffolds/parity-ladder-path.md), and [Coach Playground](C:/Users/amado/code/TsiaCoach/docs/coach-playground.md).
+Related repository documents: [Effect migration and operations](effect-migration.md), [Student Coaching Diagnostics](C:/Users/amado/code/TsiaCoach/docs/architecture/student-coaching-diagnostics.md), [Parity Ladder Path](C:/Users/amado/code/TsiaCoach/docs/scaffolds/parity-ladder-path.md), and [Coach Playground](C:/Users/amado/code/TsiaCoach/docs/coach-playground.md).

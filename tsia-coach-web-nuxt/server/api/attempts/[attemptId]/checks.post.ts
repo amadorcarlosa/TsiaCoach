@@ -1,36 +1,14 @@
-import { checkAttempt } from '#server/utils/attempts'
-import type { components } from '#server/types/schema'
+import { Effect, Schema } from 'effect'
+import { CheckAnswerRequestSchema, checkAttemptEffect } from '#server/utils/attempts'
+import { requestBody, routeParameter } from '#server/effect/input'
+import { httpError } from '#server/effect/errors'
+import { runServerEffect } from '#server/effect/runtime'
 
-type CheckAnswerRequest = components['schemas']['CheckAnswerRequest']
-
-/**
- * POST /api/attempts/:attemptId/checks
- *
- * Checks a selected answer for an attempt.
- */
-export default defineEventHandler(async (event) => {
-  const attemptId = getRouterParam(event, 'attemptId')
-
-  if (!attemptId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'An attempt ID is required.',
-    })
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const attemptId = yield* routeParameter(event, 'attemptId', 'An attempt ID is required.')
+  const body = yield* requestBody(event)
+  if (!Schema.is(CheckAnswerRequestSchema)(body)) {
+    return yield* Effect.fail(httpError({ statusCode: 400, statusMessage: 'A selected answer ID is required.' }))
   }
-
-  const body = await readBody<unknown>(event)
-  if (
-    !body
-    || typeof body !== 'object'
-    || typeof (body as Partial<CheckAnswerRequest>).selectedAnswerId !== 'string'
-  ) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A selected answer ID is required.',
-    })
-  }
-
-  return await checkAttempt(event, attemptId, {
-    selectedAnswerId: body.selectedAnswerId,
-  })
-})
+  return yield* checkAttemptEffect(event, attemptId, { selectedAnswerId: body.selectedAnswerId })
+})))

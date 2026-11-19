@@ -1,118 +1,59 @@
+import { Effect, Schema } from 'effect'
 import type { H3Event } from 'h3'
-import { z } from 'zod'
-import type { components } from '#server/types/schema'
-import type {
-  CoachTurnRequest,
-  CoachTurnResponse,
-} from '#shared/types/coaching'
+import type { CoachTurnRequest, CoachTurnResponse } from '#shared/types/coaching'
+import { backendApiFor } from '#server/effect/backend'
+import { httpError, problemTitle } from '#server/effect/errors'
+import { runServerEffect } from '#server/effect/runtime'
 
-type ProblemDetails = components['schemas']['ProblemDetails']
-
-const MAX_PROBE_ANSWER_LENGTH = 500
-const MAX_QUESTION_LENGTH = 500
-
-const coachTurnRequest = z.discriminatedUnion('event', [
-  z.object({ event: z.literal('helpRequested') }).strict(),
-  z.object({
-    event: z.literal('probeAnswered'),
-    answer: z.string().trim().min(1).max(MAX_PROBE_ANSWER_LENGTH),
-  }).strict(),
-  z.object({ event: z.literal('diagnosisRequested') }).strict(),
-  z.object({ event: z.literal('explainCorrect') }).strict(),
-  z.object({
-    event: z.literal('stepQuestionAsked'),
-    stepId: z.string().trim().min(1),
-    question: z.string().trim().min(1).max(MAX_QUESTION_LENGTH),
-  }).strict(),
+const text = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(500))
+export const CoachTurnRequestSchema = Schema.Union([
+  Schema.Struct({ event: Schema.Literal('helpRequested') }),
+  Schema.Struct({ event: Schema.Literal('probeAnswered'), answer: text }),
+  Schema.Struct({ event: Schema.Literal('diagnosisRequested') }),
+  Schema.Struct({ event: Schema.Literal('explainCorrect') }),
+  Schema.Struct({
+    event: Schema.Literal('stepQuestionAsked'),
+    stepId: Schema.Trim.check(Schema.isMinLength(1)),
+    question: text,
+  }),
 ])
 
-function apiUrlFor(event: H3Event): string {
-  const { apiUrl } = useRuntimeConfig(event)
-
-  if (!apiUrl) {
-    throw createError({
-      statusCode: 500,
-      statusMessage:
-        'NUXT_API_URL is not configured. Start the application through Aspire.',
-    })
-  }
-
-  return apiUrl
-}
-
 export function parseCoachTurnRequest(body: unknown): CoachTurnRequest {
-  const parsed = coachTurnRequest.safeParse(body)
-
-  if (!parsed.success) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A valid coaching event is required.',
-    })
+  try {
+    return Schema.decodeUnknownSync(CoachTurnRequestSchema, { onExcessProperty: 'error' })(body)
+  } catch {
+    throw httpError({ statusCode: 400, statusMessage: 'A valid coaching event is required.' })
   }
-
-  return parsed.data
 }
 
-export async function coachAttempt(
-  event: H3Event,
-  attemptId: string,
-  request: CoachTurnRequest,
-): Promise<CoachTurnResponse> {
+export function coachAttemptEffect(event: H3Event, attemptId: string, request: CoachTurnRequest) {
   const body: CoachTurnRequest = request.event === 'probeAnswered'
     ? { event: request.event, answer: request.answer }
     : request.event === 'stepQuestionAsked'
       ? { event: request.event, stepId: request.stepId, question: request.question }
       : { event: request.event }
 
-  let response
-
-  try {
-    response = await $fetch.raw<CoachTurnResponse>(
-      `/api/attempts/${encodeURIComponent(attemptId)}/coach`,
-      {
-        baseURL: apiUrlFor(event),
-        method: 'POST',
-        body,
-        ignoreResponseError: true,
-      },
-    )
-  } catch (error) {
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'Coaching is temporarily unavailable.',
-      cause: error,
-    })
-  }
-
-  if (response.status < 200 || response.status >= 300) {
-    const problem = response._data as ProblemDetails | undefined
-
-    throw createError({
-      statusCode: response.status,
-      statusMessage: safeCoachingStatusMessage(response.status, problem),
-    })
-  }
-
-  return response._data as CoachTurnResponse
+  return backendApiFor(event).request<CoachTurnResponse>({
+    path: `/api/attempts/${encodeURIComponent(attemptId)}/coach`,
+    method: 'POST', body,
+    connectionMessage: 'Coaching is temporarily unavailable.',
+    fallbackMessage: 'Coaching is temporarily unavailable.',
+    includeProblem: false,
+    responseMessage: safeCoachingStatusMessage,
+  }).pipe(Effect.withSpan('Coaching.turn'))
 }
 
-function safeCoachingStatusMessage(
-  status: number,
-  problem: ProblemDetails | undefined,
-): string {
+export function coachAttempt(event: H3Event, attemptId: string, request: CoachTurnRequest): Promise<CoachTurnResponse> {
+  return runServerEffect(event, coachAttemptEffect(event, attemptId, request))
+}
+
+function safeCoachingStatusMessage(status: number, problem: unknown): string {
   switch (status) {
-    case 400:
-      return 'The coaching request was not valid.'
-    case 404:
-      return 'Attempt not found.'
-    case 409:
-      return problem?.title
-        || 'Coaching is not available in the current attempt phase.'
-    case 429:
-      return 'The coach is busy. Try again in a moment.'
-    case 499:
-      return 'The coaching request was cancelled.'
-    default:
-      return 'Coaching is temporarily unavailable.'
+    case 400: return 'The coaching request was not valid.'
+    case 404: return 'Attempt not found.'
+    case 409: return problemTitle(problem) || 'Coaching is not available in the current attempt phase.'
+    case 429: return 'The coach is busy. Try again in a moment.'
+    case 499: return 'The coaching request was cancelled.'
+    default: return 'Coaching is temporarily unavailable.'
   }
 }

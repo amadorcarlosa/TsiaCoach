@@ -1,52 +1,43 @@
-import { z } from 'zod'
+import { Schema } from 'effect'
+import { integer, positiveInteger, schema, type Infer } from '#shared/effect/schema'
 import { authoringGoalSchema } from '../goals/goal.schema'
 import { systemsBoardConfigSchema } from '~/components/systems/systems.schema'
-const positiveInteger = z.number().int().min(1)
-const id = z.string().min(1).refine(value => value.trim().length > 0)
-export const pointSchema = z.object({ x: z.number().int(), y: z.number().int() }).strict()
-// Literal union retains the validated CuisenaireRodValue type, without a cast.
-export const partSchema = z.object({
-  value: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
-  addendGroup: z.union([z.literal(0), z.literal(1)]).optional(),
-  // Absent means positive, so older files keep their meaning. Same
-  // forward-only policy as materialRole below: a build predating signs rejects
-  // files that contain one, and nothing here drops or flips a sign to suit it.
-  // Whether a board accepts -1 is the board's scene policy, not the schema's.
-  sign: z.union([z.literal(1), z.literal(-1)]).optional(),
-  offset: pointSchema,
-  orientation: z.enum(['horizontal', 'vertical', 'tower']),
-}).strict()
-// Optional, so every level written before roles existed still parses and keeps
-// its historical meaning. Compatibility policy: new files are forward-only —
-// a build predating this field rejects them, because the schema is strict and
-// the version stays 1. Bump the version if older readers must stay supported.
-export const materialRoleSchema = z.enum(['denominator', 'numerator'])
-export const trainSchema = z.object({
-  id,
-  anchor: pointSchema,
-  parts: z.array(partSchema).min(1),
-  materialRole: materialRoleSchema.optional(),
-}).strict()
-export const stepSchema = z.object({ id, title: z.string(), prompt: z.string(), trains: z.array(trainSchema), goal: authoringGoalSchema.nullable() }).strict()
-export const boardDescriptorSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('bar'), config: z.object({ columns: positiveInteger, targetCount: positiveInteger }).strict() }).strict(),
-  z.object({ kind: z.literal('array'), config: z.object({ columns: positiveInteger, rows: positiveInteger }).strict() }).strict(),
-  z.object({ kind: z.literal('fraction'), config: z.object({ columns: positiveInteger, pairCount: positiveInteger }).strict() }).strict(),
-  // The activity travels with the document, so a saved scene is validated
-  // under the mode that authored it. Absent means the ordinary area activity,
-  // where roles grant nothing and overlaps are rejected as before.
-  z.object({ kind: z.literal('mathtabla'), config: z.object({
-    centralColumns: positiveInteger,
-    centralRows: positiveInteger,
-    activity: z.literal('fraction-multiplication').optional(),
-  }).strict() }).strict(),
-  // The whole problem travels with the rods: a snapshot without its
-  // equations is not a reproducible activity. A rod-count board also carries
-  // its strategy (and generation seed); its Equation 2 check is derived from
-  // the saved Equation 1 rods, never saved. Same forward-only policy as
-  // materialRole: older files lack the field and keep the row-length reading.
-  z.object({ kind: z.literal('systems'), config: systemsBoardConfigSchema }).strict(),
-])
-export const levelDocumentSchema = z.object({ version: z.literal(1), board: boardDescriptorSchema, steps: z.array(stepSchema) }).strict()
-export type BoardDescriptor = z.infer<typeof boardDescriptorSchema>
-export type LevelDocumentV1 = z.infer<typeof levelDocumentSchema>
+
+const id = Schema.String.check(Schema.isMinLength(1), Schema.makeFilter<string>(value => value.trim().length > 0 || 'IDs must contain a non-whitespace character.'))
+export const pointSchema = schema(Schema.Struct({ x: integer, y: integer }), { strict: true })
+export const partSchema = schema(Schema.Struct({
+  value: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+  addendGroup: Schema.optional(Schema.Literals([0, 1])),
+  sign: Schema.optional(Schema.Literals([1, -1])),
+  offset: pointSchema.schema,
+  orientation: Schema.Literals(['horizontal', 'vertical', 'tower']),
+}), { strict: true })
+
+// Optional fields preserve old files. Strict schemas reject future fields rather
+// than dropping signs, roles, strategies, or activity semantics.
+export const materialRoleSchema = schema(Schema.Literals(['denominator', 'numerator']))
+export const trainSchema = schema(Schema.Struct({
+  id, anchor: pointSchema.schema,
+  parts: Schema.Array(partSchema.schema).check(Schema.isMinLength(1)),
+  materialRole: Schema.optional(materialRoleSchema.schema),
+}), { strict: true })
+export const stepSchema = schema(Schema.Struct({
+  id, title: Schema.String, prompt: Schema.String, trains: Schema.Array(trainSchema.schema),
+  goal: Schema.NullOr(authoringGoalSchema.schema),
+}), { strict: true })
+export const boardDescriptorSchema = schema(Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('bar'), config: Schema.Struct({ columns: positiveInteger, targetCount: positiveInteger }) }),
+  Schema.Struct({ kind: Schema.Literal('array'), config: Schema.Struct({ columns: positiveInteger, rows: positiveInteger }) }),
+  Schema.Struct({ kind: Schema.Literal('fraction'), config: Schema.Struct({ columns: positiveInteger, pairCount: positiveInteger }) }),
+  Schema.Struct({ kind: Schema.Literal('mathtabla'), config: Schema.Struct({
+    centralColumns: positiveInteger, centralRows: positiveInteger,
+    activity: Schema.optional(Schema.Literal('fraction-multiplication')),
+  }) }),
+  Schema.Struct({ kind: Schema.Literal('systems'), config: systemsBoardConfigSchema.schema }),
+]), { strict: true })
+export const levelDocumentSchema = schema(Schema.Struct({
+  version: Schema.Literal(1), board: boardDescriptorSchema.schema,
+  steps: Schema.Array(stepSchema.schema),
+}), { strict: true })
+export type BoardDescriptor = Infer<typeof boardDescriptorSchema>
+export type LevelDocumentV1 = Infer<typeof levelDocumentSchema>

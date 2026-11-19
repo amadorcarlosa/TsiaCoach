@@ -1,8 +1,4 @@
-/**
- * GET /api/scaffolds
- *
- * Returns authored scaffold definitions.
- */
-export default defineEventHandler(async (event) => {
-  return await getScaffolds(event)
-})
+import { getScaffoldsEffect } from '#server/utils/scaffolds'
+import { runServerEffect } from '#server/effect/runtime'
+
+export default defineEventHandler(event => runServerEffect(event, getScaffoldsEffect(event)))

@@ -25,8 +25,12 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     apiUrl: '',
+    public: {
+      telemetryEnabled: false,
+      telemetrySamplingRatio: 1,
+    },
   },
-  modules: ['@nuxt/ui', '@nuxt/content', '@pinia/nuxt', '@nuxt/eslint'],
+  modules: ['@nuxt/ui', '@nuxt/content', '@nuxt/eslint'],
 
   content: {
     experimental: {

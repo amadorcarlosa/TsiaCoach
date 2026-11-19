@@ -1,4 +1,7 @@
 import type { components } from '~~/server/types/schema'
+import { Effect } from 'effect'
+import { browserRequest } from '~/effect/workflows/transport'
+import { runBrowserEffect } from '~/effect/runtime'
 
 export type AgentTurnRequest = components['schemas']['AgentRequest']
 export type AgentTurnResult = components['schemas']['AgentResponse']
@@ -68,7 +71,7 @@ function textFromPayload(value: unknown): string | undefined {
 }
 
 function describeFailure(error: unknown): AgentRequestError {
-  const failure = error as FetchFailure
+  const failure: FetchFailure = error && typeof error === 'object' ? error : {}
   const status = failure.statusCode ?? failure.status ?? 0
   const detail = textFromPayload(failure.data)
     ?? failure.statusMessage
@@ -102,30 +105,22 @@ export function toHistory(turns: ChatTurn[]): TurnDto[] {
   })
 }
 
-export async function requestAgentTurn(
+export function requestAgentTurnEffect(
   request: AgentTurnRequest,
   signal?: AbortSignal
-): Promise<AgentTurnResult> {
-  try {
-    const response = await $fetch<AgentTurnResult>('/api/agent', {
+): Effect.Effect<AgentTurnResult, AgentRequestError> {
+  return browserRequest<AgentTurnResult>('/api/agent', {
       method: 'POST',
       signal,
       body: request
-    })
+  }).pipe(
+    Effect.mapError(describeFailure),
+    Effect.flatMap(response => response && typeof response.text === 'string'
+      ? Effect.succeed(response)
+      : Effect.fail(new AgentRequestError('Agent response did not include any text.', 0))),
+  )
+}
 
-    if (typeof response.text !== 'string') {
-      throw new AgentRequestError(
-        'Agent response did not include any text.',
-        0
-      )
-    }
-
-    return response
-  } catch (error) {
-    if (error instanceof AgentRequestError) {
-      throw error
-    }
-
-    throw describeFailure(error)
-  }
+export function requestAgentTurn(request: AgentTurnRequest, signal?: AbortSignal): Promise<AgentTurnResult> {
+  return runBrowserEffect(requestAgentTurnEffect(request, signal), { name: 'Agent.request', signal })
 }

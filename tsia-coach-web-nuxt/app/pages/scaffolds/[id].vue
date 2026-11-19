@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
+import { workflowToRefs } from '~/effect/registry'
 import { isActiveScaffoldSession, isCompletedScaffoldSession, isGridScene } from '#shared/types/scaffolds'
 import { MaxQuestionLength } from '#shared/types/coaching'
 import ScaffoldQuestionContext from '~/components/scaffold/QuestionContext.vue'
@@ -23,7 +23,7 @@ const {
   coachReply,
   asking,
   askError,
-} = storeToRefs(store)
+} = workflowToRefs(store)
 
 useSeoMeta({
   title: 'Walkthrough · TSIA Coach',

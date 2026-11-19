@@ -1,10 +1,4 @@
-import { getPracticeItems } from '#server/utils/practice-items'
+import { getPracticeItemsEffect } from '#server/utils/practice-items'
+import { runServerEffect } from '#server/effect/runtime'
 
-/**
- * GET /api/practice-items
- *
- * Returns all practice items for the coaching flow.
- */
-export default defineEventHandler(async (event) => {
-  return await getPracticeItems(event)
-})
+export default defineEventHandler(event => runServerEffect(event, getPracticeItemsEffect(event)))

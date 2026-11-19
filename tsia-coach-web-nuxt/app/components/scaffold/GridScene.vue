@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { createResourceScope } from '~/effect/scoped-resource'
+
 /**
  * Renders a grid scene and the learner's moves on it.
  *
@@ -18,6 +20,10 @@ import type {
   ScaffoldStepSubmission,
 } from '#shared/types/scaffolds'
 import { CheckOutcomes } from '#shared/types/scaffolds'
+
+const resources = createResourceScope()
+const revertTimer = resources.timer()
+let dragResources: ReturnType<typeof createResourceScope> | undefined
 
 const props = defineProps<{
   step: ScaffoldLearnerStep
@@ -112,6 +118,7 @@ const referenceRows = computed(() => {
 const rowsAreClickable = computed(() => actionType.value === 'moveRows' || actionType.value === 'selectRows')
 
 function seedFromEvidence() {
+  revertTimer.clear()
   placed.value = []
   movedRows.value = new Set()
   selectedRows.value = new Set()
@@ -146,10 +153,11 @@ watch(() => props.lastCheck, (check) => {
   if (move.kind === 'piece') rejectedPieceId.value = move.id
   else rejectedRow.value = move.row
 
-  setTimeout(undoPending, REVERT_MS)
+  revertTimer.schedule(undoPending, REVERT_MS)
 })
 
 function undoPending() {
+  revertTimer.clear()
   const move = pending.value
   if (!move) return
   if (move.kind === 'piece') {
@@ -247,9 +255,11 @@ function beginDrag(event: PointerEvent, length: number, pieceId: number | null) 
     valid: false,
     moved: false,
   }
-  window.addEventListener('pointermove', onDragMove)
-  window.addEventListener('pointerup', onDragEnd)
-  window.addEventListener('pointercancel', cleanupDrag)
+  dragResources?.close()
+  dragResources = createResourceScope()
+  dragResources.listen(window, 'pointermove', onDragMove)
+  dragResources.listen(window, 'pointerup', onDragEnd)
+  dragResources.listen(window, 'pointercancel', cleanupDrag)
 }
 
 function onDragMove(event: PointerEvent) {
@@ -315,12 +325,12 @@ function onDragEnd() {
 
 function cleanupDrag() {
   drag.value = null
-  window.removeEventListener('pointermove', onDragMove)
-  window.removeEventListener('pointerup', onDragEnd)
-  window.removeEventListener('pointercancel', cleanupDrag)
+  dragResources?.close()
+  dragResources = undefined
 }
 
-onBeforeUnmount(cleanupDrag)
+resources.defer(cleanupDrag)
+onBeforeUnmount(resources.close)
 
 // ---------------------------------------------------------------- rendering
 

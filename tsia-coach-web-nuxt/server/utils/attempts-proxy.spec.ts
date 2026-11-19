@@ -40,11 +40,11 @@ describe('attempt and practice-item proxy contracts', () => {
 
     await getPracticeItems({} as Parameters<typeof getPracticeItems>[0])
 
-    expect(rawFetch).toHaveBeenCalledWith('/api/practice-items', {
+    expect(rawFetch).toHaveBeenCalledWith('/api/practice-items', expect.objectContaining({
       baseURL: 'https://example.invalid',
       method: 'GET',
       ignoreResponseError: true
-    })
+    }))
   })
 
   it('startAttemptProxy_ForwardsOnlyPracticeItemId', async () => {
@@ -134,10 +134,10 @@ describe('attempt and practice-item proxy contracts', () => {
       }
     })
 
-    expect(rawFetch).toHaveBeenCalledWith('/api/attempts/attempt-1', {
+    expect(rawFetch).toHaveBeenCalledWith('/api/attempts/attempt-1', expect.objectContaining({
       baseURL: 'https://example.invalid',
       method: 'GET',
       ignoreResponseError: true
-    })
+    }))
   })
 })

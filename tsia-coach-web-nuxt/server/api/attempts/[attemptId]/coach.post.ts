@@ -1,24 +1,11 @@
-import { coachAttempt, parseCoachTurnRequest } from '#server/utils/coaching'
+import { Effect } from 'effect'
+import { coachAttemptEffect, parseCoachTurnRequest } from '#server/utils/coaching'
+import { parseInput, requestBody, routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-/**
- * POST /api/attempts/:attemptId/coach
- *
- * Requests one server-validated coaching move for an attempt.
- * The browser supplies only the coaching event; everything else
- * (phase, diagnosis, history, model configuration) stays server-side.
- */
-export default defineEventHandler(async (event) => {
-  const attemptId = getRouterParam(event, 'attemptId')
-
-  if (!attemptId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'An attempt ID is required.',
-    })
-  }
-
-  const body = await readBody<unknown>(event)
-  const request = parseCoachTurnRequest(body)
-
-  return await coachAttempt(event, attemptId, request)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const attemptId = yield* routeParameter(event, 'attemptId', 'An attempt ID is required.')
+  const body = yield* requestBody(event)
+  const request = yield* parseInput(body, parseCoachTurnRequest)
+  return yield* coachAttemptEffect(event, attemptId, request)
+})))

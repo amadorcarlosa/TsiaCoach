@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import {
     nextTick,
     onBeforeUnmount,
@@ -28,6 +29,7 @@ type BoardDragOptions = {
 }
 
 export function useInertialBoardDrag(options: BoardDragOptions) {
+    const resources = createResourceScope()
     const { $gsap: gsap, $Draggable } = useNuxtApp()
 
     let draggable: Draggable | null = null
@@ -361,10 +363,10 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
             draggable?.disable()
         }
 
-        element.addEventListener('keydown', onKeydown)
-        window.addEventListener('blur', cancel)
-        window.addEventListener('pointercancel', cancel)
-        motionPreference.addEventListener('change', updateMotionPreference)
+        resources.listen(element, 'keydown', onKeydown)
+        resources.listen(window, 'blur', cancel)
+        resources.listen(window, 'pointercancel', cancel)
+        resources.listen(motionPreference, 'change', updateMotionPreference)
     })
 
     if (cancellationVersion) {
@@ -387,17 +389,10 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
         syncInteraction,
         { flush: 'post' },
     )
-    onBeforeUnmount(() => {
+    resources.defer(() => {
         disposed = true
         endMove()
 
-        options.el.value?.removeEventListener('keydown', onKeydown)
-        window.removeEventListener('blur', cancel)
-        window.removeEventListener('pointercancel', cancel)
-        motionPreference?.removeEventListener(
-            'change',
-            updateMotionPreference,
-        )
 
         void draggable?.tween?.kill()
         draggable?.kill()
@@ -407,6 +402,7 @@ export function useInertialBoardDrag(options: BoardDragOptions) {
             proxy.remove()
         }
     })
+    onBeforeUnmount(resources.close)
 
     return { cancel }
 }

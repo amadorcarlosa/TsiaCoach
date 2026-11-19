@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import { screenDeltaToGrid, type Point } from '~/components/grid/gridPointer'
 
@@ -9,6 +10,7 @@ export function useGridRodDrag(options: {
   drop: (point: Point) => void
   rejected: () => void
 }) {
+  const resources = createResourceScope()
   const preview = ref<Point | null>(null)
   const invalid = computed(() => preview.value !== null && !options.canDrop(preview.value))
   let active: { id: number, pointer: Point, origin: Point, axisX: Point, axisY: Point } | null = null
@@ -63,7 +65,8 @@ export function useGridRodDrag(options: {
     if (options.canDrop(destination)) options.drop(destination)
     else options.rejected()
   }
-  onMounted(() => window.addEventListener('blur', cancel))
-  onBeforeUnmount(() => { cancel(); window.removeEventListener('blur', cancel) })
+  onMounted(() => resources.listen(window, 'blur', cancel))
+  resources.defer(cancel)
+  onBeforeUnmount(resources.close)
   return { preview, invalid, down, move, up, cancel, keydown }
 }

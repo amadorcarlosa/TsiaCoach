@@ -4,6 +4,8 @@
 **/TestResults/
 /TestResults/
 /artifacts/
+/output/
+/tsia-coach-web-nuxt/output/
 
 # JavaScript dependencies and build output
 **/node_modules/

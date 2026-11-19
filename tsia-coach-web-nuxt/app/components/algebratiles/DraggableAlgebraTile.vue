@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useInertialBoardDrag } from '~/composables/useInertialBoardDrag'
 import type { Point } from '~/components/grid/gridPointer'
@@ -22,9 +23,10 @@ const drag = useInertialBoardDrag({
   enabled: () => !props.disabled, onStart: () => props.beginMove(), constrainPosition: point => props.constrainPosition(point),
   onPreview: point => emit('preview', point), onSettled: point => emit('settled', point), onEnd: () => emit('end'),
 })
-let timer: ReturnType<typeof setTimeout> | undefined
+const resources = createResourceScope()
+const timer = resources.timer()
 let touch: Point | null = null
-function clearTouch() { clearTimeout(timer); touch = null }
+function clearTouch() { timer.clear(); touch = null }
 function menu() {
   clearTouch()
   if (props.disabled) return
@@ -39,7 +41,7 @@ function pointerDown(event: PointerEvent) {
   if (toggle) { event.preventDefault(); event.stopImmediatePropagation(); element.value?.focus({ preventScroll: true }); return }
   if (event.pointerType === 'touch') {
     touch = { x: event.clientX, y: event.clientY }
-    timer = setTimeout(menu, 550)
+    timer.schedule(menu, 550)
   }
 }
 function pointerMove(event: PointerEvent) { if (touch && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) > 8) clearTouch() }
@@ -49,7 +51,8 @@ function keydown(event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) emit('select', event.key === ' ' ? 'toggle' : 'replace') }
 }
 watch(() => [props.tile.rotated, props.tile.sign, props.disabled], () => { drag.cancel(); clearTouch() }, { flush: 'sync' })
-onBeforeUnmount(clearTouch)
+resources.defer(clearTouch)
+onBeforeUnmount(resources.close)
 </script>
 
 <template>
