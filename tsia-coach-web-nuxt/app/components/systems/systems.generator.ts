@@ -1,3 +1,4 @@
+import { Effect, Random } from 'effect'
 import { analyzeSystem, countColumnsNeeded, determinant, type CandidateCounts } from './systems.candidates'
 import {
   rodCountLimits,
@@ -50,7 +51,9 @@ export function seededRandom(seed: number): () => number {
   }
 }
 
-export const randomSeed = () => Math.floor(Math.random() * 0xffffffff) >>> 0
+/** Randomness is injectable at the workflow boundary; seeded generation below stays pure. */
+export const randomSeedEffect = Random.next.pipe(Effect.map(value => Math.floor(value * 0xffffffff) >>> 0))
+export const randomSeed = () => Effect.runSync(randomSeedEffect)
 
 const between = (random: () => number, [min, max]: Range) => min + Math.floor(random() * (max - min + 1))
 

@@ -1,28 +1,13 @@
-import type { AgentRequest } from '#server/utils/agent'
-import { postAgentRequest } from '#server/utils/agent'
+import { Effect } from 'effect'
+import { isAgentRequest, postAgentRequestEffect } from '#server/utils/agent'
+import { requestBody } from '#server/effect/input'
+import { httpError } from '#server/effect/errors'
+import { runServerEffect } from '#server/effect/runtime'
 
-function isAgentRequest(value: unknown): value is AgentRequest {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  const request = value as Partial<AgentRequest>
-
-  return typeof request.model === 'string'
-    && typeof request.instructions === 'string'
-    && typeof request.prompt === 'string'
-    && Array.isArray(request.history)
-}
-
-export default defineEventHandler(async (event) => {
-  const body = await readBody<unknown>(event)
-
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const body = yield* requestBody(event)
   if (!isAgentRequest(body)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Invalid agent request body.'
-    })
+    return yield* Effect.fail(httpError({ statusCode: 400, statusMessage: 'Invalid agent request body.' }))
   }
-
-  return await postAgentRequest(event, body)
-})
+  return yield* postAgentRequestEffect(event, body)
+})))

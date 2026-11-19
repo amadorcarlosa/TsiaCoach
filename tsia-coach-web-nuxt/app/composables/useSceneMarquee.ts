@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import {
   onBeforeUnmount,
   onMounted,
@@ -60,6 +61,7 @@ function clampToBoard(world: HTMLElement, point: Point): Point {
 }
 
 export function useSceneMarquee(options: Options) {
+  const resources = createResourceScope()
   const active = ref(false)
   const rectangle = shallowRef<MarqueeRect | null>(null)
   const previewIds = shallowRef<ReadonlySet<string> | null>(null)
@@ -255,24 +257,20 @@ export function useSceneMarquee(options: Options) {
   )
 
   onMounted(() => {
-    window.addEventListener('pointermove', onPointerMove, {
+    resources.listen(window, 'pointermove', onPointerMove, {
       capture: true,
       passive: false,
     })
-    window.addEventListener('pointerup', onPointerUp, true)
-    window.addEventListener('pointercancel', onPointerCancel, true)
-    window.addEventListener('keydown', onKeydown, true)
-    window.addEventListener('blur', onBlur)
+    resources.listen(window, 'pointerup', onPointerUp, true)
+    resources.listen(window, 'pointercancel', onPointerCancel, true)
+    resources.listen(window, 'keydown', onKeydown, true)
+    resources.listen(window, 'blur', onBlur)
   })
 
-  onBeforeUnmount(() => {
+  resources.defer(() => {
     cancel()
-    window.removeEventListener('pointermove', onPointerMove, true)
-    window.removeEventListener('pointerup', onPointerUp, true)
-    window.removeEventListener('pointercancel', onPointerCancel, true)
-    window.removeEventListener('keydown', onKeydown, true)
-    window.removeEventListener('blur', onBlur)
   })
+  onBeforeUnmount(resources.close)
 
   return {
     active,

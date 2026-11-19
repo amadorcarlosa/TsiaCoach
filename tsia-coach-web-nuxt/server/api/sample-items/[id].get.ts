@@ -1,17 +1,9 @@
-﻿/**
- * GET /api/sample-items/:id
- *
- * Returns a single sample practice item.
- */
-export default defineEventHandler(async (event) => {
-    const id = getRouterParam(event, 'id')
+import { Effect } from 'effect'
+import { getSampleItemByIdEffect } from '#server/utils/sample-items'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-    if (!id) {
-        throw createError({
-            statusCode: 400,
-            statusMessage: 'A sample item ID is required.',
-        })
-    }
-
-    return await getSampleItemById(event, id)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const id = yield* routeParameter(event, 'id', 'A sample item ID is required.')
+  return yield* getSampleItemByIdEffect(event, id)
+})))

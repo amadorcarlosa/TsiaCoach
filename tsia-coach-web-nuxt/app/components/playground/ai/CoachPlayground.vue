@@ -3,14 +3,17 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import BarRodPlayground from '../BarRodPlayground.vue'
 import MathTablaPlayground from '../MathTablaPlayground.vue'
 import { buildExperiment, defaultInstructions, parseDecision, type BoardCapture, type ExperimentMode } from './experiment'
-import { requestAgentTurn, type AgentTurnRequest, type AgentTurnResult } from '~/utils/agent'
+import { requestAgentTurnEffect, type AgentTurnRequest, type AgentTurnResult } from '~/utils/agent'
 import type { JevResult } from '#shared/jev'
+import { Clock, Effect } from 'effect'
+import { browserRequest } from '~/effect/workflows/transport'
+import { runBrowserEffect } from '~/effect/runtime'
 import type { components } from '~~/server/types/schema'
 
 type Model = components['schemas']['FoundryDeploymentResponse']
 type BoardHandle = { capture: () => BoardCapture, clear: () => unknown }
 type Run = { id: number, mode: ExperimentMode, request: AgentTurnRequest, result?: AgentTurnResult, jev?: JevResult, error?: string, elapsed: number }
-const { data: models, status: modelsStatus, error: modelsError, refresh: refreshModels } = await useFetch<Model[]>('/api/models', { default: () => [], server: false })
+const { data: models, status: modelsStatus, error: modelsError, refresh: refreshModels } = await useAsyncData('coach-playground-models', () => runBrowserEffect(browserRequest<Model[]>('/api/models'), { name: 'Models.load' }), { default: () => [], server: false })
 const model = ref('')
 watch(models, values => {
   if (!values.some(item => item.name === model.value)) model.value = values[0]?.name ?? ''
@@ -55,22 +58,25 @@ async function runExperiment() {
   notice.value = 'Evaluating the captured board…'
   const abort = new AbortController()
   controller = abort
-  const started = performance.now()
+  let started = 0
   try {
-    let result: AgentTurnResult
-    if (run.mode === 'decision') {
-      const jev = await $fetch<JevResult>('/api/decisions', {
-        method: 'POST', body: { state: JSON.parse(request.prompt), instructions: request.instructions }, signal: abort.signal,
-      })
-      run.jev = jev
-      result = { text: JSON.stringify(jev.raw, null, 2), model: jev.model, inputTokens: jev.usage?.input_tokens ?? jev.usage?.inputTokens ?? 0, outputTokens: jev.usage?.output_tokens ?? jev.usage?.outputTokens ?? 0 }
-    } else result = await requestAgentTurn(request, abort.signal)
+    const result = await runBrowserEffect(Effect.gen(function* () {
+      started = yield* Clock.currentTimeMillis
+      if (run.mode === 'decision') {
+        const jev = yield* browserRequest<JevResult>('/api/decisions', {
+          method: 'POST', body: { state: JSON.parse(request.prompt), instructions: request.instructions }, signal: abort.signal,
+        })
+        run.jev = jev
+        return { text: JSON.stringify(jev.raw, null, 2), model: jev.model, inputTokens: jev.usage?.input_tokens ?? jev.usage?.inputTokens ?? 0, outputTokens: jev.usage?.output_tokens ?? jev.usage?.outputTokens ?? 0 }
+      }
+      return yield* requestAgentTurnEffect(request, abort.signal)
+    }), { name: 'CoachPlayground.run', signal: abort.signal })
     if (abort.signal.aborted) run.error = 'Run cancelled.'
     else run.result = result
   } catch (error) {
     run.error = abort.signal.aborted ? 'Run cancelled.' : describeError(error)
   } finally {
-    run.elapsed = Math.round(performance.now() - started)
+    run.elapsed = Math.max(0, Math.round((await Effect.runPromise(Clock.currentTimeMillis)) - started))
     runs.value = runs.value.map(item => item.id === run.id ? { ...run } : item)
     sending.value = false
     notice.value = run.error ?? `Run ${run.id} complete.`

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { SceneAction, SceneResult } from './rod.scene.types'
@@ -6,6 +7,8 @@ import type {
   SceneMenuAction, SceneMenuChoice, SceneMenuCommand,
   SceneMenuRequest,
 } from './scene-menu.types'
+
+const resources = createResourceScope()
 
 const props = defineProps<{
   request: SceneMenuRequest | null
@@ -133,14 +136,11 @@ function closeForResize(): void {
 
 onMounted(() => {
   // Capture also catches scrolling inside external nested containers.
-  window.addEventListener('scroll', closeForViewportChange, true)
-  window.addEventListener('resize', closeForResize)
+  resources.listen(window, 'scroll', closeForViewportChange, true)
+  resources.listen(window, 'resize', closeForResize)
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('scroll', closeForViewportChange, true)
-  window.removeEventListener('resize', closeForResize)
-})
+onBeforeUnmount(resources.close)
 </script>
 
 <template>

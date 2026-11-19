@@ -1,19 +1,9 @@
-import { getAttempt } from '#server/utils/attempts'
+import { Effect } from 'effect'
+import { getAttemptEffect } from '#server/utils/attempts'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-/**
- * GET /api/attempts/:attemptId
- *
- * Returns the latest projection for an attempt.
- */
-export default defineEventHandler(async (event) => {
-  const attemptId = getRouterParam(event, 'attemptId')
-
-  if (!attemptId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'An attempt ID is required.',
-    })
-  }
-
-  return await getAttempt(event, attemptId)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const attemptId = yield* routeParameter(event, 'attemptId', 'An attempt ID is required.')
+  return yield* getAttemptEffect(event, attemptId)
+})))

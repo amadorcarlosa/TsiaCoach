@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { browserRequest } from '~/effect/workflows/transport'
+import { runBrowserEffect } from '~/effect/runtime'
 import type { components } from '~~/server/types/schema'
 
 type Model = components['schemas']['FoundryDeploymentResponse']
+const requestFetch = useRequestFetch()
 
 definePageMeta({
   layout: 'admin'
@@ -16,14 +19,14 @@ const {
   data: health,
   status: healthStatus,
   refresh: refreshHealth
-} = await useFetch<{ ok: boolean }>('/api/health')
+} = await useAsyncData('admin-health', () => runBrowserEffect(browserRequest<{ ok: boolean }>('/api/health', {}, requestFetch), { name: 'Health.load' }))
 
 const {
   data: models,
   status: modelsStatus,
   error: modelsError,
   refresh: refreshModels
-} = await useFetch<Model[]>('/api/models', {
+} = await useAsyncData('admin-models', () => runBrowserEffect(browserRequest<Model[]>('/api/models', {}, requestFetch), { name: 'Models.load' }), {
   default: () => []
 })
 

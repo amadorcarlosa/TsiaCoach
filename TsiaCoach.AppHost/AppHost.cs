@@ -14,6 +14,8 @@ var api =
 
 var web = builder.AddViteApp("web-nuxt", "../tsia-coach-web-nuxt")
     .WithPnpm()
+    .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
+    .WithEnvironment("NUXT_PUBLIC_TELEMETRY_ENABLED", "true")
     .WithEnvironment("NUXT_API_URL", api.GetEndpoint("http"))
     .WithHttpEndpoint(port: 3000, env: "PORT")
     .WaitFor(api);

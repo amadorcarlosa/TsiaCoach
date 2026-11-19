@@ -1,7 +1,9 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { screenDeltaToGrid } from '~/components/grid/gridPointer'
 
 export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: () => void, projection: Ref<{ rise: number; side: number }>) {
+  const resources = createResourceScope()
   const cellSize = ref(36)
   const fitSize = ref(4)
   const phonePortrait = ref(false)
@@ -14,11 +16,14 @@ export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: ()
   const padding = computed(() => `${Math.ceil(projection.value.rise * cellSize.value) + 24}px ${Math.ceil(projection.value.side * cellSize.value) + 24}px 24px ${Math.ceil(projection.value.side * cellSize.value) + 24}px`)
   const origin = () => viewport.value?.querySelector('[data-grid-axis="origin"]')?.getBoundingClientRect()
   watch(projection, async () => {
+    if (resources.closed) return
     const before = origin()
     cancel()
     await nextTick()
+    if (resources.closed) return
     measure()
     await nextTick()
+    if (resources.closed) return
     const after = origin()
     if (!fitted && before && after && viewport.value) {
       viewport.value.scrollTop += after.top - before.top
@@ -45,6 +50,7 @@ export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: ()
     }
   }, { flush: 'pre' })
   async function measure() {
+    if (resources.closed) return
     const element = viewport.value
     phonePortrait.value = query?.matches ?? false
     if (!element || !element.clientWidth || !element.clientHeight) return
@@ -54,11 +60,13 @@ export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: ()
     if (!positioned) {
       positioned = true
       await nextTick()
+      if (resources.closed) return
       const start = origin(), bounds = element.getBoundingClientRect()
       if (start) { element.scrollLeft += start.left - bounds.left - 24; element.scrollTop += start.top - bounds.top - 24 }
     }
   }
   async function zoom(size: number, fit = false) {
+    if (resources.closed) return
     const element = viewport.value
     if (!element) return
     cancel()
@@ -74,6 +82,7 @@ export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: ()
     fitted = fit
     cellSize.value = Math.max(fitSize.value, Math.min(36, size))
     await nextTick()
+    if (resources.closed) return
     if (fit) { element.scrollLeft = 0; element.scrollTop = 0 }
     else if (point) {
       const after = axes()
@@ -102,12 +111,13 @@ export function useBaseTenViewport(viewport: Ref<HTMLElement | null>, cancel: ()
   }
   onMounted(() => {
     query = window.matchMedia('(max-width: 600px) and (orientation: portrait)')
-    query.addEventListener('change', measure)
-    observer = new ResizeObserver(measure)
+    resources.listen(query, 'change', measure)
+    observer = resources.acquire(() => new ResizeObserver(measure), observer => observer.disconnect())
     if (viewport.value) observer.observe(viewport.value)
-    window.addEventListener('blur', cancel)
+    resources.listen(window, 'blur', cancel)
     measure()
   })
-  onBeforeUnmount(() => { observer?.disconnect(); query?.removeEventListener('change', measure); window.removeEventListener('blur', cancel); endPan() })
+  resources.defer(() => { endPan() })
+  onBeforeUnmount(resources.close)
   return { cellSize, fitSize, padding, phonePortrait, panMode, zoom, togglePan, pointerDown, pointerMove, endPan }
 }

@@ -1,19 +1,9 @@
-import { getPracticeItemById } from '#server/utils/practice-items'
+import { Effect } from 'effect'
+import { getPracticeItemByIdEffect } from '#server/utils/practice-items'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-/**
- * GET /api/practice-items/:id
- *
- * Returns a single practice item for the coaching flow.
- */
-export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id')
-
-  if (!id) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A practice item ID is required.',
-    })
-  }
-
-  return await getPracticeItemById(event, id)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const id = yield* routeParameter(event, 'id', 'A practice item ID is required.')
+  return yield* getPracticeItemByIdEffect(event, id)
+})))

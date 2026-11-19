@@ -1,14 +1,9 @@
-import { getScaffoldSession } from '#server/utils/scaffold-sessions'
+import { Effect } from 'effect'
+import { getScaffoldSessionEffect } from '#server/utils/scaffold-sessions'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-export default defineEventHandler(async (event) => {
-  const sessionId = getRouterParam(event, 'sessionId')
-
-  if (!sessionId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A scaffold session ID is required.',
-    })
-  }
-
-  return await getScaffoldSession(event, sessionId)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const sessionId = yield* routeParameter(event, 'sessionId', 'A scaffold session ID is required.')
+  return yield* getScaffoldSessionEffect(event, sessionId)
+})))

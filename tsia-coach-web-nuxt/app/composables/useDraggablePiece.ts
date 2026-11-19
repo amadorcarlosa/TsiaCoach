@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import type { Draggable } from 'gsap/Draggable'
 import { hitZone, snapPointForZone, type Rect, type ZoneRect } from '~/utils/drag-geometry'
@@ -27,6 +28,7 @@ const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 const DROP_OVERLAP_RATIO = 0.2
 
 export function useDraggablePiece(options: DraggablePieceOptions) {
+  const resources = createResourceScope()
   const activeZoneId = ref<string | null>(null)
   const isKeyboardLifted = ref(false)
   const keyboard = new KeyboardDragStateMachine()
@@ -296,7 +298,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     if (originalRole === null) {
       piece.setAttribute('role', 'button')
     }
-    piece.addEventListener('keydown', handleKeyboard)
+    resources.listen(piece, 'keydown', handleKeyboard)
 
     origin = {
       x: numeric(nuxtApp.$gsap.getProperty(piece, 'x')),
@@ -358,8 +360,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
     }, piece)
   })
 
-  onBeforeUnmount(() => {
-    options.el.value?.removeEventListener('keydown', handleKeyboard)
+  resources.defer(() => {
     matchMedia?.revert()
     context?.revert()
     draggable?.kill()
@@ -380,6 +381,7 @@ export function useDraggablePiece(options: DraggablePieceOptions) {
       }
     }
   })
+  onBeforeUnmount(resources.close)
 
   function resetToOrigin(onComplete?: () => void) {
     activeZoneId.value = null

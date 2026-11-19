@@ -12,15 +12,19 @@ declare global {
   }
 }
 
-export default defineNuxtPlugin(() => {
-  const store = useSampleItemsStore()
+export default defineNuxtPlugin({
+  name: 'practice-item-agent',
+  dependsOn: ['effect-workflows'],
+  setup(nuxtApp) {
+    const store = useSampleItemsStore(nuxtApp.$effectWorkflows)
 
-  window.__TSIA_COACH__ = {
-    focusTarget(command) {
-      store.focusForItem(command)
-    },
-    clearFocus() {
-      store.clearFocus()
+    window.__TSIA_COACH__ = {
+      focusTarget(command) {
+        void store.focusForItem(command)
+      },
+      clearFocus() {
+        store.clearFocus()
+      },
     }
-  }
+  },
 })

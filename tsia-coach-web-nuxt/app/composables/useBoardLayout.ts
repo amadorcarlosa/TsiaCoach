@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 
 type BoardLayoutOptions = {
@@ -51,6 +52,7 @@ export function boardCellSize(input: {
 }
 
 export function useBoardLayout(options: BoardLayoutOptions) {
+  const resources = createResourceScope()
   // Responsive presentation state.
   const compactLayout = ref(false)
   const phonePortrait = ref(false)
@@ -149,12 +151,12 @@ export function useBoardLayout(options: BoardLayoutOptions) {
     updateLayout()
 
     layoutQueries.forEach(query => {
-      query.addEventListener('change', updateLayout)
+      resources.listen(query, 'change', updateLayout)
     })
 
-    resizeObserver = new ResizeObserver(
+    resizeObserver = resources.acquire(() => new ResizeObserver(
       scheduleBoardMeasurement,
-    )
+    ), observer => observer.disconnect())
 
     if (options.boardViewport.value) {
       resizeObserver.observe(options.boardViewport.value)
@@ -164,32 +166,18 @@ export function useBoardLayout(options: BoardLayoutOptions) {
       resizeObserver.observe(options.workspaceTools.value)
     }
 
-    window.addEventListener('resize', measureBoard)
-    window.visualViewport?.addEventListener(
-      'resize',
-      measureBoard,
-    )
+    resources.listen(window, 'resize', measureBoard)
+    if (window.visualViewport) resources.listen(window.visualViewport, 'resize', measureBoard)
 
     measureBoard()
   })
 
-  onBeforeUnmount(() => {
-    resizeObserver?.disconnect()
-
+  resources.defer(() => {
     if (measurementFrame !== null) {
       window.cancelAnimationFrame(measurementFrame)
     }
-
-    window.removeEventListener('resize', measureBoard)
-    window.visualViewport?.removeEventListener(
-      'resize',
-      measureBoard,
-    )
-
-    layoutQueries.forEach(query => {
-      query.removeEventListener('change', updateLayout)
-    })
   })
+  onBeforeUnmount(resources.close)
 
   return {
     compactLayout,

@@ -1,3 +1,4 @@
+import { createResourceScope } from '~/effect/scoped-resource'
 import {
   computed,
   nextTick,
@@ -48,12 +49,14 @@ export function useBoardTransformPreview(options: {
   staleReason: string
 }) {
   const { scene } = options
+  const resources = createResourceScope()
   const session = shallowRef<Session | null>(null)
   const announcement = ref('')
   const active = computed(() => session.value !== null)
 
   async function focusFirst(ids: readonly string[]): Promise<void> {
     await nextTick()
+    if (resources.closed) return
     const viewport = options.viewport.value
     const target = ids
       .map(id => viewport?.querySelector<HTMLElement>(`[data-piece-id="${CSS.escape(id)}"]`))
@@ -132,11 +135,11 @@ export function useBoardTransformPreview(options: {
   }, { flush: 'sync' })
 
   const onBlur = () => dismiss('', false)
-  onMounted(() => window.addEventListener('blur', onBlur))
-  onBeforeUnmount(() => {
-    window.removeEventListener('blur', onBlur)
+  onMounted(() => resources.listen(window, 'blur', onBlur))
+  resources.defer(() => {
     dismiss('', false)
   })
+  onBeforeUnmount(resources.close)
   onDeactivated(() => dismiss('', false))
 
   /** Decorative: pieces the change would remove. Never scene data. */

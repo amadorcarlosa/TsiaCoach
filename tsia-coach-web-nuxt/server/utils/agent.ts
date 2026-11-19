@@ -1,58 +1,35 @@
+import { Effect, Schema } from 'effect'
 import type { H3Event } from 'h3'
 import type { components } from '#server/types/schema'
+import { backendApiFor } from '#server/effect/backend'
+import { runServerEffect } from '#server/effect/runtime'
 
 export type AgentRequest = components['schemas']['AgentRequest']
 export type AgentResponse = components['schemas']['AgentResponse']
-type ProblemDetails = components['schemas']['ProblemDetails']
 
-export async function postAgentRequest(
-  event: H3Event,
-  agentRequest: AgentRequest
-): Promise<AgentResponse> {
-  const { apiUrl } = useRuntimeConfig(event)
+export const AgentRequestSchema = Schema.Struct({
+  model: Schema.String,
+  instructions: Schema.String,
+  prompt: Schema.String,
+  history: Schema.Array(Schema.Unknown),
+})
 
-  if (!apiUrl) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'NUXT_API_URL is not configured. Start the application through Aspire.'
-    })
-  }
+export function isAgentRequest(value: unknown): value is AgentRequest {
+  return Schema.is(AgentRequestSchema)(value)
+}
 
-  let response
+export function postAgentRequestEffect(event: H3Event, agentRequest: AgentRequest) {
+  return backendApiFor(event).request<AgentResponse>({
+    path: '/api/agent', method: 'POST',
+    body: { model: agentRequest.model, instructions: agentRequest.instructions, prompt: agentRequest.prompt, history: agentRequest.history },
+    connectionMessage: 'Could not reach the agent API.',
+    fallbackMessage: 'Could not run the agent.',
+    validate: (body): body is AgentResponse => !!body && typeof body === 'object'
+      && 'text' in body && typeof body.text === 'string',
+    invalidResponseMessage: 'The agent API returned an invalid response.',
+  }).pipe(Effect.withSpan('Agent.turn'))
+}
 
-  try {
-    response = await $fetch.raw<AgentResponse | ProblemDetails>('/api/agent', {
-      baseURL: apiUrl,
-      method: 'POST',
-      body: agentRequest,
-      ignoreResponseError: true
-    })
-  } catch (error) {
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'Could not reach the agent API.',
-      cause: error
-    })
-  }
-
-  if (response.status < 200 || response.status >= 300) {
-    const problem = response._data as ProblemDetails | undefined
-
-    throw createError({
-      statusCode: response.status,
-      statusMessage: problem?.title || 'Could not run the agent.',
-      data: problem
-    })
-  }
-
-  const payload = response._data as AgentResponse | undefined
-
-  if (!payload || typeof payload.text !== 'string') {
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'The agent API returned an invalid response.'
-    })
-  }
-
-  return payload
+export function postAgentRequest(event: H3Event, agentRequest: AgentRequest): Promise<AgentResponse> {
+  return runServerEffect(event, postAgentRequestEffect(event, agentRequest))
 }

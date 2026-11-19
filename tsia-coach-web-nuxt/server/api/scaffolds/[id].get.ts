@@ -1,17 +1,9 @@
-/**
- * GET /api/scaffolds/:id
- *
- * Returns one authored scaffold definition.
- */
-export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id')
+import { Effect } from 'effect'
+import { getScaffoldByIdEffect } from '#server/utils/scaffolds'
+import { routeParameter } from '#server/effect/input'
+import { runServerEffect } from '#server/effect/runtime'
 
-  if (!id) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A scaffold ID is required.',
-    })
-  }
-
-  return await getScaffoldById(event, id)
-})
+export default defineEventHandler(event => runServerEffect(event, Effect.gen(function* () {
+  const id = yield* routeParameter(event, 'id', 'A scaffold ID is required.')
+  return yield* getScaffoldByIdEffect(event, id)
+})))

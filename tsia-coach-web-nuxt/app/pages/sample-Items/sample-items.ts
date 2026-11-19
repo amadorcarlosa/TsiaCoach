@@ -1,5 +1,7 @@
-import { computed, ref } from 'vue'
-import { defineStore } from 'pinia'
+import { computed, shallowRef } from 'vue'
+import { Effect, Result } from 'effect'
+import { workflowField, workflowFacade, workflowFeature, useWorkflowContext, type WorkflowContext } from '~/effect/registry'
+import { workflowRequest, executeWorkflow } from '~/effect/workflows/transport'
 import type { AttemptProjection, MathNode, PracticeItemPrompt, PromptMultipleChoiceInteraction } from '#shared/types/sample-items'
 import {
   isAfterCorrectCheckPhase,
@@ -47,15 +49,15 @@ export type {
 
 const SUBMISSION_ERROR_MESSAGE = 'Could not submit the selected answer.'
 
-export const useSampleItemsStore = defineStore('sampleItems', () => {
-  const items = ref<PracticeItemPrompt[]>([])
-  const selectedItemId = ref<string | null>(null)
-  const focusTarget = ref<FocusTarget | null>(null)
-  const loadState = ref<LoadState>(LoadStates.Idle)
-  const loadError = ref<string | null>(null)
-  const loadInFlight = ref<Promise<void> | null>(null)
+function createSampleItemsWorkflow(context: WorkflowContext) {
+  const items = workflowField<PracticeItemPrompt[]>(context, 'sampleItems.items', [])
+  const selectedItemId = workflowField<string | null>(context, 'sampleItems.selectedItemId', null)
+  const focusTarget = workflowField<FocusTarget | null>(context, 'sampleItems.focusTarget', null)
+  const loadState = workflowField<LoadState>(context, 'sampleItems.loadState', LoadStates.Idle)
+  const loadError = workflowField<string | null>(context, 'sampleItems.loadError', null)
+  const loadInFlight = shallowRef<Promise<void> | null>(null)
 
-  const attemptSessions = ref<Record<string, AttemptSession>>({})
+  const attemptSessions = workflowField<Record<string, AttemptSession>>(context, 'sampleItems.attemptSessions', {})
   const startAttemptInFlight = new Map<string, Promise<AttemptProjection>>()
   const coachingInFlight = new Map<string, Promise<void>>()
 
@@ -202,8 +204,8 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       return existing
     }
 
-    const startAttempt = (async () => {
-      const started = await $fetch<AttemptProjection>('/api/attempts', {
+    const startAttempt = executeWorkflow('Attempts.start', Effect.gen(function* () {
+      const started = yield* workflowRequest<AttemptProjection>(context, '/api/attempts', {
         method: 'POST',
         body: {
           practiceItemId: itemId
@@ -220,7 +222,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       session.submissionError = null
 
       return started
-    })()
+    }))
 
     startAttemptInFlight.set(itemId, startAttempt)
 
@@ -256,8 +258,8 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     loadState.value = LoadStates.Loading
     loadError.value = null
 
-    const load = (async () => {
-      const practiceItems = await $fetch<PracticeItemPrompt[]>('/api/practice-items')
+    const load = executeWorkflow('PracticeItems.load', Effect.gen(function* () {
+      const practiceItems = yield* workflowRequest<PracticeItemPrompt[]>(context, '/api/practice-items')
       items.value = practiceItems
       loadState.value = LoadStates.Loaded
 
@@ -266,9 +268,9 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
       }
 
       if (selectedItemId.value) {
-        await ensureAttemptForItem(selectedItemId.value)
+        yield* Effect.tryPromise({ try: () => ensureAttemptForItem(selectedItemId.value!), catch: error => error })
       }
-    })()
+    }))
 
     loadInFlight.value = load
 
@@ -456,56 +458,37 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
         || currentProjection.phase.type !== capturedPhaseType
     }
 
-    const request = (async () => {
-      try {
-        const turn = await $fetch<{ move: CoachMoveResponse }>(
-          `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
-          {
-            method: 'POST',
-            body
-          }
-        )
-
-        if (isStale()) {
-          return
-        }
-
-        const current = attemptSessions.value[itemId]!
-        current.coachingMove = turn.move
-        current.coachingState = 'shown'
-        current.coachingError = null
-
-        const focusPhraseId = firstKnownPhraseId(itemId, turn.move.focusPhraseIds)
-        if (focusPhraseId && selectedItemId.value === itemId) {
-          focusTarget.value = { kind: FocusTargetKinds.Phrase, id: focusPhraseId }
-        }
-      } catch (error) {
-        const statusCode = (error as { statusCode?: number; status?: number }).statusCode
-          ?? (error as { status?: number }).status
-
+    const request = executeWorkflow('Coaching.request', Effect.gen(function* () {
+      const turn = yield* workflowRequest<{ move: CoachMoveResponse }>(
+        context,
+        `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
+        { method: 'POST', body },
+      )
+      if (isStale()) return
+      const current = attemptSessions.value[itemId]!
+      current.coachingMove = turn.move
+      current.coachingState = 'shown'
+      current.coachingError = null
+      const focusPhraseId = firstKnownPhraseId(itemId, turn.move.focusPhraseIds)
+      if (focusPhraseId && selectedItemId.value === itemId) {
+        focusTarget.value = { kind: FocusTargetKinds.Phrase, id: focusPhraseId }
+      }
+    }).pipe(
+      Effect.catch(error => Effect.gen(function* () {
+        const statusCode = (error as { statusCode?: number; status?: number })?.statusCode
+          ?? (error as { status?: number })?.status
         if (statusCode === 409) {
-          try {
-            const refreshed = await $fetch<AttemptProjection>(
-              `/api/attempts/${encodeURIComponent(capturedAttemptId)}`
-            )
-            const current = attemptSessions.value[itemId]
-            if (current && current.attemptId === capturedAttemptId) {
-              current.projection = refreshed
-            }
-          } catch {
-            // Keep the last known projection when the refresh also fails.
+          const refreshed = yield* Effect.result(workflowRequest<AttemptProjection>(
+            context, `/api/attempts/${encodeURIComponent(capturedAttemptId)}`,
+          ))
+          const current = attemptSessions.value[itemId]
+          if (Result.isSuccess(refreshed) && current?.attemptId === capturedAttemptId) {
+            current.projection = refreshed.success
           }
         }
-
-        if (isStale() && statusCode !== 409) {
-          return
-        }
-
+        if (isStale() && statusCode !== 409) return
         const current = attemptSessions.value[itemId]
-        if (!current) {
-          return
-        }
-
+        if (!current) return
         current.coachingState = 'error'
         current.coachingError = statusCode === 409
           ? 'This item changed. Ask the coach again.'
@@ -514,10 +497,9 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
             : statusCode === 502
               ? 'Coaching is temporarily unavailable.'
               : 'Could not reach the coach.'
-      } finally {
-        coachingInFlight.delete(itemId)
-      }
-    })()
+      })),
+      Effect.ensuring(Effect.sync(() => { coachingInFlight.delete(itemId) })),
+    ))
 
     coachingInFlight.set(itemId, request)
     return request
@@ -564,24 +546,26 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     setSessionError(itemId, null)
 
     try {
-      const projection = await $fetch<AttemptProjection>(
-        `/api/attempts/${encodeURIComponent(session.attemptId)}/checks`,
-        {
-          method: 'POST',
-          body: {
-            selectedAnswerId: answerId
+      await executeWorkflow('Attempts.check', Effect.gen(function* () {
+        const projection = yield* workflowRequest<AttemptProjection>(
+          context, `/api/attempts/${encodeURIComponent(session.attemptId!)}/checks`,
+          {
+            method: 'POST',
+            body: {
+              selectedAnswerId: answerId
+            }
           }
+        )
+
+        if (projection.practiceItemId !== itemId) {
+          throw new Error('Attempt projection did not match requested item.')
         }
-      )
 
-      if (projection.practiceItemId !== itemId) {
-        throw new Error('Attempt projection did not match requested item.')
-      }
-
-      session.projection = projection
-      session.submissionState = SubmissionStates.Submitted
-      session.selectedAnswerId = answerId
-      clearCoachingFor(itemId)
+        session.projection = projection
+        session.submissionState = SubmissionStates.Submitted
+        session.selectedAnswerId = answerId
+        clearCoachingFor(itemId)
+      }))
     } catch (error) {
       session.projection = previousProjection
       setSessionSubmissionState(itemId, SubmissionStates.Error)
@@ -594,7 +578,7 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     }
   }
 
-  return {
+  return workflowFacade({
     items,
     selectedItemId,
     selectedItem,
@@ -633,5 +617,9 @@ export const useSampleItemsStore = defineStore('sampleItems', () => {
     focusForItem,
     clearFocus,
     submitSelectedAnswer
-  }
-})
+  })
+}
+
+export function useSampleItemsStore(context: WorkflowContext = useWorkflowContext()) {
+  return workflowFeature(context, 'sampleItems', () => createSampleItemsWorkflow(context))
+}

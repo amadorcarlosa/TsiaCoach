@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=22.19.0 <23"
   },
   "scripts": {
     "build": "pnpm test:sync && nuxt build",
@@ -23,13 +23,28 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@effect/atom-vue": "4.1.4",
+    "@effect/opentelemetry": "4.1.4",
     "@nuxt/content": "^3.16.0",
     "@nuxt/ui": "^4.11.0",
-    "@pinia/nuxt": "^1.0.2",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.223.0",
+    "@opentelemetry/context-async-hooks": "2.12.0",
+    "@opentelemetry/core": "2.12.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "0.223.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "0.223.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.223.0",
+    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/sdk-logs": "0.223.0",
+    "@opentelemetry/sdk-metrics": "2.12.0",
+    "@opentelemetry/sdk-trace-base": "2.12.0",
+    "@opentelemetry/sdk-trace-node": "2.12.0",
+    "@opentelemetry/sdk-trace-web": "2.12.0",
     "better-sqlite3": "^12.11.1",
+    "effect": "4.1.4",
     "gsap": "^3.15.0",
+    "h3": "1.15.11",
     "nuxt": "^4.5.2",
-    "pinia": "^4.0.3",
     "tailwindcss": "^4.3.3",
     "vue": "^3.5.41",
     "vue-router": "^5.2.0"

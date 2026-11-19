@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
+import { workflowToRefs } from '~/effect/registry'
 import type { CharacterSpan } from '#shared/types/sample-items'
 import {
   LoadStates,
@@ -37,13 +37,13 @@ const {
   submissionError,
   answerMathObjectIds,
   selectedInteraction
-} = storeToRefs(store)
+} = workflowToRefs(store)
 const {
   attemptProjection,
   coachingState,
   coachingMove,
   coachingError
-} = storeToRefs(store)
+} = workflowToRefs(store)
 
 await callOnce('sample-items-load', () => store.load())
 

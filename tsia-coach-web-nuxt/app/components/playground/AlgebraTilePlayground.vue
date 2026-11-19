@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
 import AlgebraTileTray from '~/components/algebratiles/AlgebraTileTray.vue'
@@ -13,6 +14,8 @@ import { useManipulativeMenu } from '~/composables/useManipulativeMenu'
 import { usePlaygroundElementRefs } from '~/composables/usePlaygroundElementRefs'
 import { algebraTileDimensions, type AlgebraTile } from '~/components/algebratiles/algebra-tile.types'
 import { playgroundBoardLayout } from '~/components/playground/playground.types'
+
+const resources = createResourceScope()
 
 const props = withDefaults(defineProps<{ active?: boolean; cancelVersion?: () => number }>(), {
   active: true,
@@ -75,8 +78,8 @@ function lostCapture(event: PointerEvent): void {
 
 // A resize changes the board under a gesture; a blurred window loses the pointer.
 watch([cellSize, visibleColumns], interaction.cancel, { flush: 'sync' })
-onMounted(() => window.addEventListener('blur', interaction.cancel))
-onBeforeUnmount(() => window.removeEventListener('blur', interaction.cancel))
+onMounted(() => resources.listen(window, 'blur', interaction.cancel))
+onBeforeUnmount(resources.close)
 </script>
 
 <template>
