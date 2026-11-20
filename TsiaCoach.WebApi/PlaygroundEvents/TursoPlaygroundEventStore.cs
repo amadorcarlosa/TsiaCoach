@@ -1,20 +1,20 @@
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
+using Turso.Serverless.Client;
 
 namespace TsiaCoach.WebApi.PlaygroundEvents;
 
 /// <summary>
-/// Playground sessions and events in Turso (libSQL). Times are stored as Unix
-/// milliseconds. Every write is idempotent, so the HTTP client's retries are safe.
+/// Playground sessions and events stored in Turso. Times are stored as Unix milliseconds.
 /// </summary>
-public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider timeProvider) : IPlaygroundEventStore
+public sealed class TursoPlaygroundEventStore(TursoConnectionFactory connections, TimeProvider timeProvider) : IPlaygroundEventStore
 {
     private const string SessionColumns = "id, playground, attempt_id, scaffold_session_id, level_id, started_at, consent";
     private const string EventColumns =
         "id, session_id, playground, seq, at, trace_id, type, outcome, reason, data, scene_summary, received_at";
+    private const int EventsPerInsert = 100;
 
-    private static readonly LibSqlStatement[] Schema =
+    private static readonly TursoBatchStatement[] Schema =
     [
         new("""
             CREATE TABLE IF NOT EXISTS playground_sessions (
@@ -52,20 +52,21 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
     private readonly SemaphoreSlim schemaLock = new(1, 1);
     private volatile bool schemaReady;
 
-    private async Task<IReadOnlyList<LibSqlResult>> Execute(CancellationToken cancellationToken, params LibSqlStatement[] statements)
+    private async Task<TursoResultSet> ExecuteAsync(string sql, IReadOnlyList<object?> args, CancellationToken cancellationToken)
     {
-        await EnsureSchema(cancellationToken);
-        return await client.ExecuteAsync(statements, cancellationToken);
+        await using var connection = connections.CreateConnection();
+        await EnsureSchemaAsync(connection, cancellationToken);
+        return await connection.ExecuteAsync(sql, args, cancellationToken: cancellationToken);
     }
 
-    private async Task EnsureSchema(CancellationToken cancellationToken)
+    private async Task EnsureSchemaAsync(TursoServerlessConnection connection, CancellationToken cancellationToken)
     {
         if (schemaReady) return;
         await schemaLock.WaitAsync(cancellationToken);
         try
         {
             if (schemaReady) return;
-            await client.ExecuteAsync(Schema, cancellationToken);
+            await connection.BatchAsync(Schema, TursoBatchMode.Immediate, cancellationToken: cancellationToken);
             schemaReady = true;
         }
         finally
@@ -84,18 +85,18 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
             request.LevelId,
             FromMillis(ToMillis(timeProvider.GetUtcNow())),
             request.Consent);
-        await Execute(cancellationToken, new LibSqlStatement(
-            $"INSERT OR IGNORE INTO playground_sessions ({SessionColumns}) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            session.Id, session.Playground, session.AttemptId, session.ScaffoldSessionId, session.LevelId,
-            ToMillis(session.StartedAt), session.Consent));
+        await ExecuteAsync(
+            $"INSERT INTO playground_sessions ({SessionColumns}) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [session.Id, session.Playground, session.AttemptId, session.ScaffoldSessionId, session.LevelId,
+             ToMillis(session.StartedAt), session.Consent], cancellationToken);
         return session;
     }
 
     public async Task<PlaygroundSession?> FindSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken, new LibSqlStatement(
-            $"SELECT {SessionColumns} FROM playground_sessions WHERE id = ?", sessionId));
-        return results[0].Rows.Select(ToSession).FirstOrDefault();
+        var result = await ExecuteAsync(
+            $"SELECT {SessionColumns} FROM playground_sessions WHERE id = ?", [sessionId], cancellationToken);
+        return result.Rows.Select(ToSession).FirstOrDefault();
     }
 
     public async Task<AppendPlaygroundEventsResult> AppendAsync(
@@ -103,46 +104,48 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
         IReadOnlyList<PlaygroundEventRecord> events,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<LibSqlResult> state = await Execute(cancellationToken,
-            new LibSqlStatement("SELECT 1 FROM playground_sessions WHERE id = ?", sessionId),
-            new LibSqlStatement("SELECT COUNT(*) FROM playground_events WHERE session_id = ?", sessionId));
-        if (state[0].Rows.Count == 0)
+        await using var connection = connections.CreateConnection();
+        await EnsureSchemaAsync(connection, cancellationToken);
+        // Reserve the write before checking the cap so two appends cannot claim the same remaining slots.
+        await using var transaction = await connection.BeginTransactionAsync(TursoBatchMode.Immediate, cancellationToken);
+        var state = await transaction.ExecuteAsync("""
+            SELECT (SELECT COUNT(*) FROM playground_events WHERE session_id = ?)
+            FROM playground_sessions WHERE id = ?
+            """, [sessionId, sessionId], cancellationToken);
+        if (state.Rows.Count == 0)
         {
             return new(AppendPlaygroundEventsResultKind.UnknownSession);
         }
 
-        // Repeats inside one batch are duplicates too; the database ignores repeats across batches.
-        PlaygroundEventRecord[] distinct = events.DistinctBy(record => record.Id, StringComparer.Ordinal).ToArray();
-        int repeatedInBatch = events.Count - distinct.Length;
-        long stored = (long)state[1].Rows[0][0]!;
-        if (distinct.Length == 0)
+        int accepted = 0;
+        foreach (var batch in events.Chunk(EventsPerInsert))
         {
-            return new(AppendPlaygroundEventsResultKind.Appended, 0, repeatedInBatch);
+            string values = string.Join(", ", Enumerable.Repeat("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch.Length));
+            List<object?> args = new(batch.Length * 12);
+            foreach (PlaygroundEventRecord record in batch)
+            {
+                args.AddRange([
+                    record.Id, sessionId, record.Playground, record.Seq, ToMillis(record.At), record.TraceId,
+                    record.Type, record.Outcome, record.Reason, record.Data.GetRawText(),
+                    record.SceneSummary is null ? null : JsonSerializer.Serialize(record.SceneSummary),
+                    ToMillis(record.ReceivedAt),
+                ]);
+            }
+            var inserted = await transaction.ExecuteAsync(
+                $"INSERT INTO playground_events ({EventColumns}) VALUES {values} ON CONFLICT(session_id, id) DO NOTHING",
+                args, cancellationToken);
+            accepted += checked((int)inserted.RowsAffected);
         }
 
-        if (stored + distinct.Length > PlaygroundEventLimits.MaxEventsPerSession)
+        int duplicates = events.Count - accepted;
+        if (accepted > 0 && state.Rows[0].GetInt64(0) + accepted > PlaygroundEventLimits.MaxEventsPerSession)
         {
-            return new(AppendPlaygroundEventsResultKind.SessionFull, 0, repeatedInBatch);
+            await transaction.RollbackAsync(cancellationToken);
+            return new(AppendPlaygroundEventsResultKind.SessionFull, 0, duplicates);
         }
 
-        // One statement, so a batch lands entirely or not at all.
-        StringBuilder sql = new($"INSERT OR IGNORE INTO playground_events ({EventColumns}) VALUES ");
-        List<object?> args = new(distinct.Length * 12);
-        for (int index = 0; index < distinct.Length; index++)
-        {
-            PlaygroundEventRecord record = distinct[index];
-            sql.Append(index == 0 ? "" : ", ").Append("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            args.AddRange([
-                record.Id, sessionId, record.Playground, record.Seq, ToMillis(record.At), record.TraceId,
-                record.Type, record.Outcome, record.Reason, record.Data.GetRawText(),
-                record.SceneSummary is null ? null : JsonSerializer.Serialize(record.SceneSummary),
-                ToMillis(record.ReceivedAt),
-            ]);
-        }
-
-        LibSqlResult inserted = (await Execute(cancellationToken, new LibSqlStatement(sql.ToString(), [.. args])))[0];
-        int accepted = (int)inserted.AffectedRows;
-        return new(AppendPlaygroundEventsResultKind.Appended, accepted, events.Count - accepted);
+        await transaction.CommitAsync(cancellationToken);
+        return new(AppendPlaygroundEventsResultKind.Appended, accepted, duplicates);
     }
 
     public async Task<IReadOnlyList<PlaygroundEventRecord>> ReadAsync(
@@ -151,37 +154,38 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
         int limit = PlaygroundEventLimits.MaxEventsPerSession,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken, new LibSqlStatement(
+        var result = await ExecuteAsync(
             $"SELECT {EventColumns} FROM playground_events WHERE session_id = ? AND (? IS NULL OR seq > ?) ORDER BY seq, at, id LIMIT ?",
-            sessionId, sinceSeq, sinceSeq, (long)Math.Max(0, limit)));
-        return results[0].Rows.Select(ToEvent).ToArray();
+            [sessionId, sinceSeq, sinceSeq, Math.Max(0, limit)], cancellationToken);
+        return result.Rows.Select(ToEvent).ToArray();
     }
 
     public async Task<IReadOnlyList<PlaygroundSession>> FindByAttemptAsync(string attemptId, CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken, new LibSqlStatement(
+        var result = await ExecuteAsync(
             $"SELECT {SessionColumns} FROM playground_sessions WHERE attempt_id = ? ORDER BY started_at DESC, id LIMIT ?",
-            attemptId, (long)PlaygroundEventLimits.MaxSessionsPerAttempt));
-        return results[0].Rows.Select(ToSession).ToArray();
+            [attemptId, PlaygroundEventLimits.MaxSessionsPerAttempt], cancellationToken);
+        return result.Rows.Select(ToSession).ToArray();
     }
 
-    public async Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
-    {
-        IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken,
-            new LibSqlStatement("DELETE FROM playground_events WHERE session_id = ?", sessionId),
-            new LibSqlStatement("DELETE FROM playground_sessions WHERE id = ?", sessionId));
-        return results[1].AffectedRows > 0;
-    }
+    public async Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        await DeleteSessionsAsync("id = ?", sessionId, cancellationToken) > 0;
 
-    public async Task<int> DeleteStartedBeforeAsync(DateTimeOffset cutoff, CancellationToken cancellationToken = default)
+    public Task<int> DeleteStartedBeforeAsync(DateTimeOffset cutoff, CancellationToken cancellationToken = default) =>
+        DeleteSessionsAsync("started_at < ?", ToMillis(cutoff), cancellationToken);
+
+    private async Task<int> DeleteSessionsAsync(string predicate, object value, CancellationToken cancellationToken)
     {
-        long millis = ToMillis(cutoff);
-        IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken,
-            new LibSqlStatement(
-                "DELETE FROM playground_events WHERE session_id IN (SELECT id FROM playground_sessions WHERE started_at < ?)",
-                millis),
-            new LibSqlStatement("DELETE FROM playground_sessions WHERE started_at < ?", millis));
-        return (int)results[1].AffectedRows;
+        await using var connection = connections.CreateConnection();
+        await EnsureSchemaAsync(connection, cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(TursoBatchMode.Immediate, cancellationToken);
+        await transaction.ExecuteAsync(
+            $"DELETE FROM playground_events WHERE session_id IN (SELECT id FROM playground_sessions WHERE {predicate})",
+            [value], cancellationToken);
+        var deleted = await transaction.ExecuteAsync(
+            $"DELETE FROM playground_sessions WHERE {predicate}", [value], cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return checked((int)deleted.RowsAffected);
     }
 
     public async IAsyncEnumerable<PlaygroundSession> ListSessionsAsync(
@@ -196,11 +200,10 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
         while (true)
         {
             // Keyset paging on (started_at, id) so concurrent inserts never shift a page.
-            IReadOnlyList<LibSqlResult> results = await Execute(cancellationToken, new LibSqlStatement(
+            var result = await ExecuteAsync(
                 $"SELECT {SessionColumns} FROM playground_sessions WHERE (started_at > ? OR (started_at = ? AND id > ?)) AND started_at < ? ORDER BY started_at, id LIMIT ?",
-                after, after, afterId, before, (long)page));
-            IReadOnlyList<IReadOnlyList<object?>> rows = results[0].Rows;
-            foreach (IReadOnlyList<object?> row in rows)
+                [after, after, afterId, before, page], cancellationToken);
+            foreach (var row in result.Rows)
             {
                 PlaygroundSession session = ToSession(row);
                 after = ToMillis(session.StartedAt);
@@ -208,7 +211,7 @@ public sealed class TursoPlaygroundEventStore(LibSqlClient client, TimeProvider 
                 yield return session;
             }
 
-            if (rows.Count < page) yield break;
+            if (result.Rows.Count < page) yield break;
         }
     }
 

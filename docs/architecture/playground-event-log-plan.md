@@ -59,7 +59,7 @@ Event types map directly onto the existing action unions:
 - `POST /api/playground-sessions` → `{ sessionId }` (optionally linked to `attemptId` / scaffold `sessionId` / level id).
 - `POST /api/playground-sessions/{id}/events` → append, dedupe by event `id`, order by `seq`.
 - `GET /api/playground-sessions/{id}/events?since=seq` and `GET .../summary` for agents.
-- Storage: current stores are in-memory (`InMemoryAttemptStore` etc.). Start with `InMemoryPlaygroundEventStore` behind an interface; choose durable storage (Postgres/Cosmos/Table) as a separate decision before production — **this is the key open decision**.
+- `IPlaygroundEventStore` supports in-memory development and durable storage on Turso Cloud. See [Playground event storage](#playground-event-storage) for setup.
 
 ## 5. Agent consumption
 
@@ -119,13 +119,50 @@ On the API, `CoachingTurnService` reads the attempt's sessions (`PlaygroundActiv
 
 **Coach playground and `/api/agent`.** Each instrumented scene keeps its last 20 actions in memory (`scene.events.recent()`), whether or not the log is on. Every rod tab's `capture()` returns them as `recentActions`, and the coach-playground prompt (and the decision state sent to `/api/decisions`) includes them beside the snapshot, with the same train IDs. Nothing is stored for this; it is part of the prompt the operator already sees.
 
-## Phase 5: storage and governance (2026-11-19)
+## Phase 5: storage and governance (2026-11-20)
 
-**Storage: Turso.** `TursoPlaygroundEventStore` talks to Turso over the libSQL HTTP protocol (`POST /v2/pipeline`) with plain `HttpClient` (`LibSqlClient`), with no extra packages. It creates two tables, `playground_sessions` and `playground_events` (primary key `(session_id, id)`), on first use. Each batch lands in one `INSERT OR IGNORE`, so retries are idempotent. Times are stored as Unix milliseconds.
+### Playground event storage
 
-- **Configuration:** `PlaygroundEvents:Store=Turso`, `PlaygroundEvents:Turso:Url` (`libsql://…`, `https://…` or `http://host:8080`) and `PlaygroundEvents:Turso:AuthToken`. Without `Store=Turso` the API keeps the in-memory store, which the tests use.
-- **Aspire:** the AppHost sets `Store=Turso`. When `Turso:Url` is configured it uses that database plus the `turso-auth-token` secret parameter. Otherwise it runs `ghcr.io/tursodatabase/libsql-server:v0.24.33` (same protocol) with the `tsia-libsql-data` volume, which needs Docker.
-- **Tests:** the store contract runs against both stores. Set `TSIA_LIBSQL_URL` (and optionally `TSIA_LIBSQL_TOKEN`) to include Turso, for example `docker run -p 18080:8080 ghcr.io/tursodatabase/libsql-server:v0.24.33` and `TSIA_LIBSQL_URL=http://127.0.0.1:18080`.
+The durable store uses the **Turso Database engine on Turso Cloud (early preview)**. The API uses Turso’s managed .NET package, `Turso.Serverless.Client`, to execute SQL over HTTP. On first use it creates `playground_sessions` and `playground_events`. Each event has a composite primary key of `(session_id, id)` so a retried event is stored once. Timestamps use Unix milliseconds. [Turso Cloud engines](https://docs.turso.tech/turso-cloud) · [.NET client](https://www.nuget.org/packages/Turso.Serverless.Client/0.8.3)
+
+To connect a local Aspire run to the preview, run these PowerShell commands from the repository root. The example uses the Turso CLI installed in WSL. For first-time setup, sign in after locating the CLI. [Turso Cloud quickstart](https://docs.turso.tech/quickstart)
+
+```powershell
+$turso = (wsl sh -lc 'command -v turso || realpath ~/.turso/turso').Trim()
+wsl -- $turso auth login
+```
+
+Choose an available database name. The `--tursodb` flag selects the preview engine. This block configures Aspire after Turso creates the database and returns its HTTPS URL and database token. [Database URLs and tokens](https://docs.turso.tech/sdk/http/reference)
+
+```powershell
+& {
+    $database = 'tsia-playground-dev'
+    wsl -- $turso db create $database --tursodb
+    if ($LASTEXITCODE -ne 0) { throw 'Turso could not create the preview database.' }
+
+    $databaseUrl = wsl -- $turso db show $database --http-url
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($databaseUrl)) {
+        throw 'Turso could not return the database URL.'
+    }
+    $databaseToken = wsl -- $turso db tokens create $database
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($databaseToken)) {
+        throw 'Turso could not return a database token.'
+    }
+
+    @{
+        'Turso:Url' = $databaseUrl.Trim()
+        'Parameters:turso-auth-token' = $databaseToken.Trim()
+    } | ConvertTo-Json | dotnet user-secrets set --project TsiaCoach.AppHost
+    if ($LASTEXITCODE -ne 0) { throw 'Could not save the Aspire settings.' }
+
+    $env:NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED = 'true'
+    aspire start
+}
+```
+
+- **Local development.** Aspire uses the hosted database when `Turso:Url` is configured. With no URL, it uses the in-memory event store and sessions expire when the API restarts.
+- **Deployment.** The Aspire publish model requires a `turso-url` parameter and a secret `turso-auth-token` parameter. When running the API directly, set `PlaygroundEvents__Store=Turso`, `PlaygroundEvents__Turso__Url` to the HTTPS database URL, and `PlaygroundEvents__Turso__AuthToken` to its database token.
+- **Store tests.** Point `TSIA_TEST_TURSO_URL` and `TSIA_TEST_TURSO_TOKEN` at a separate disposable preview database and run `dotnet test --project TsiaCoach.WebApi.Tests`. The contract suite exercises deletion and a database-wide retention sweep. With these settings absent, the default suite uses in-memory storage.
 
 **Retention.** `PlaygroundEventRetentionService` deletes sessions, with their events, that started more than `PlaygroundEvents:RetentionDays` ago (default **180**; 0 keeps everything). It sweeps a minute after start, then every `RetentionSweepInterval` (1 day). The consent notice shows `runtimeConfig.public.playgroundEventsRetentionDays`; keep the two values equal.
 
@@ -149,7 +186,6 @@ Still open: hosting the production Turso database and setting its token; a learn
 
 ## Open decisions
 
-- Durable store choice and retention period.
 - Whether dev/authoring playgrounds log at all, or only learner-facing ones.
 - Whether any free text is ever stored.
 - Consent model for minors (TSIA learners).

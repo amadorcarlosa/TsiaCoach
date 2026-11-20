@@ -4,15 +4,12 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TsiaCoach.WebApi.EndPoints;
 using TsiaCoach.WebApi.PlaygroundEvents;
 using TsiaCoach.WebApi.Response;
 
 namespace TsiaCoach.WebApi.Tests;
 
-/// <summary>
-/// One contract for every store. The Turso cases run when TSIA_LIBSQL_URL names a
-/// libSQL server (for example a local ghcr.io/tursodatabase/libsql-server container).
-/// </summary>
 internal sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
 {
     private DateTimeOffset now = start;
@@ -22,8 +19,10 @@ internal sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
     public void Advance(TimeSpan by) => now += by;
 }
 
+/// <summary>Set TSIA_TEST_TURSO_URL to a disposable test database to run the remote store contract.</summary>
 public sealed class PlaygroundEventStoreTests
 {
+    private static readonly HttpClient DatabaseHttpClient = new();
     private static readonly JsonElement EmptyData = JsonDocument.Parse("{}").RootElement.Clone();
 
     internal static PlaygroundEventRecord Event(
@@ -47,18 +46,18 @@ public sealed class PlaygroundEventStoreTests
             null,
             DateTimeOffset.UnixEpoch);
 
-    internal static IPlaygroundEventStore Store(string kind, TimeProvider? time = null)
+    private static IPlaygroundEventStore Store(string kind, TimeProvider? time = null)
     {
         time ??= TimeProvider.System;
         if (kind == "memory") return new InMemoryPlaygroundEventStore(time);
-        string? url = Environment.GetEnvironmentVariable("TSIA_LIBSQL_URL");
-        Skip.Unless(!string.IsNullOrWhiteSpace(url), "Set TSIA_LIBSQL_URL to run the Turso store tests.");
+        string? url = Environment.GetEnvironmentVariable("TSIA_TEST_TURSO_URL");
+        Skip.Unless(!string.IsNullOrWhiteSpace(url), "Set TSIA_TEST_TURSO_URL to a disposable Turso test database.");
         var options = Options.Create(new PlaygroundEventOptions
         {
             Store = "Turso",
-            Turso = new TursoOptions { Url = url, AuthToken = Environment.GetEnvironmentVariable("TSIA_LIBSQL_TOKEN") },
+            Turso = new TursoOptions { Url = url, AuthToken = Environment.GetEnvironmentVariable("TSIA_TEST_TURSO_TOKEN") },
         });
-        return new TursoPlaygroundEventStore(new LibSqlClient(new HttpClient(), options), time);
+        return new TursoPlaygroundEventStore(new TursoConnectionFactory(DatabaseHttpClient, options), time);
     }
 
     [Test]
@@ -77,6 +76,48 @@ public sealed class PlaygroundEventStoreTests
         await Assert.That(retried.Accepted).IsEqualTo(0);
         await Assert.That(retried.Duplicates).IsEqualTo(2);
         await Assert.That((await store.ReadAsync(session.Id)).Count).IsEqualTo(2);
+        await store.DeleteSessionAsync(session.Id);
+    }
+
+    [Test]
+    [Arguments("memory")]
+    [Arguments("turso")]
+    public async Task Append_EnforcesCapacityAcrossConcurrentBatchesAndDuplicateRetries(string kind)
+    {
+        IPlaygroundEventStore store = Store(kind);
+        PlaygroundSession session = await store.StartAsync(new StartPlaygroundSession("algebra-tiles"));
+        try
+        {
+            int capacity = PlaygroundEventLimits.MaxEventsPerSession;
+            PlaygroundEventRecord[] initial = Enumerable.Range(0, capacity - 1)
+                .Select(seq => Event(session.Id, seq)).ToArray();
+            foreach (var batch in initial.Chunk(PlaygroundSessionEndpoints.MaxEventsPerBatch))
+            {
+                await Assert.That((await store.AppendAsync(session.Id, batch)).Accepted).IsEqualTo(batch.Length);
+            }
+
+            PlaygroundEventRecord left = Event(session.Id, capacity);
+            PlaygroundEventRecord right = Event(session.Id, capacity + 1);
+            var oversized = await store.AppendAsync(session.Id, [initial[0], left, right]);
+            await Assert.That(oversized).IsEqualTo(new AppendPlaygroundEventsResult(
+                AppendPlaygroundEventsResultKind.SessionFull, Accepted: 0, Duplicates: 1));
+
+            var results = await Task.WhenAll(
+                store.AppendAsync(session.Id, [initial[0], left]),
+                store.AppendAsync(session.Id, [initial[0], right]));
+            await Assert.That(results.Count(result => result.Kind == AppendPlaygroundEventsResultKind.SessionFull)).IsEqualTo(1);
+            await Assert.That(results.Sum(result => result.Accepted)).IsEqualTo(1);
+            await Assert.That(results.Sum(result => result.Duplicates)).IsEqualTo(2);
+
+            var last = (await store.ReadAsync(session.Id, sinceSeq: capacity - 2)).Single();
+            var retry = await store.AppendAsync(session.Id, [last, last, initial[0]]);
+            await Assert.That(retry).IsEqualTo(new AppendPlaygroundEventsResult(
+                AppendPlaygroundEventsResultKind.Appended, Accepted: 0, Duplicates: 3));
+        }
+        finally
+        {
+            await store.DeleteSessionAsync(session.Id);
+        }
     }
 
     [Test]
@@ -94,6 +135,7 @@ public sealed class PlaygroundEventStoreTests
             .IsEquivalentTo(new long[] { 0, 1, 2, 3 });
         await Assert.That((await store.ReadAsync(session.Id, sinceSeq: 1)).Select(record => record.Seq))
             .IsEquivalentTo(new long[] { 2, 3 });
+        await store.DeleteSessionAsync(session.Id);
     }
 
     [Test]
@@ -120,6 +162,7 @@ public sealed class PlaygroundEventStoreTests
         await Assert.That(stored.Reason).IsEqualTo(original.Reason);
         await Assert.That(stored.Data.GetRawText()).IsEqualTo(original.Data.GetRawText());
         await Assert.That(stored.SceneSummary!["tiles"]).IsEqualTo(3);
+        await store.DeleteSessionAsync(session.Id);
     }
 
     [Test]
@@ -143,10 +186,12 @@ public sealed class PlaygroundEventStoreTests
         IPlaygroundEventStore store = Store(kind);
         string attempt = "attempt-" + Guid.NewGuid().ToString("N");
         PlaygroundSession linked = await store.StartAsync(new StartPlaygroundSession("base-ten", attempt));
-        await store.StartAsync(new StartPlaygroundSession("base-ten", "attempt-other-" + Guid.NewGuid().ToString("N")));
+        PlaygroundSession unrelated = await store.StartAsync(new StartPlaygroundSession("base-ten", "attempt-other-" + Guid.NewGuid().ToString("N")));
 
         await Assert.That((await store.FindByAttemptAsync(attempt)).Select(session => session.Id))
             .IsEquivalentTo(new[] { linked.Id });
+        await store.DeleteSessionAsync(linked.Id);
+        await store.DeleteSessionAsync(unrelated.Id);
     }
 
     [Test]
@@ -172,12 +217,12 @@ public sealed class PlaygroundEventStoreTests
     [Arguments("turso")]
     public async Task Retention_DeletesOnlyExpiredSessions(string kind)
     {
-        // Far-past clock so a shared Turso database keeps everyone else's rows.
-        ManualTimeProvider time = new(new DateTimeOffset(2001, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        // Only sessions stamped at the earliest representable millisecond fall before the cutoff.
+        ManualTimeProvider time = new(DateTimeOffset.MinValue);
         IPlaygroundEventStore store = Store(kind, time);
         PlaygroundSession old = await store.StartAsync(new StartPlaygroundSession("algebra-tiles"));
         await store.AppendAsync(old.Id, [Event(old.Id, 0)]);
-        time.Advance(TimeSpan.FromDays(200));
+        time.Advance(TimeSpan.FromDays(180) + TimeSpan.FromMilliseconds(1));
         PlaygroundSession fresh = await store.StartAsync(new StartPlaygroundSession("algebra-tiles"));
         var retention = new PlaygroundEventRetentionService(
             store,
@@ -234,68 +279,69 @@ public sealed class PlaygroundEventStoreTests
     }
 }
 
-public sealed class LibSqlClientTests
+public sealed class TursoConnectionFactoryTests
 {
-    private sealed class Handler(string response, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
+    private sealed class QueryHandler : HttpMessageHandler
     {
-        public HttpRequestMessage? Request { get; private set; }
-        public string? Body { get; private set; }
+        public Uri? Uri { get; private set; }
+        public string? Authorization { get; private set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Request = request;
-            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
+            Uri = request.RequestUri;
+            Authorization = request.Headers.Authorization?.ToString();
+            const string cursor = """
+                {"baton":null,"base_url":null}
+                {"type":"step_begin","step":0,"cols":[{"name":"n"}]}
+                {"type":"row","row":[{"type":"integer","value":"42"}]}
+                {"type":"step_end","affected_row_count":0}
+                """;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(cursor, Encoding.UTF8, "application/x-ndjson"),
+            });
         }
     }
 
-    private static LibSqlClient Client(Handler handler, string url = "libsql://db-org.turso.io", string? token = "secret") =>
-        new(new HttpClient(handler), Options.Create(new PlaygroundEventOptions { Turso = new() { Url = url, AuthToken = token } }));
+    private static TursoConnectionFactory Factory(HttpClient http, string url, string? token) =>
+        new(http, Options.Create(new PlaygroundEventOptions { Turso = new() { Url = url, AuthToken = token } }));
 
     [Test]
-    public async Task Execute_SendsPipelineWithTypedArgumentsAndToken()
+    [Arguments("turso://db-org.turso.io", "https://db-org.turso.io", "test-token")]
+    [Arguments("libsql://db-org.turso.io", "https://db-org.turso.io", "test-token")]
+    [Arguments("https://db-org.turso.io", "https://db-org.turso.io", "test-token")]
+    [Arguments("http://127.0.0.1:8080", "http://127.0.0.1:8080", null)]
+    public async Task Create_ConnectsToConfiguredEndpoint(string configuredUrl, string expectedOrigin, string? token)
     {
-        Handler handler = new("""
-            {"results":[{"type":"ok","response":{"type":"execute","result":{"cols":[{"name":"n"},{"name":"t"},{"name":"z"}],"rows":[[{"type":"integer","value":"9007199254740993"},{"type":"text","value":"a"},{"type":"null"}]],"affected_row_count":0}}},{"type":"ok","response":{"type":"close"}}]}
-            """);
+        using var handler = new QueryHandler();
+        using var http = new HttpClient(handler);
+        await using var connection = Factory(http, configuredUrl, token).CreateConnection();
 
-        IReadOnlyList<LibSqlResult> results = await Client(handler).ExecuteAsync([new("SELECT ?, ?, ?, ?", 5L, "a", null, true)]);
+        var result = await connection.ExecuteAsync("SELECT ? AS n", [42L]);
 
-        await Assert.That(handler.Request!.RequestUri!.ToString()).IsEqualTo("https://db-org.turso.io/v2/pipeline");
-        await Assert.That(handler.Request.Headers.Authorization!.ToString()).IsEqualTo("Bearer secret");
-        await Assert.That(handler.Body!).Contains("\"type\":\"integer\",\"value\":\"5\"");
-        await Assert.That(handler.Body!).Contains("\"type\":\"null\"");
-        await Assert.That(handler.Body!).Contains("{\"type\":\"close\"}");
-        await Assert.That(results[0].Rows[0][0]).IsEqualTo(9007199254740993L);
-        await Assert.That(results[0].Rows[0][1]).IsEqualTo("a");
-        await Assert.That(results[0].Rows[0][2]).IsNull();
+        await Assert.That(result.Rows.Single().GetInt64("n")).IsEqualTo(42L);
+        await Assert.That(handler.Uri?.GetLeftPart(UriPartial.Authority)).IsEqualTo(expectedOrigin);
+        await Assert.That(handler.Authorization).IsEqualTo(token is null ? null : $"Bearer {token}");
     }
 
     [Test]
-    public async Task Execute_RaisesStatementErrors()
+    [Arguments("file:///tmp/db")]
+    [Arguments("turso://user:password@db-org.turso.io")]
+    [Arguments("turso://db-org.turso.io?token=test")]
+    [Arguments("turso://db-org.turso.io#fragment")]
+    [Arguments("http://db-org.turso.io")]
+    public async Task Create_RejectsInvalidDatabaseUrls(string url)
     {
-        Handler handler = new("""
-            {"results":[{"type":"error","error":{"message":"no such table: missing","code":"SQLITE_UNKNOWN"}},{"type":"ok","response":{"type":"close"}}]}
-            """);
-
-        LibSqlException? error = null;
-        try { await Client(handler, "http://127.0.0.1:8080", token: null).ExecuteAsync([new("SELECT * FROM missing")]); }
-        catch (LibSqlException exception) { error = exception; }
-
-        await Assert.That(error?.Code).IsEqualTo("SQLITE_UNKNOWN");
-        await Assert.That(handler.Request!.Headers.Authorization).IsNull();
+        using var http = new HttpClient();
+        await Assert.That(() => Factory(http, url, "test-token").CreateConnection()).Throws<InvalidOperationException>();
     }
 
     [Test]
-    public async Task Execute_RaisesHttpFailures()
+    public async Task Create_RequiresACloudDatabaseToken()
     {
-        Handler handler = new("{}", HttpStatusCode.Unauthorized);
-
-        LibSqlException? error = null;
-        try { await Client(handler).ExecuteAsync([new("SELECT 1")]); }
-        catch (LibSqlException exception) { error = exception; }
-
-        await Assert.That(error?.Message).Contains("401");
+        using var http = new HttpClient();
+        await Assert.That(() => Factory(http, "turso://db-org.turso.io", null).CreateConnection())
+            .Throws<InvalidOperationException>();
     }
 }
 

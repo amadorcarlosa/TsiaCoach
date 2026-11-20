@@ -37,7 +37,11 @@ builder.Services.AddOptions<PlaygroundEventOptions>()
     .Bind(builder.Configuration.GetSection(PlaygroundEventOptions.Section));
 if (string.Equals(builder.Configuration["PlaygroundEvents:Store"], "Turso", StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddHttpClient<LibSqlClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+    // A POST can advance the Turso session or commit a transaction. Replaying it can reuse an expired baton.
+#pragma warning disable EXTEXP0001 // Opt out of the service defaults' automatic HTTP retries on this client.
+    builder.Services.AddHttpClient<TursoConnectionFactory>(client => client.Timeout = TimeSpan.FromSeconds(30))
+        .RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
     builder.Services.AddSingleton<IPlaygroundEventStore, TursoPlaygroundEventStore>();
 }
 else
