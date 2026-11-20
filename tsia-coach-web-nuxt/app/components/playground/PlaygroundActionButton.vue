@@ -2,6 +2,8 @@
 defineProps<{
   disabled?: boolean
   pressed?: boolean
+  /** Looks unavailable but still clicks, so the board can explain the refusal (and log the attempt). */
+  refused?: boolean
 }>()
 </script>
 
@@ -9,7 +11,9 @@ defineProps<{
   <button
     type="button"
     class="playground-action"
+    :class="{ 'playground-action--refused': refused }"
     :disabled="disabled"
+    :aria-disabled="refused || undefined"
     :aria-pressed="pressed"
   >
     <slot />
@@ -28,7 +32,8 @@ defineProps<{
   cursor: pointer;
 }
 
-.playground-action:disabled {
+.playground-action:disabled,
+.playground-action--refused {
   opacity: 0.5;
   cursor: default;
 }

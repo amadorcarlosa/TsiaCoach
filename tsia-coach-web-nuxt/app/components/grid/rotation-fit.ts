@@ -5,7 +5,7 @@ export type Box = { x: number; y: number; width: number; depth: number }
 /**
  * The smallest shift that brings a turned piece back inside its bounds.
  * Null when the piece is larger than the bounds in either direction.
- * Obstacles are not avoided: a blocked destination is refused, not moved.
+ * Obstacles are handled by `settleTurn`'s nearby search, not here.
  */
 export function edgeShift(piece: Box, bounds: Box): Point | null {
     if (piece.width > bounds.width || piece.depth > bounds.depth) return null
@@ -27,11 +27,15 @@ export type TurnedPiece = { id: string; edge: Point; back: Point | null }
 /**
  * Picks where the turned pieces land. Turning straight back first tries to
  * undo the last slide, so a round trip ends where it began; otherwise each
- * piece takes its edge shift. `attempt` validates one set of shifts.
+ * piece takes its edge shift. When that spot is blocked, `nearby` offsets
+ * (nearest first) move every turned piece together until one fits; with
+ * none fitting, the edge attempt's refusal is returned. `attempt` validates
+ * one set of shifts.
  */
 export function settleTurn<R extends { allowed: boolean }>(
     turned: readonly TurnedPiece[],
     attempt: (shifts: ReadonlyMap<string, Point>) => R,
+    nearby: Iterable<Point> = [],
 ): { result: R; shifts: Map<string, Point> } {
     if (turned.some(turn => turn.back)) {
         const shifts = new Map(turned.map(turn => [turn.id, turn.back ?? turn.edge]))
@@ -39,7 +43,14 @@ export function settleTurn<R extends { allowed: boolean }>(
         if (result.allowed) return { result, shifts }
     }
     const shifts = new Map(turned.map(turn => [turn.id, turn.edge]))
-    return { result: attempt(shifts), shifts }
+    const result = attempt(shifts)
+    if (result.allowed) return { result, shifts }
+    for (const offset of nearby) {
+        const moved = new Map(turned.map(turn => [turn.id, { x: turn.edge.x + offset.x, y: turn.edge.y + offset.y }]))
+        const found = attempt(moved)
+        if (found.allowed) return { result: found, shifts: moved }
+    }
+    return { result, shifts }
 }
 
 export const shifted = (anchor: Point, shift: Point | undefined): Point =>

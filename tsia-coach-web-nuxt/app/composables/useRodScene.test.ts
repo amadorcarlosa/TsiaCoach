@@ -1014,7 +1014,7 @@ describe('set-orientation', () => {
     expect(sceneSnapshot(scene)).toEqual(before)
   })
 
-  it('rejects an obstacle at the edge-adjusted destination', () => {
+  it('moves a turn blocked at the edge-adjusted destination to the nearest free spot', () => {
     const scene = createScene()
 
     const obstacle = createRod(scene, 1)
@@ -1031,16 +1031,15 @@ describe('set-orientation', () => {
     scene.apply(parts, { type: 'make-train' })
 
     const id = [...scene.selection.value][0]!
-    const before = sceneSnapshot(scene)
+    const obstacleBefore = JSON.parse(JSON.stringify(scene.trains.value.find(train => train.id === obstacle)))
 
     expect(scene.apply([id], {
       type: 'set-orientation',
       orientation: 'vertical',
-    })).toEqual({
-      allowed: false,
-      reason: 'Cannot change orientation. That arrangement overlaps another part.',
-    })
-    expect(sceneSnapshot(scene)).toEqual(before)
+    }).allowed).toBe(true)
+    const turned = scene.trains.value.find(train => train.id === id)!
+    expect(turned.parts.every(part => part.orientation === 'vertical')).toBe(true)
+    expect(scene.trains.value.find(train => train.id === obstacle)).toEqual(obstacleBefore)
   })
 
   it('rejects selected trains whose adjusted destinations overlap', () => {

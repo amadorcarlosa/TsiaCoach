@@ -31,6 +31,15 @@ describe('settleTurn and turn memory', () => {
     expect(blocked.shifts.get('a')).toEqual({ x: 0, y: 0 })
   })
 
+  it('moves a blocked turn to the first nearby offset that fits, else keeps the refusal', () => {
+    const turned = [{ id: 'a', edge: { x: 1, y: 0 }, back: null }]
+    const nearby = [{ x: 0, y: 1 }, { x: 0, y: 2 }, { x: 0, y: 3 }]
+    const moved = settleTurn(turned, shifts => ({ allowed: shifts.get('a')!.y >= 2 }), nearby)
+    expect(moved.shifts.get('a')).toEqual({ x: 1, y: 2 })
+    const refused = settleTurn(turned, () => ({ allowed: false, reason: 'blocked' }), nearby)
+    expect(refused).toEqual({ result: { allowed: false, reason: 'blocked' }, shifts: new Map([['a', { x: 1, y: 0 }]]) })
+  })
+
   it('only undoes a turn that is reversed exactly and untouched since', () => {
     const memory = createTurnMemory()
     memory.remember('a', { state: 'after', inverse: 'horizontal', shift: { x: 0, y: -4 } })

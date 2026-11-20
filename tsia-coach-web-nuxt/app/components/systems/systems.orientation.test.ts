@@ -53,13 +53,14 @@ describe('systems orientation prototyping', () => {
     expect(JSON.stringify(scene.trains.value)).toBe(before)
   })
 
-  it('rejects blocked, too-tall and tower destinations without changing source material', () => {
+  it('moves a blocked turn to a free spot and rejects too-tall and tower destinations', () => {
     const a = rod('a')
     const obstacle = rod('blocker', x.x, x.y + 1)
     const scene = setup([a, obstacle])
-    const before = JSON.stringify(scene.trains.value)
-    expect(scene.apply(['a'], turn).allowed).toBe(false)
-    expect(JSON.stringify(scene.trains.value)).toBe(before)
+    expect(scene.apply(['a'], turn).allowed).toBe(true)
+    const turned = scene.trains.value.find(train => train.id === 'a')!
+    expect(turned.anchor).not.toEqual(a.anchor)
+    expect(scene.trains.value.find(train => train.id === 'blocker')).toEqual(obstacle)
     const tall = rod('tall')
     tall.parts[0]!.value = 5
     const other = setup([tall])

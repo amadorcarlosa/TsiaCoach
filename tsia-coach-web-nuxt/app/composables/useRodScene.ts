@@ -303,6 +303,8 @@ export function useRodScene(policy: ScenePolicy) {
                 }
 
                 const turned: (TurnedPiece & { inverse: string })[] = []
+                // How far the turned trains may move together and stay in their areas.
+                const room = { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity }
 
                 for (const train of selected) {
                     // A filled rectangle turns as a whole: rows become columns.
@@ -319,8 +321,13 @@ export function useRodScene(policy: ScenePolicy) {
                     // the board when the scene has no regions.
                     const region = policy.regions && regionAt(policy.regions, train.anchor)
                     const bounds = region ?? { x: 0, y: 0, width: policy.columns, depth: policy.rows }
-                    const edge = edgeShift(trainBounds(transformed.value), bounds)
+                    const box = trainBounds(transformed.value)
+                    const edge = edgeShift(box, bounds)
                     if (!edge) return reject('Cannot change orientation. The train does not fit in its area.')
+                    room.minX = Math.max(room.minX, bounds.x - (box.x + edge.x))
+                    room.maxX = Math.min(room.maxX, bounds.x + bounds.width - (box.x + edge.x + box.width))
+                    room.minY = Math.max(room.minY, bounds.y - (box.y + edge.y))
+                    room.maxY = Math.min(room.maxY, bounds.y + bounds.depth - (box.y + edge.y + box.depth))
 
                     turned.push({
                         id: train.id,
@@ -332,12 +339,13 @@ export function useRodScene(policy: ScenePolicy) {
                     train.parts = transformed.value.parts
                 }
 
-                // Validate all transformed destinations together.
+                // Validate all transformed destinations together. A blocked
+                // spot moves the turned trains to the nearest free one.
                 const { result, shifts } = settleTurn(turned, shifts => validate(
                     current.map(train => shifts.has(train.id)
                         ? { ...train, anchor: shifted(train.anchor, shifts.get(train.id)) }
                         : train),
-                ))
+                ), offsetsByDistance(room))
 
                 return result.allowed
                     ? {

@@ -91,7 +91,8 @@ const emit = defineEmits<{
           v-for="orientation in orientations"
           :key="orientation"
           class="orientation-button"
-          :disabled="!canOrient(orientation)"
+          :disabled="blocked || editingDisabled"
+          :refused="!canOrient(orientation)"
           :pressed="selectedOrientation === orientation"
           @click="emit('orient', orientation)"
         >
