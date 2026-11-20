@@ -43,6 +43,19 @@ public sealed class AppHostConfigurationTests
         await Assert.That(env.ContainsKey("PlaygroundEvents__Turso__AuthToken")).IsFalse();
     }
 
+    [Test]
+    public async Task Web_GetsPlaygroundEventsFlag_FromAppHostParameter()
+    {
+        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.TsiaCoach_AppHost>(
+            ["--Parameters:openrouter-api-key=test-key", "--Parameters:playground-events-enabled=true"]);
+        await using var app = await builder.BuildAsync();
+        var web = builder.Resources.OfType<IResourceWithEnvironment>().Single(resource => resource.Name == "web-nuxt");
+
+        var env = await web.GetEnvironmentVariableValuesAsync(DistributedApplicationOperation.Run);
+
+        await Assert.That(env["NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED"]).IsEqualTo("true");
+    }
+
     private static async Task<Dictionary<string, string>> ApiEnvironment(params string[] args)
     {
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.TsiaCoach_AppHost>(args);

@@ -16,6 +16,8 @@ var openRouterModels = Setting("openrouter-models", "", "Comma-separated OpenRou
 var foundryEndpoint = Setting("foundry-endpoint", "", "Azure OpenAI endpoint for Foundry mode.");
 var foundryResource = Setting("foundry-resource", "", "Foundry resource name for Anthropic models in Foundry mode.");
 var azureTenantId = Setting("azure-tenant-id", "", "Optional Azure tenant for Azure CLI sign-in in Foundry mode.");
+var playgroundEventsEnabled = Setting("playground-events-enabled", "false",
+    "Set to true to record playground actions (after learner consent) in the action log.");
 
 var api =
     builder.AddProject<Projects.TsiaCoach_WebApi>("api")
@@ -53,6 +55,7 @@ var web = builder.AddViteApp("web-nuxt", "../tsia-coach-web-nuxt")
     .WithPnpm()
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithEnvironment("NUXT_PUBLIC_TELEMETRY_ENABLED", "true")
+    .WithEnvironment("NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED", playgroundEventsEnabled)
     .WithEnvironment("NUXT_API_URL", api.GetEndpoint("http"))
     .WithHttpEndpoint(port: 3000, env: "PORT")
     .WaitFor(api);

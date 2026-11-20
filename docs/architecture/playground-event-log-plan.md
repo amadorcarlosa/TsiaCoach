@@ -83,7 +83,7 @@ Event types map directly onto the existing action unions:
 
 ## Implementation status (2026-11-19)
 
-Phases 1–5 are built; the log is **off by default** (`NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED=true` turns it on).
+Phases 1–5 are built; the log is **off by default** (the AppHost parameter `playground-events-enabled=true`, passed to Nuxt as `NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED`, turns it on).
 
 | Piece | Where |
 |---|---|
@@ -155,7 +155,7 @@ Choose an available database name. The `--tursodb` flag selects the preview engi
     } | ConvertTo-Json | dotnet user-secrets set --project TsiaCoach.AppHost
     if ($LASTEXITCODE -ne 0) { throw 'Could not save the Aspire settings.' }
 
-    $env:NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED = 'true'
+    aspire secret set "Parameters:playground-events-enabled" "true"
     aspire start
 }
 ```

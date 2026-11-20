@@ -30,7 +30,9 @@ const validMove = {
   }
 }
 
-describe('coaching proxy contract', () => {
+// Each test re-imports the coaching module (and Effect) after vi.resetModules(); under a
+// full parallel run that cold import alone can exceed Vitest's 5 s default.
+describe('coaching proxy contract', { timeout: 30_000 }, () => {
   beforeEach(() => {
     stubNitroGlobals()
   })
