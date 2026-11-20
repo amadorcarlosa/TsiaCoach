@@ -20,19 +20,18 @@ namespace TsiaCoach.WebApi.EndPoints;
 public static partial class PlaygroundSessionEndpoints
 {
     public const int MaxEventsPerBatch = 100;
-    public const int MaxReasonLength = 200;
+    public const int MaxReasonLength = PlaygroundEventSchema.MaxReasonLength;
     public const int MaxDataBytes = 4 * 1024;
     public const int MaxSceneSummaryEntries = 40;
     public const int MaxReadLimit = 1_000;
 
-    public static readonly IReadOnlySet<string> Playgrounds = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "bar-rod", "array-rod", "fraction-rod", "math-tabla", "systems",
-        "rod-count-systems", "base-ten", "algebra-tiles", "scaffold", "rod-canvas"
-    };
+    /// <summary>Rate-limiter policy for session starts; see <see cref="PlaygroundEventOptions.SessionStartsPerMinute"/>.</summary>
+    public const string StartRateLimitPolicy = "playground-session-start";
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")]
-    private static partial Regex Token();
+    public static readonly IReadOnlySet<string> Playgrounds =
+        new HashSet<string>(PlaygroundEventSchema.Playgrounds, StringComparer.Ordinal);
+
+    private static Regex Token() => PlaygroundEventSchema.Token();
 
     [GeneratedRegex("^[A-Za-z0-9_.:-]{1,128}$")]
     private static partial Regex Link();
@@ -46,9 +45,11 @@ public static partial class PlaygroundSessionEndpoints
 
         sessions.MapPost("/", Start)
             .WithName("StartPlaygroundSession")
+            .RequireRateLimiting(StartRateLimitPolicy)
             .Produces<PlaygroundSessionResponse>(StatusCodes.Status201Created)
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
-            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         sessions.MapPost("/{sessionId}/events", Append)
             .WithName("AppendPlaygroundEvents")
@@ -194,14 +195,18 @@ public static partial class PlaygroundSessionEndpoints
                 return "Event sequence numbers cannot be negative.";
             if (item.Type is null || !Token().IsMatch(item.Type))
                 return "Invalid event type.";
+            if (!PlaygroundEventSchema.Records(session.Playground, item.Type))
+                return "This playground does not record that event type.";
             if (item.Outcome is not ("applied" or "rejected"))
                 return "Event outcome must be applied or rejected.";
-            if (item.Reason is { Length: 0 or > MaxReasonLength })
-                return $"Rejection reasons must be 1 to {MaxReasonLength} characters.";
+            if (item.Reason is not null && !PlaygroundEventSchema.ReasonCode().IsMatch(item.Reason))
+                return $"Rejection reasons must be codes of lowercase words and hyphens, up to {MaxReasonLength} characters.";
             if (item.TraceId is not null && !TraceId().IsMatch(item.TraceId))
                 return "Invalid trace ID.";
             if (item.Data.ValueKind != JsonValueKind.Object || item.Data.GetRawText().Length > MaxDataBytes)
                 return "Event data must be a small JSON object.";
+            if (!PlaygroundEventSchema.IsValidData(item.Data))
+                return "Event data may hold only allowlisted fields.";
             if (item.SceneSummary is { } summary &&
                 (summary.Count > MaxSceneSummaryEntries || summary.Keys.Any(key => !Token().IsMatch(key))))
                 return "Invalid scene summary.";

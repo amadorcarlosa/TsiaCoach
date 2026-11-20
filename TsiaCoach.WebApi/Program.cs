@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.Extensions.Options;
 using TsiaCoach.WebApi;
 using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.EndPoints;
@@ -43,6 +45,22 @@ else
     builder.Services.AddSingleton<IPlaygroundEventStore, InMemoryPlaygroundEventStore>();
 }
 builder.Services.AddHostedService<PlaygroundEventRetentionService>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(PlaygroundSessionEndpoints.StartRateLimitPolicy, context =>
+    {
+        int permits = context.RequestServices.GetRequiredService<IOptions<PlaygroundEventOptions>>().Value.SessionStartsPerMinute;
+        return permits <= 0
+            ? RateLimitPartition.GetNoLimiter("playground-session-start")
+            : RateLimitPartition.GetFixedWindowLimiter("playground-session-start", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permits,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
+    });
+});
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -72,6 +90,7 @@ else
 {
     app.UseExceptionHandler();
 }
+app.UseRateLimiter();
 app.MapGet("/", () => "Hello World!");
 app.MapGet("/health", () => Results.Ok("healthy"));
 var api = app.MapGroup("/api");

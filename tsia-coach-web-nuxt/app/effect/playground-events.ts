@@ -2,6 +2,7 @@ import { Data, Effect, Fiber, Queue, Schedule } from 'effect'
 import { trace } from '@opentelemetry/api'
 import {
   MAX_EVENTS_PER_BATCH,
+  reasonCode,
   type PlaygroundEvent,
   type PlaygroundEventBatch,
   type PlaygroundEventData,
@@ -14,6 +15,7 @@ import { workflowFeature, type WorkflowContext } from './registry'
 export type PlaygroundEventDraft = {
   type: string
   outcome: 'applied' | 'rejected'
+  /** Authored text; the log sends only its `reasonCode`. */
   reason?: string
   data: PlaygroundEventData
   sceneSummary?: SceneSummary
@@ -162,7 +164,7 @@ export function makePlaygroundEventLog(options: PlaygroundEventLogOptions) {
             ...(trace ? { traceId: trace } : {}),
             type: draft.type,
             outcome: draft.outcome,
-            ...(draft.reason ? { reason: draft.reason } : {}),
+            ...(draft.reason ? { reason: reasonCode(draft.reason) } : {}),
             data: draft.data,
             ...(draft.sceneSummary ? { sceneSummary: draft.sceneSummary } : {}),
           }

@@ -23,7 +23,7 @@ PlaygroundEvent = {
   traceId?: string
   type: <per-playground literal>
   outcome: 'applied' | 'rejected'
-  reason?: string       // rejection reason (authored text from build(), not learner text)
+  reason?: string       // rejection code derived from the authored text (see reasonCode), never prose
   data: <per-type schema>   // e.g. { pieceIds, pieceKinds, counts, from, to }
   sceneSummary?: <small derived state>  // e.g. rod counts by value, tile totals; never full scene
 }
@@ -98,7 +98,8 @@ Instrumented: algebra tiles, base ten, bar, array, fraction, MathTabla, systems 
 
 Differences from the plan above:
 
-- `data` is one strict allowlist shared by every type, not a schema per type. Its strings must be identifier tokens with no spaces, so free text cannot get in; `reason` is the only prose field (authored, 1–200 characters).
+- `data` is one strict allowlist shared by every type, not a schema per type. Its strings must be identifier tokens with no spaces, so free text cannot get in. `reason` is a rejection code: the recorder reduces the scene's authored text with `reasonCode` (lowercase words and hyphens, numbers become `n`, at most 64 characters), so `Select exactly 8 x rods; 3 selected.` is sent as `select-exactly-n-x-rods-n-selected`. Local `recent()` history keeps the readable text.
+- The API repeats every check (`PlaygroundEventSchema`): the type per playground, each `data` field and its shape, and the reason-code pattern. It does not trust Nuxt.
 - A batch carries one `sessionId`; the Nuxt route forwards it to `POST /api/playground-sessions/{id}/events`.
 - Events recorded before the session has opened cannot go out by beacon, so if the page closes in the first moments those events are lost.
 - The summary's stuck signal is the same refusal (type and reason) three or more times with no later success of that type. Time on task adds the gaps between events, each capped at 5 minutes.
@@ -140,7 +141,9 @@ On the API, `CoachingTurnService` reads the attempt's sessions (`PlaygroundActiv
 - Until the learner allows it, recorders record nothing and open no session, so nothing leaves the browser. Declining keeps every playground usable.
 - Sessions opened with consent are stored with `consent = 'granted'`.
 
-**Free text: never.** Only identifier tokens, numbers and authored rejection reasons are stored; for `coach.asked`, only the question length.
+**Free text: never.** Only identifier tokens, numbers and rejection codes are stored; for `coach.asked`, only the question length.
+
+**Rate limits.** Events: 600 per session per minute (Nuxt). Session starts: 120 per client address and 1,200 overall per minute (Nuxt), plus `PlaygroundEvents:SessionStartsPerMinute` (default 1,200; 0 turns it off) on the API, so rotating sessions cannot get around the event budget.
 
 Still open: hosting the production Turso database and setting its token; a learner-facing way to change the consent choice later; and an export or deletion request flow for families (the API endpoints exist; there is no UI).
 

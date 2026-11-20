@@ -5,7 +5,7 @@ import { integer, nonnegativeInteger, schema } from './schema'
  * Learner action log: committed playground actions, never pointer frames.
  * Product data, kept apart from tracing; `traceId` exists only to correlate.
  * Every field is allowlisted. Strings are identifier tokens, so a payload cannot
- * carry free text; `reason` is authored rejection text from the scene, bounded.
+ * carry free text. `reason` is a rejection code (see `reasonCode`), never a sentence.
  */
 
 export const playgrounds = [
@@ -50,8 +50,29 @@ export type PlaygroundEventType<P extends PlaygroundName = PlaygroundName> = typ
 
 export const MAX_EVENTS_PER_BATCH = 100
 export const MAX_BATCH_BYTES = 256 * 1024
-export const MAX_REASON_LENGTH = 200
+export const MAX_REASON_LENGTH = 64
 const MAX_IDS = 100
+
+/** Lowercase words joined by hyphens; no digits, spaces or punctuation. */
+export const reasonCodePattern = /^[a-z](?:[a-z-]{0,62}[a-z])?$/
+
+/**
+ * Reduces authored rejection text to a code such as `select-exactly-n-x-rods`.
+ * Numbers become `n`, so counts and names typed into a scene never leave the
+ * browser, and the code is too constrained to carry instructions to the coach.
+ */
+export function reasonCode(text: string): string {
+  const code = text
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\d+(?:[.,]\d+)*/g, ' n ')
+    .replace(/[^a-z]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_REASON_LENGTH)
+    .replace(/-+$/, '')
+  return reasonCodePattern.test(code) ? code : 'rejected'
+}
 
 /** Identifier-shaped text only: no spaces, so no sentences. */
 const token = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/))
@@ -104,7 +125,7 @@ const envelope = Schema.Struct({
   traceId: Schema.optionalKey(traceId),
   type: token,
   outcome: Schema.Literals(['applied', 'rejected']),
-  reason: Schema.optionalKey(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_REASON_LENGTH))),
+  reason: Schema.optionalKey(Schema.String.check(Schema.isPattern(reasonCodePattern))),
   data: playgroundEventDataSchema,
   sceneSummary: Schema.optionalKey(sceneSummarySchema),
 })

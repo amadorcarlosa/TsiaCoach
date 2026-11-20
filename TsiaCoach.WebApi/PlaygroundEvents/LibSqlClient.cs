@@ -19,6 +19,12 @@ public sealed class PlaygroundEventOptions
 
     public TimeSpan RetentionSweepInterval { get; set; } = TimeSpan.FromDays(1);
 
+    /// <summary>
+    /// Session starts allowed per minute across the whole API (all traffic arrives via Nuxt,
+    /// which also limits per client). Zero or less turns the limit off.
+    /// </summary>
+    public int SessionStartsPerMinute { get; set; } = 1_200;
+
     public TursoOptions Turso { get; set; } = new();
 }
 

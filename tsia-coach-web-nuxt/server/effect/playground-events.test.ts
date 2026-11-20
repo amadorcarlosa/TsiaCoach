@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSessionRateLimiter, playgroundEventPolicy } from './playground-events'
+import { createSessionRateLimiter, createSessionStartLimiter, playgroundEventPolicy } from './playground-events'
 
 const allowed = { enabled: true, origin: 'http://app', requestOrigin: 'http://app', contentType: 'application/json; charset=utf-8' }
 
@@ -36,5 +36,21 @@ describe('session rate limiter', () => {
     // "a" was evicted, so its budget starts over.
     expect(limiter.take('a', 1)).toBe(true)
     expect(limiter.take('c', 1)).toBe(false)
+  })
+})
+
+describe('session start limiter', () => {
+  it('caps starts per client and overall', () => {
+    let time = 0
+    const limiter = createSessionStartLimiter({ perClient: 2, global: 3, windowMillis: 1000, maxClients: 10, now: () => time })
+
+    expect(limiter.take('1.1.1.1')).toBe(true)
+    expect(limiter.take('1.1.1.1')).toBe(true)
+    expect(limiter.take('1.1.1.1')).toBe(false)
+    expect(limiter.take('2.2.2.2')).toBe(true)
+    // Rotating addresses still hits the global cap.
+    expect(limiter.take('3.3.3.3')).toBe(false)
+    time = 1000
+    expect(limiter.take('1.1.1.1')).toBe(true)
   })
 })

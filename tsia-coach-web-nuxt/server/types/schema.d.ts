@@ -446,6 +446,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/playground-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StartPlaygroundSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playground-sessions/{sessionId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPlaygroundEvents"];
+        put?: never;
+        post: operations["AppendPlaygroundEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playground-sessions/{sessionId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPlaygroundEventSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playground-sessions/{sessionId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ExportPlaygroundSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playground-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["DeletePlaygroundSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playground-sessions/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ExportPlaygroundSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -480,6 +576,16 @@ export interface components {
         AnswerMathBindingResponse: {
             answerChoiceId: string;
             mathObjectId: string;
+        };
+        AppendPlaygroundEventsRequest: {
+            sessionId: string;
+            events: components["schemas"]["PlaygroundEventRequest"][];
+        };
+        AppendPlaygroundEventsResponse: {
+            /** Format: int32 */
+            accepted: number | string;
+            /** Format: int32 */
+            duplicates: number | string;
         };
         AttemptPhaseResponse: components["schemas"]["AttemptPhaseResponseBeforeCheckResponse"] | components["schemas"]["AttemptPhaseResponseAfterIncorrectCheckResponse"] | components["schemas"]["AttemptPhaseResponseAfterCorrectCheckResponse"];
         AttemptPhaseResponseAfterCorrectCheckResponse: {
@@ -721,6 +827,101 @@ export interface components {
             /** Format: int32 */
             y: number | string;
             orientation: string;
+        };
+        PlaygroundEventRecord: {
+            id: string;
+            sessionId: string;
+            playground: string;
+            /** Format: int64 */
+            seq: number | string;
+            /** Format: date-time */
+            at: string;
+            traceId: null | string;
+            type: string;
+            outcome: string;
+            reason: null | string;
+            data: components["schemas"]["JsonElement"];
+            sceneSummary: null | {
+                [key: string]: number | string;
+            };
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        PlaygroundEventRequest: {
+            id: string;
+            sessionId: string;
+            playground: string;
+            /** Format: int64 */
+            seq: number | string;
+            /** Format: date-time */
+            at: string;
+            type: string;
+            outcome: string;
+            data: components["schemas"]["JsonElement"];
+            traceId?: null | string;
+            reason?: null | string;
+            sceneSummary?: null | {
+                [key: string]: number | string;
+            };
+        };
+        PlaygroundEventsResponse: {
+            sessionId: string;
+            playground: string;
+            events: components["schemas"]["PlaygroundEventRecord"][];
+        };
+        PlaygroundEventSummary: {
+            sessionId: string;
+            playground: string;
+            /** Format: int32 */
+            eventCount: number | string;
+            /** Format: int32 */
+            appliedCount: number | string;
+            /** Format: int32 */
+            rejectedCount: number | string;
+            countsByType: {
+                [key: string]: number | string;
+            };
+            rejections: components["schemas"]["PlaygroundRejectionSummary"][];
+            /** Format: double */
+            timeOnTaskSeconds: number | string;
+            /** Format: date-time */
+            firstEventAt: null | string;
+            /** Format: date-time */
+            lastEventAt: null | string;
+            recent: components["schemas"]["PlaygroundEventRecord"][];
+            stuckSignals: components["schemas"]["PlaygroundStuckSignal"][];
+            latestSceneSummary: null | {
+                [key: string]: number | string;
+            };
+        };
+        PlaygroundRejectionSummary: {
+            type: string;
+            reason: string;
+            /** Format: int32 */
+            count: number | string;
+        };
+        PlaygroundSession: {
+            id: string;
+            playground: string;
+            attemptId: null | string;
+            scaffoldSessionId: null | string;
+            levelId: null | string;
+            /** Format: date-time */
+            startedAt: string;
+            consent?: null | string;
+        };
+        PlaygroundSessionExport: {
+            session: components["schemas"]["PlaygroundSession"];
+            events: components["schemas"]["PlaygroundEventRecord"][];
+        };
+        PlaygroundSessionResponse: {
+            sessionId: string;
+        };
+        PlaygroundStuckSignal: {
+            type: string;
+            reason: string;
+            /** Format: int32 */
+            repeats: number | string;
         };
         PracticeItemPromptResponse: {
             id: string;
@@ -1024,6 +1225,13 @@ export interface components {
         };
         StartAttemptRequest: {
             practiceItemId: string;
+        };
+        StartPlaygroundSessionRequest: {
+            playground: string;
+            attemptId?: null | string;
+            scaffoldSessionId?: null | string;
+            levelId?: null | string;
+            consent?: null | string;
         };
         SuccessCheckResponse: components["schemas"]["SuccessCheckResponseLengthsAreEquivalentCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesComputedFitCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesIntegerDomainCheckResponse"] | components["schemas"]["SuccessCheckResponseAllGapsTraversedCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesPartCompositionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentScalarCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesLatentExpressionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesCorrectAnswerCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowCompositionsCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowPartitionCheckResponse"] | components["schemas"]["SuccessCheckResponseMatchesRowSelectionCheckResponse"];
         SuccessCheckResponseAllGapsTraversedCheckResponse: {
@@ -1586,6 +1794,266 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartPlaygroundSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartPlaygroundSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaygroundSessionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPlaygroundEvents: {
+        parameters: {
+            query?: {
+                since?: number | string;
+                limit?: number | string;
+            };
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaygroundEventsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AppendPlaygroundEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendPlaygroundEventsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendPlaygroundEventsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPlaygroundEventSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaygroundEventSummary"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ExportPlaygroundSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaygroundSessionExport"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeletePlaygroundSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ExportPlaygroundSessions: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -73,6 +73,7 @@ describe('playground event log', () => {
 
     await until(() => fake.sent.length === 1)
     expect(playgroundEventBatch.safeParse(fake.sent[0]).success).toBe(true)
+    expect(fake.sent[0]!.events[1]!.reason).toBe('keep-tiles-inside-the-board-without-overlapping')
   })
 
   it('opens each session once and sends one request per session', async () => {

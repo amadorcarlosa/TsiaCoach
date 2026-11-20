@@ -27,7 +27,7 @@ public sealed class CoachPlaygroundActivityTests : CoachApiTestBase
                 at = DateTimeOffset.UnixEpoch.AddSeconds(seq).ToString("O"),
                 type = "step.checked",
                 outcome = "rejected",
-                reason = "The rods do not match yet.",
+                reason = "the-rods-do-not-match-yet",
                 data = new { stepId = "step-rebuild-from-twos-and-ones", satisfied = false },
             })
             .ToArray();
@@ -42,7 +42,7 @@ public sealed class CoachPlaygroundActivityTests : CoachApiTestBase
         CoachingAgentDefinition definition = Runner.Definitions.Single();
         await Assert.That(definition.Prompt).Contains("\"playgroundActivity\"");
         await Assert.That(definition.Prompt).Contains("\"step.checked\": 3");
-        await Assert.That(definition.Prompt).Contains("The rods do not match yet.");
+        await Assert.That(definition.Prompt).Contains("the-rods-do-not-match-yet");
         await Assert.That(definition.Prompt).Contains("\"repeats\": 3");
         // Event data stays out: the probe prompt must not reveal step ids.
         await Assert.That(definition.Prompt).DoesNotContain("step-");

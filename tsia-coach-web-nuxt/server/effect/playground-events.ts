@@ -58,6 +58,28 @@ export function createSessionRateLimiter(options: {
 /** Generous for a learner (about ten actions a second), tight for a script. */
 export const playgroundEventLimiter = createSessionRateLimiter({ limit: 600, windowMillis: 60_000, maxSessions: 10_000 })
 
+/**
+ * Session starts per client, so rotating sessions cannot dodge the event
+ * budget. Forwarded addresses can be forged, so a global cap backs it up.
+ */
+export function createSessionStartLimiter(options: {
+  perClient: number
+  global: number
+  windowMillis: number
+  maxClients: number
+  now?: () => number
+}) {
+  const clients = createSessionRateLimiter({ limit: options.perClient, windowMillis: options.windowMillis, maxSessions: options.maxClients, now: options.now })
+  const all = createSessionRateLimiter({ limit: options.global, windowMillis: options.windowMillis, maxSessions: 1, now: options.now })
+  return {
+    /** Takes one start for `client`, or returns false when either budget is spent. */
+    take: (client: string): boolean => clients.take(client, 1) && all.take('all', 1),
+  }
+}
+
+/** Roomy enough for a classroom behind one address. */
+export const playgroundSessionStartLimiter = createSessionStartLimiter({ perClient: 120, global: 1200, windowMillis: 60_000, maxClients: 10_000 })
+
 export function startPlaygroundSessionEffect(event: H3Event, request: StartPlaygroundSession) {
   return backendApiFor(event).request({
     path: '/api/playground-sessions',

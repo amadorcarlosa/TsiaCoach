@@ -1,9 +1,9 @@
 import { Effect } from 'effect'
-import { defineEventHandler, getHeader, getRequestURL, setResponseStatus } from 'h3'
+import { defineEventHandler, getHeader, getRequestIP, getRequestURL, setResponseStatus } from 'h3'
 import { startPlaygroundSession } from '#shared/effect/playground-events'
 import { requestBody } from '#server/effect/input'
 import { httpError } from '#server/effect/errors'
-import { playgroundEventPolicy, startPlaygroundSessionEffect } from '#server/effect/playground-events'
+import { playgroundEventPolicy, playgroundSessionStartLimiter, startPlaygroundSessionEffect } from '#server/effect/playground-events'
 import { runServerEffect } from '#server/effect/runtime'
 
 export default defineEventHandler(async (event) => {
@@ -16,6 +16,11 @@ export default defineEventHandler(async (event) => {
   if (policy.status !== 200) {
     event.node.req.resume()
     setResponseStatus(event, policy.status)
+    return null
+  }
+  if (!playgroundSessionStartLimiter.take(getRequestIP(event, { xForwardedFor: true }) ?? 'unknown')) {
+    event.node.req.resume()
+    setResponseStatus(event, 429)
     return null
   }
   const session = await runServerEffect(event, Effect.gen(function* () {
