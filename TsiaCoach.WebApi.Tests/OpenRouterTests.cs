@@ -36,6 +36,39 @@ public sealed class OpenRouterTests
     }
 
     [Test]
+    public async Task OpenRouter_AcceptsCommaSeparatedModels_FromAspireParameter()
+    {
+        var configuration = AspireConfiguration("openai/first-model, anthropic/second-model");
+        var services = new ServiceCollection();
+        services.AddAgentProvider(configuration);
+        services.AddOptions<CoachingAgentOptions>().Bind(configuration.GetSection("CoachingAgent"));
+        using var provider = services.BuildServiceProvider();
+
+        var names = provider.GetRequiredService<AgentFactory>().AvailableModels.Select(model => model.Name).ToArray();
+        await Assert.That(names).IsEquivalentTo(["openai/first-model", "anthropic/second-model"]);
+        await Assert.That(provider.GetRequiredService<IOptions<CoachingAgentOptions>>().Value.Model)
+            .IsEqualTo("openai/first-model");
+    }
+
+    [Test]
+    [Arguments("openai/a,,openai/b")]
+    [Arguments("openai/a,openai/a")]
+    [Arguments("openai/a,")]
+    public async Task OpenRouter_RejectsInvalidCommaSeparatedModels(string models)
+    {
+        await Assert.That(() => new ServiceCollection().AddAgentProvider(AspireConfiguration(models)))
+            .Throws<InvalidOperationException>();
+    }
+
+    private static IConfigurationRoot AspireConfiguration(string models) => new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AgentProvider"] = "OpenRouter",
+            ["OpenRouter:ApiKey"] = "test-key",
+            ["OpenRouter:Models"] = models
+        }).Build();
+
+    [Test]
     [Arguments("OpenRouter:ApiKey", "")]
     [Arguments("OpenRouter:Models:0", "typesafe/jev-1.13")]
     [Arguments("CoachingAgent:Model", "unlisted/model")]

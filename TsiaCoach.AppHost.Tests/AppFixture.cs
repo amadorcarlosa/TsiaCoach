@@ -20,7 +20,10 @@ public sealed class AppFixture
     protected override void ConfigureBuilder(
         IDistributedApplicationTestingBuilder builder)
     {
+        // Pin Foundry mode so local AppHost secrets for another provider don't change the catalog.
         builder.CreateResourceBuilder<ProjectResource>("api")
+            .WithEnvironment("AI__Enabled", "true")
+            .WithEnvironment("AgentProvider", "Foundry")
             .WithEnvironment(
                 "endpoint",
                 "https://example.invalid")

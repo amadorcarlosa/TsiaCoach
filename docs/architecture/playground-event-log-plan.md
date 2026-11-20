@@ -150,7 +150,7 @@ Choose an available database name. The `--tursodb` flag selects the preview engi
     }
 
     @{
-        'Turso:Url' = $databaseUrl.Trim()
+        'Parameters:turso-url' = $databaseUrl.Trim()
         'Parameters:turso-auth-token' = $databaseToken.Trim()
     } | ConvertTo-Json | dotnet user-secrets set --project TsiaCoach.AppHost
     if ($LASTEXITCODE -ne 0) { throw 'Could not save the Aspire settings.' }
@@ -160,7 +160,7 @@ Choose an available database name. The `--tursodb` flag selects the preview engi
 }
 ```
 
-- **Local development.** Aspire uses the hosted database when `Turso:Url` is configured. With no URL, it uses the in-memory event store and sessions expire when the API restarts.
+- **Local development.** Aspire uses the hosted database when the `Parameters:turso-url` AppHost secret is set. With no URL, it uses the in-memory event store and sessions expire when the API restarts. (The old `Turso:Url` key is no longer read; rename it.)
 - **Deployment.** The Aspire publish model requires a `turso-url` parameter and a secret `turso-auth-token` parameter. When running the API directly, set `PlaygroundEvents__Store=Turso`, `PlaygroundEvents__Turso__Url` to the HTTPS database URL, and `PlaygroundEvents__Turso__AuthToken` to its database token.
 - **Store tests.** Point `TSIA_TEST_TURSO_URL` and `TSIA_TEST_TURSO_TOKEN` at a separate disposable preview database and run `dotnet test --project TsiaCoach.WebApi.Tests`. The contract suite exercises deletion and a database-wide retention sweep. With these settings absent, the default suite uses in-memory storage.
 

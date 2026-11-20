@@ -18,7 +18,7 @@ public static class AgentProviderRegistration
         if (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
         {
             string key = Required(configuration, "OpenRouter:ApiKey");
-            string[] models = configuration.GetSection("OpenRouter:Models").Get<string[]>() ?? [];
+            string[] models = Models(configuration.GetSection("OpenRouter:Models"));
             if (models.Length == 0 || models.Any(model =>
                     string.IsNullOrWhiteSpace(model) || model != model.Trim() ||
                     !model.Contains('/') || model.StartsWith("typesafe/", StringComparison.OrdinalIgnoreCase)) ||
@@ -47,7 +47,10 @@ public static class AgentProviderRegistration
         string endpoint = Required(configuration, "endpoint");
         string resource = Required(configuration, "foundryResource");
         services.AddSingleton<TokenCredential>(new ChainedTokenCredential(
-            new AzureCliCredential(new AzureCliCredentialOptions { TenantId = configuration["tenantId"] }),
+            new AzureCliCredential(new AzureCliCredentialOptions
+            {
+                TenantId = string.IsNullOrWhiteSpace(configuration["tenantId"]) ? null : configuration["tenantId"]
+            }),
             new EnvironmentCredential()));
         services.AddSingleton(sp => new FoundryTokenCredential(sp.GetRequiredService<TokenCredential>(), resource));
         services.AddSingleton(sp => new ModelClient(
@@ -56,6 +59,12 @@ public static class AgentProviderRegistration
         services.AddSingleton(sp => new AgentFactory(sp.GetRequiredService<ModelClient>()));
         return services;
     }
+
+    // Accepts an indexed list (OpenRouter:Models:0) or one comma-separated value, as Aspire passes it.
+    private static string[] Models(IConfigurationSection section) =>
+        !string.IsNullOrWhiteSpace(section.Value)
+            ? section.Value.Split(',', StringSplitOptions.TrimEntries)
+            : section.Get<string[]>() ?? [];
 
     private static string Required(IConfiguration configuration, string name) =>
         !string.IsNullOrWhiteSpace(configuration[name])

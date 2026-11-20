@@ -7,55 +7,60 @@ The Nuxt admin model picker reads the configured models from `/api/models`.
 
 ## Local setup
 
+The Aspire AppHost owns these settings and the key. It declares them as parameters
+and forwards them to the API, so set them once in the AppHost's user secrets with
+`aspire secret set` (from the repository root). Never put the key in Nuxt config,
+source control, or a chat message.
+
+| AppHost parameter | API setting | Default |
+| --- | --- | --- |
+| `ai-enabled` | `AI:Enabled` | `true` |
+| `agent-provider` | `AgentProvider` | `Foundry` |
+| `openrouter-api-key` (secret) | `OpenRouter:ApiKey` | required |
+| `openrouter-models` | `OpenRouter:Models` (comma-separated) | empty |
+| `foundry-endpoint` | `endpoint` | empty |
+| `foundry-resource` | `foundryResource` | empty |
+| `azure-tenant-id` | `tenantId` | empty |
+
+To use OpenRouter:
+
+```powershell
+aspire secret set "Parameters:agent-provider" "OpenRouter"
+aspire secret set "Parameters:openrouter-api-key" "YOUR_OPENROUTER_KEY"
+aspire secret set "Parameters:openrouter-models" "openai/gpt-5.4-mini"
+aspire start
+```
+
 To run without AI calls or provider credentials:
 
 ```powershell
-dotnet user-secrets set "AI:Enabled" "false" --project TsiaCoach.WebApi
+aspire secret set "Parameters:ai-enabled" "false"
 ```
 
-In Development, this skips provider setup, returns an empty model list, and makes
+With AI disabled, the API skips provider setup, returns an empty model list, and makes
 agent, coaching, and decision requests return HTTP 503 with "AI is disabled".
-Other API features remain available. Restart after changing the setting.
-Set `AI:Enabled` to `true` to restore AI (the default); deployed environments can
-use `AI__Enabled=false`.
-
-From the repository root, store these settings in the WebApi's development user
-secrets. Replace the key placeholder locally; never put the key in Nuxt config,
-source control, or a chat message.
-
-```powershell
-dotnet user-secrets set "AgentProvider" "OpenRouter" --project TsiaCoach.WebApi
-dotnet user-secrets set "OpenRouter:ApiKey" "YOUR_OPENROUTER_KEY" --project TsiaCoach.WebApi
-dotnet user-secrets set "OpenRouter:Models:0" "openai/gpt-5.4-mini" --project TsiaCoach.WebApi
-dotnet user-secrets set "CoachingAgent:Model" "openai/gpt-5.4-mini" --project TsiaCoach.WebApi
-dotnet run --project TsiaCoach.WebApi
-```
+Other API features remain available. The OpenRouter key parameter is still required
+because Jev decisions use it.
 
 Use a currently available chat model ID from OpenRouter's catalog. Coaching needs
-JSON object output support. Add additional models as `OpenRouter:Models:1`, etc.
-Only listed models can be requested. If `CoachingAgent:Model` is absent, the first
-listed model is used; remove or update an old Foundry coaching model setting.
+JSON object output support. List more models separated by commas
+(`openai/gpt-5.4-mini,anthropic/claude-sonnet-4.5`). Only listed models can be
+requested, and the first one coaches. Restart Aspire (`aspire start`) after changing
+parameters.
 
 In OpenRouter mode, Azure endpoint, Foundry resource, and Azure authentication are
-not required. Restart the API after configuration changes.
+not required. The key is forwarded only to the API, not to Nuxt.
 
-### Running through Aspire
+Values set in the API's own user secrets (`dotnet user-secrets --project TsiaCoach.WebApi`)
+are overridden by the AppHost when running through Aspire. They only apply when the API
+runs on its own, where `OpenRouter:Models:0`, `OpenRouter:Models:1`, … also work.
 
-The AppHost declares a secret parameter named `openrouter-api-key` and forwards it
-to the API as `OpenRouter__ApiKey`. Store the key in AppHost user secrets:
+### Deployment
 
-```powershell
-dotnet user-secrets set "Parameters:openrouter-api-key" "YOUR_OPENROUTER_KEY" --project TsiaCoach.AppHost
-```
-
-For Aspire runs, use this AppHost secret instead of the WebApi key command above.
-Keep the provider and model settings in WebApi user secrets as shown above; adding
-the key alone does not switch the provider to OpenRouter. Restart Aspire after
-changing AppHost wiring. The key is forwarded only to the API, not to Nuxt.
-
-For deployed environments, use a secret store or environment variables:
-`AgentProvider`, `OpenRouter__ApiKey`, `OpenRouter__Models__0`, and
-`CoachingAgent__Model`. User secrets are loaded only in Development.
+Aspire publish and deploy ask for the same parameters. For non-interactive deploys, set
+them as environment variables on the `aspire deploy` process, for example
+`Parameters__openrouter-api-key` and `Parameters__agent-provider`. `aspire secret set`
+is for local development only.
 
 ## Verify
 
@@ -66,9 +71,10 @@ validation still resolves authored categories to messages and authorized routes.
 Provider authentication errors map to 502, rate limits to 429, and an unlisted
 model to 400. Requests incur charges on your OpenRouter account.
 
-To switch back, set `AgentProvider` to `Foundry`, restore a Foundry
-`CoachingAgent:Model` (or remove that override), and supply the existing Azure
-configuration.
+To switch back, set `Parameters:agent-provider` to `Foundry` and set
+`Parameters:foundry-endpoint` and `Parameters:foundry-resource` (plus
+`Parameters:azure-tenant-id` if needed). Remove any old `CoachingAgent:Model` override
+that names a model the new provider doesn't list.
 
 ## Jev decisions
 
