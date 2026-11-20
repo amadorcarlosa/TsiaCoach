@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { createResourceScope } from '~/effect/scoped-resource'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import GridSurface from '~/components/grid/surface/GridSurface.vue'
@@ -37,7 +38,7 @@ const { phonePortrait, trayOpen, visibleColumns, cellSize, boardPaddingY } = use
 
 const editingDisabled = computed(() => !props.active || phonePortrait.value)
 
-const scene = useAlgebraTileScene({ columns: fullColumns, rows: boardRows, editable: () => !editingDisabled.value })
+const scene = instrumentScene(useAlgebraTileScene({ columns: fullColumns, rows: boardRows, editable: () => !editingDisabled.value }), 'algebra-tiles')
 
 const interaction = useManipulativeInteraction<AlgebraTile, AlgebraTileAction>({
   scene: { ...scene, pieces: () => scene.tiles.value },

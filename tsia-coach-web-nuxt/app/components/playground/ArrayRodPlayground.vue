@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { createArrayGoalAdapter } from './goals/board-goal-adapters'
 import { computed, ref, watch } from 'vue'
 import BoardViewControls from '~/components/grid/BoardViewControls.vue'
@@ -88,7 +89,7 @@ const policy: ScenePolicy = {
   allowNegativeRods: true,
   allowZeroPairCancellation: true,
 }
-const scene = useRodScene(policy)
+const scene = instrumentScene(useRodScene(policy), 'array-rod')
 
 // While a zero pair is previewed, the board takes no edits at all.
 const preview = useCancellationPreview({
@@ -228,7 +229,7 @@ function resizeBoard() {
   applySize(columns, rows)
 }
 
-defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene() }), clear: () => replaceScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene(), recentActions: scene.events.recent() }), clear: () => replaceScene([]) })
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 const zeroPairMenuChoice = useZeroPairMenuChoice(scene)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { createMathTablaGoalAdapter } from './goals/board-goal-adapters'
 import { computed, ref } from 'vue'
 import MathTablaBoard from '~/components/tabla/MathTablaBoard.vue'
@@ -120,7 +121,7 @@ const policy: ScenePolicy = {
   },
 }
 
-const scene = useRodScene(policy)
+const scene = instrumentScene(useRodScene(policy), 'math-tabla')
 
 /** Board cells a train covers, as "x,y" keys. */
 function cellsOf(train: (typeof scene.trains.value)[number]): string[] {
@@ -235,7 +236,7 @@ function restoreScene(source: SceneSnapshot) {
   return result
 }
 
-defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene() }), clear: () => restoreScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board: board.value, trains: captureScene(), recentActions: scene.events.recent() }), clear: () => restoreScene([]) })
 
 const factorMenuChoice = useFactorMenuChoice(scene)
 const areaGroupingMenuChoice = useAreaGroupingMenuChoice(scene)

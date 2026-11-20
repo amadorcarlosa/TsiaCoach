@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { computed, ref, watch } from 'vue'
 import { baseTenTiltDegrees, baseTenProjectionExtent } from '~/components/basetenblocks/base-ten-view'
 import { baseTenDimensions, type BaseTenBlock } from '~/components/basetenblocks/base10.types'
@@ -36,7 +37,7 @@ const layout = useBaseTenViewport(viewport, () => {
 }, projection)
 
 const editingDisabled = computed(() => !props.active || layout.phonePortrait.value)
-const scene = useBaseTenScene({ columns: boardSize, rows: boardSize, editable: () => !editingDisabled.value })
+const scene = instrumentScene(useBaseTenScene({ columns: boardSize, rows: boardSize, editable: () => !editingDisabled.value }), 'base-ten')
 
 const interaction = useManipulativeInteraction<BaseTenBlock, BaseTenAction>({
   scene: { ...scene, pieces: () => scene.blocks.value },

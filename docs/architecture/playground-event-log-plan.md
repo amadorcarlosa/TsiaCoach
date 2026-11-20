@@ -81,6 +81,69 @@ Event types map directly onto the existing action unions:
 4. Scaffold events tied to attempt/session; coach prompt uses the server summary.
 5. Durable storage, retention, dashboard/export; enable flag in production.
 
+## Implementation status (2026-11-19)
+
+Phases 1–5 are built; the log is **off by default** (`NUXT_PUBLIC_PLAYGROUND_EVENTS_ENABLED=true` turns it on).
+
+| Piece | Where |
+|---|---|
+| Envelope, per-playground type allowlist, batch and session schemas | `tsia-coach-web-nuxt/shared/effect/playground-events.ts` |
+| Client log: dropping `Queue` (1000) drained by one fiber, 25 events or 2 s, one request per session, exponential retry on transient failures, refused batches dropped, `sendBeacon` on `pagehide` | `tsia-coach-web-nuxt/app/effect/playground-events.ts` |
+| Scene describers and `apply` wrapper (`events.during` folds several edits into one event) | `tsia-coach-web-nuxt/app/components/playground/events/scene-events.ts` |
+| `instrumentScene(scene, playground)` / `usePlaygroundRecorder` | `tsia-coach-web-nuxt/app/composables/usePlaygroundEvents.ts` |
+| Nuxt routes: `POST /api/playground-sessions`, `POST /api/playground-events` (flag gate, same-origin JSON, 256 KiB, 600 events/min per session) | `tsia-coach-web-nuxt/server/api/`, `server/effect/playground-events.ts` |
+| C# store (`IPlaygroundEventStore`, in memory: 5,000 events per session, 10,000 sessions, oldest evicted), summary projection, endpoints | `TsiaCoach.WebApi/PlaygroundEvents/`, `EndPoints/PlaygroundSessionEndpoints.cs` |
+
+Instrumented: algebra tiles, base ten, bar, array, fraction, MathTabla, systems and rod-count systems. Drags are covered because `settleMove` commits through `apply`; zero-distance moves are skipped. Rod-count "+x/−x" and in-order clone record one `count.rod-added` / `count.rod-removed` / `piece.duplicated` event each. Board transforms map to `denomination.converted` and `arrange.x-then-y`. `system.correctness-evaluated` is recorded when the board starts or stops satisfying the system. Draft edits inside the conversion workspace are not logged, only the committed conversion.
+
+Differences from the plan above:
+
+- `data` is one strict allowlist shared by every type, not a schema per type. Its strings must be identifier tokens with no spaces, so free text cannot get in; `reason` is the only prose field (authored, 1–200 characters).
+- A batch carries one `sessionId`; the Nuxt route forwards it to `POST /api/playground-sessions/{id}/events`.
+- Events recorded before the session has opened cannot go out by beacon, so if the page closes in the first moments those events are lost.
+- The summary's stuck signal is the same refusal (type and reason) three or more times with no later success of that type. Time on task adds the gaps between events, each capped at 5 minutes.
+- The `GET` endpoints exist only on the API; the browser cannot read events back.
+
+**Phase 4.** The scaffold store (`app/pages/scaffolds/scaffold-session.ts`) opens one recorder per scaffold session, linked to its `attemptId` and `scaffoldSessionId`, and records:
+
+- `step.checked`: the server's verdict. `outcome` is `rejected` when the move broke the step's rule, so repeated rule breaks become stuck signals. Data holds `stepId`, `satisfied` and the server outcome.
+- `step.advanced`: the new step or `completed`, with the completed-step count.
+- `coach.asked`: the step and the question's **length** only, with `answered` or `unanswered`. The question text is never logged.
+
+Before a coach question the store calls `log.flush()`, which sends waiting events immediately (waiting at most 1 s), so the coach sees the latest checks.
+
+On the API, `CoachingTurnService` reads the attempt's sessions (`PlaygroundActivityProjector.ForAttempt`) and passes a `playgroundActivity` block to every model-backed coach prompt. The block covers the newest 3 sessions that have events: counts per type, applied and rejected counts, time on task, the top 3 rejections, stuck signals, the last 5 actions (type, outcome and reason only) and the latest scene totals. It never includes event `data`, so piece, step and scaffold IDs stay out of the prompt, which matters because the probe prompt must not reveal step IDs. The system prompt says the block is context only and never changes the phase, allowed moves or IDs. With no linked activity, the field is omitted and prompts are unchanged.
+
+**Attempt links.** A page calls `providePlaygroundLinks({ attemptId })` and every playground recorder below it links its session to that attempt (the API refuses unknown attempts). `/dev/playground?attemptId=<id>` does this for all tabs, so the coach's `playgroundActivity` includes manipulative work, not just scaffold checks.
+
+**Coach playground and `/api/agent`.** Each instrumented scene keeps its last 20 actions in memory (`scene.events.recent()`), whether or not the log is on. Every rod tab's `capture()` returns them as `recentActions`, and the coach-playground prompt (and the decision state sent to `/api/decisions`) includes them beside the snapshot, with the same train IDs. Nothing is stored for this; it is part of the prompt the operator already sees.
+
+## Phase 5: storage and governance (2026-11-19)
+
+**Storage: Turso.** `TursoPlaygroundEventStore` talks to Turso over the libSQL HTTP protocol (`POST /v2/pipeline`) with plain `HttpClient` (`LibSqlClient`), with no extra packages. It creates two tables, `playground_sessions` and `playground_events` (primary key `(session_id, id)`), on first use. Each batch lands in one `INSERT OR IGNORE`, so retries are idempotent. Times are stored as Unix milliseconds.
+
+- **Configuration:** `PlaygroundEvents:Store=Turso`, `PlaygroundEvents:Turso:Url` (`libsql://…`, `https://…` or `http://host:8080`) and `PlaygroundEvents:Turso:AuthToken`. Without `Store=Turso` the API keeps the in-memory store, which the tests use.
+- **Aspire:** the AppHost sets `Store=Turso`. When `Turso:Url` is configured it uses that database plus the `turso-auth-token` secret parameter. Otherwise it runs `ghcr.io/tursodatabase/libsql-server:v0.24.33` (same protocol) with the `tsia-libsql-data` volume, which needs Docker.
+- **Tests:** the store contract runs against both stores. Set `TSIA_LIBSQL_URL` (and optionally `TSIA_LIBSQL_TOKEN`) to include Turso, for example `docker run -p 18080:8080 ghcr.io/tursodatabase/libsql-server:v0.24.33` and `TSIA_LIBSQL_URL=http://127.0.0.1:18080`.
+
+**Retention.** `PlaygroundEventRetentionService` deletes sessions, with their events, that started more than `PlaygroundEvents:RetentionDays` ago (default **180**; 0 keeps everything). It sweeps a minute after start, then every `RetentionSweepInterval` (1 day). The consent notice shows `runtimeConfig.public.playgroundEventsRetentionDays`; keep the two values equal.
+
+**Deletion and export (API only; Nuxt does not proxy these):**
+
+- `DELETE /api/playground-sessions/{id}` deletes one session and its events.
+- `GET /api/playground-sessions/{id}/export` returns the session (including consent) and every event.
+- `GET /api/playground-sessions/export?from=&to=` returns NDJSON, one line per session started in the range, each with its events.
+
+**Consent: opt-in per browser** (`runtimeConfig.public.playgroundEventsConsent`, default `opt-in`; `not-required` when consent is handled outside the app, for example by school agreements).
+
+- When the log is on, `PlaygroundEventsConsent` (on `/dev/playground` and the scaffold page) asks once. The choice is kept in `localStorage`.
+- Until the learner allows it, recorders record nothing and open no session, so nothing leaves the browser. Declining keeps every playground usable.
+- Sessions opened with consent are stored with `consent = 'granted'`.
+
+**Free text: never.** Only identifier tokens, numbers and authored rejection reasons are stored; for `coach.asked`, only the question length.
+
+Still open: hosting the production Turso database and setting its token; a learner-facing way to change the consent choice later; and an export or deletion request flow for families (the API endpoints exist; there is no UI).
+
 ## Open decisions
 
 - Durable store choice and retention period.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { computed } from 'vue'
 import { createBarGoalAdapter } from './goals/board-goal-adapters'
 import RodTabla from '~/components/tabla/RodTabla.vue'
@@ -61,7 +62,7 @@ const { workspaceStyle, boardWidth, boardAriaLabel } = useTablaWorkspace({
 
 const editingDisabled = computed(() => !props.active || phonePortrait.value)
 
-const scene = useRodScene({
+const scene = instrumentScene(useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
   spawnRows: boardDefinition.targets.map(target => target.row),
@@ -70,7 +71,7 @@ const scene = useRodScene({
   allowOrientation: false,
   allowFactors: false,
   requireHorizontalAnchorRow: true,
-})
+}), 'bar-rod')
 
 const controls = useRodPlaygroundInteraction({
   scene,
@@ -84,7 +85,7 @@ const { menu, marquee, blocked, checkSelected, applySelected, addendMenuChoice, 
 const goalAdapter = createBarGoalAdapter({ columns: fullColumns, targetCount })
 const board = { kind: 'bar', config: { columns: fullColumns, targetCount } } as const
 
-defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene(), recentActions: scene.events.recent() }), clear: () => replaceScene([]) })
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   ...baseRodMenuChoices(addendMenuChoice.value),

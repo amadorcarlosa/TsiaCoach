@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import BoardViewControls from '~/components/grid/BoardViewControls.vue'
 import { clientPointToGrid, measureGridFrame } from '~/components/grid/grid-coordinates'
@@ -173,7 +174,7 @@ const policy: ScenePolicy = {
   regionBoundEdits: true,
   planTransform: (trains, ids, transform) => planTransform(config.value)(trains, ids, transform),
 }
-const scene = useRodScene(policy)
+const scene = instrumentScene(useRodScene(policy), props.strategy === 'rod-count' ? 'rod-count-systems' : 'systems')
 
 const preview = useBoardTransformPreview({
   scene,
@@ -193,6 +194,7 @@ const count = useSystemsCountActivity({
   preview,
   blocked: () => blocked.value || editingDisabled.value,
   editable: () => !editingDisabled.value,
+  events: scene.events,
 })
 const conversion = count.conversion
 
@@ -390,7 +392,7 @@ const goalAdapter: BoardGoalAdapter = {
 }
 
 defineExpose<RodPlaygroundExposed>({
-  capture: () => ({ board: board.value, trains: captureScene() }),
+  capture: () => ({ board: board.value, trains: captureScene(), recentActions: scene.events.recent() }),
   clear: () => replaceScene([]),
 })
 
@@ -424,6 +426,15 @@ watch(editingDisabled, disabled => {
 // ---- Evaluation and readouts ------------------------------------------------
 
 const evaluation = computed(() => evaluateSystem(config.value, scene.trains.value))
+// The action log notes each time the board starts or stops satisfying the system.
+const systemSatisfied = computed(() => countMode.value
+  ? count.evaluation.value.valid && count.evaluation.value.solved
+  : evaluation.value.valid && evaluation.value.satisfied)
+watch(systemSatisfied, satisfied => scene.events.record({
+  type: 'system.correctness-evaluated',
+  outcome: 'applied',
+  data: { satisfied },
+}))
 const substitution = computed(() => substituteSystem(config.value, scene.trains.value))
 const equationRows = computed(() => config.value.system.equations.map((equation, index) => {
   const evaluated = evaluation.value.valid ? evaluation.value.equations[index]! : null

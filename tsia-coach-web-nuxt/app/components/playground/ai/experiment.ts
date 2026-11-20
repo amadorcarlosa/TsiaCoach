@@ -1,8 +1,9 @@
 import type { BoardDescriptor } from '../files/level-document'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import type { AgentTurnRequest } from '~/utils/agent'
+import type { RecentAction } from '../events/scene-events'
 
-export type BoardCapture = { board: BoardDescriptor, trains: SceneSnapshot }
+export type BoardCapture = { board: BoardDescriptor, trains: SceneSnapshot, recentActions?: readonly RecentAction[] }
 export type ExperimentMode = 'coach' | 'decision'
 export const decisionActions = ['observe', 'ask', 'hint', 'demonstrate'] as const
 export type Decision = { action: typeof decisionActions[number], message: string }
@@ -28,7 +29,15 @@ export function buildExperiment(input: {
       studentMessage: input.studentMessage,
       board: input.capture.board,
       trains: input.capture.trains,
-      coordinateConvention: 'Grid units. Each train has an anchor; each part has an offset relative to that anchor, a rod value (its physical length, always positive), an orientation, and an optional sign: sign -1 marks a negative rod whose contribution is minus its value; no sign means positive. This is a single board snapshot, not a history of student actions.',
+      recentActions: (input.capture.recentActions ?? []).map(action => ({
+        at: action.at,
+        type: action.type,
+        outcome: action.outcome,
+        ...(action.reason ? { reason: action.reason } : {}),
+        data: action.data,
+        ...(action.sceneSummary ? { sceneSummary: action.sceneSummary } : {}),
+      })),
+      coordinateConvention: 'Grid units. Each train has an anchor; each part has an offset relative to that anchor, a rod value (its physical length, always positive), an orientation, and an optional sign: sign -1 marks a negative rod whose contribution is minus its value; no sign means positive. The trains are the board now. recentActions lists the latest actions of the student on this board, oldest first: each has a type, an outcome (applied, or rejected with the reason the board gave), data naming the pieces involved by the same train ids, and sceneSummary counting rods by value after the action. It may be empty and covers only the most recent actions.',
     }, null, 2),
   }
 }

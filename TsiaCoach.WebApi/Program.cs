@@ -5,6 +5,7 @@ using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.EndPoints;
 using TsiaCoach.WebApi.Attempts;
 using TsiaCoach.WebApi.CoachingAgents;
+using TsiaCoach.WebApi.PlaygroundEvents;
 using TsiaCoach.WebApi.ScaffoldSessions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,6 +30,19 @@ builder.Services.AddSingleton<InMemoryAttemptStore>();
 builder.Services.AddSingleton<InMemoryProbeRouteStore>();
 builder.Services.AddSingleton<InMemoryScaffoldSessionStore>();
 builder.Services.AddSingleton<ScaffoldSessionService>();
+// Learner action log: Turso when PlaygroundEvents:Store is "Turso", in memory otherwise.
+builder.Services.AddOptions<PlaygroundEventOptions>()
+    .Bind(builder.Configuration.GetSection(PlaygroundEventOptions.Section));
+if (string.Equals(builder.Configuration["PlaygroundEvents:Store"], "Turso", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<LibSqlClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+    builder.Services.AddSingleton<IPlaygroundEventStore, TursoPlaygroundEventStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IPlaygroundEventStore, InMemoryPlaygroundEventStore>();
+}
+builder.Services.AddHostedService<PlaygroundEventRetentionService>();
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -86,6 +100,7 @@ api.MapAttempts(
     app.Services.GetRequiredService<InMemoryAttemptStore>());
 api.MapScaffolds(app.Services.GetRequiredService<SamplePracticeCatalog>());
 api.MapScaffoldSessions(app.Services.GetRequiredService<ScaffoldSessionService>());
+api.MapPlaygroundSessions();
 app.Run();
 
 static IResult AiDisabled() => Results.Problem(

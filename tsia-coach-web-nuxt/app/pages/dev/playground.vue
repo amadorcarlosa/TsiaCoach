@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { providePlaygroundLinks } from '~/composables/usePlaygroundEvents'
+import PlaygroundEventsConsent from '~/components/playground/events/PlaygroundEventsConsent.vue'
 
 import { playgroundTabs, type PlaygroundId } from '~/components/playground/playground.types'
 import ArrayRodPlayground from '~/components/playground/ArrayRodPlayground.vue'
@@ -15,6 +17,12 @@ const tabs = playgroundTabs.map(({ id, label }) => ({
   value: id,
   slot: id,
 }))
+
+// `?attemptId=` ties every tab's action log to an attempt, so the coach reads
+// this board work when the student asks for help on that attempt.
+const route = useRoute()
+const queried = route.query.attemptId
+providePlaygroundLinks({ attemptId: typeof queried === 'string' ? queried : null })
 
 const activeTab = ref<PlaygroundId>(playgroundTabs[0].id)
 const cancellationVersion = ref(0)
@@ -44,6 +52,7 @@ watch(activeTab, cancelSceneMovement, { flush: 'sync' })
 
 <template>
   <div @pointerdown.capture="onTabPointerDown">
+    <PlaygroundEventsConsent class="mb-3" />
     <UTabs
       v-model="activeTab"
       :items="tabs"

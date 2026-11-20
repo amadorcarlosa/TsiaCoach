@@ -28,6 +28,14 @@ export default defineNuxtConfig({
     public: {
       telemetryEnabled: false,
       telemetrySamplingRatio: 1,
+      // Learner action log (docs/architecture/playground-event-log-plan.md). Off until
+      // storage, retention and consent are decided.
+      playgroundEventsEnabled: false,
+      // 'opt-in': record nothing until the learner accepts the notice in this
+      // browser. 'not-required': consent is handled outside the app.
+      playgroundEventsConsent: 'opt-in',
+      // Shown in the consent notice; keep equal to the API's PlaygroundEvents:RetentionDays.
+      playgroundEventsRetentionDays: 180,
     },
   },
   modules: ['@nuxt/ui', '@nuxt/content', '@nuxt/eslint'],

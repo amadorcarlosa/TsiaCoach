@@ -4,6 +4,7 @@ using TsiaCoach.Domain.Coaching;
 using TsiaCoach.Domain.ValueObjects;
 using TsiaCoach.WebApi.Agents;
 using TsiaCoach.WebApi.Attempts;
+using TsiaCoach.WebApi.PlaygroundEvents;
 using TsiaCoach.WebApi.Request;
 using TsiaCoach.WebApi.Response;
 
@@ -40,6 +41,7 @@ public sealed class CoachingTurnService(
     CoachingAgentDefinitionFactory definitionFactory,
     ICoachingAgentRunner runner,
     ICoachingMoveRecorder moveRecorder,
+    IPlaygroundEventStore playgroundEvents,
     TimeProvider timeProvider,
     ILogger<CoachingTurnService> logger)
 {
@@ -82,13 +84,16 @@ public sealed class CoachingTurnService(
             return ServeProbe(attempt, entry, request.Event);
         }
 
+        PlaygroundActivityContext? activity = await PlaygroundActivity(attempt.Id.Value, cancellationToken);
+
         CoachingAgentDefinition definition = definitionFactory.Create(
             attempt,
             entry,
             request.Event,
             request.Answer,
             request.StepId,
-            request.Question);
+            request.Question,
+            activity);
 
         long startedAt = Stopwatch.GetTimestamp();
         string eventName = CoachContractNames.EventName(request.Event);
@@ -184,6 +189,23 @@ public sealed class CoachingTurnService(
             Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
         return new(CoachingTurnResultKind.Succeeded, response);
+    }
+
+    /// <summary>
+    /// The attempt's playground activity, read on the server so the browser cannot
+    /// forge what the student did. The coach still answers when the store is down.
+    /// </summary>
+    private async Task<PlaygroundActivityContext?> PlaygroundActivity(string attemptId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await PlaygroundActivityProjector.ForAttemptAsync(playgroundEvents, attemptId, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(exception, "Could not read playground activity for attempt {AttemptId}", attemptId);
+            return null;
+        }
     }
 
     private CoachingTurnResult ServeProbe(

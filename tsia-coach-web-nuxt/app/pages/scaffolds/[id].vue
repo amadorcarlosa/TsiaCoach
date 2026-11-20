@@ -8,10 +8,12 @@ import {
   ScaffoldSessionLoadStates,
   useScaffoldSessionStore,
 } from './scaffold-session'
+import { usePlaygroundEventLog } from '~/composables/usePlaygroundEvents'
+import PlaygroundEventsConsent from '~/components/playground/events/PlaygroundEventsConsent.vue'
 
 const route = useRoute()
 const attemptId = computed(() => String(route.params.id ?? ''))
-const store = useScaffoldSessionStore()
+const store = useScaffoldSessionStore(undefined, { eventLog: usePlaygroundEventLog() })
 const {
   session,
   practiceItem,
@@ -75,6 +77,7 @@ async function send() {
 
 <template>
   <UContainer class="walkthrough-page py-6 sm:py-10">
+    <PlaygroundEventsConsent class="mb-4" />
     <UAlert
       v-if="loadState === ScaffoldSessionLoadStates.Error"
       color="error"

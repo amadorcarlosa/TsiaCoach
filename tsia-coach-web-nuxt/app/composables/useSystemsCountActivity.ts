@@ -10,6 +10,7 @@ import { strategyOf, type SystemsBoardConfig, type VariableId } from '~/componen
 import type { useBoardTransformPreview } from './useBoardTransformPreview'
 import { useCountConversionWorkspace } from './useCountConversionWorkspace'
 import type { useRodScene } from './useRodScene'
+import { silentSceneEvents, type SceneEvents } from '~/components/playground/events/scene-events'
 
 /**
  * What Equation 2 shows, and why. The check is always derived from counts;
@@ -44,8 +45,14 @@ export function useSystemsCountActivity(options: {
   blocked: () => boolean
   /** The committed board can be edited at all (active tab, not portrait). */
   editable: () => boolean
+  /** Learner action log; folds multi-rod edits into one event. */
+  events?: SceneEvents
 }) {
   const { config, scene, preview } = options
+  const events = options.events ?? silentSceneEvents
+  const outcome = (done: boolean, fallback: string) => done
+    ? { outcome: 'applied' as const }
+    : { outcome: 'rejected' as const, reason: (message.value || fallback).slice(0, 200) }
   const active = computed(() => strategyOf(config.value) === 'rod-count')
   const conversion = useCountConversionWorkspace({ config, scene, editable: options.editable })
   const converting = computed(() => conversion.active.value)
@@ -191,7 +198,11 @@ export function useSystemsCountActivity(options: {
 
   function addRods(variable: VariableId, count: number): void {
     if (options.blocked() || converting.value) return
-    const created = placeRods(variable, count)
+    const created = events.during(() => placeRods(variable, count), created => ({
+      type: 'count.rod-added',
+      ...outcome(created.length > 0, 'No room for the rod.'),
+      data: { variant: variable, count: created.length, ...(created.length ? { createdIds: created.slice(0, 100) } : {}) },
+    }))
     if (created.length) scene.select(created)
   }
 
@@ -227,10 +238,14 @@ export function useSystemsCountActivity(options: {
       if (!train || train.parts.length !== 1 || !unit) return null
       variables.push(unit.variable)
     }
-    const created = (['x', 'y'] as const).flatMap(variable => {
+    const created = events.during(() => (['x', 'y'] as const).flatMap(variable => {
       const amount = variables.filter(item => item === variable).length
       return amount ? placeRods(variable, amount) : []
-    })
+    }), created => ({
+      type: 'piece.duplicated',
+      ...outcome(created.length > 0, 'No room to clone the selection.'),
+      data: { pieceIds: ids.slice(0, 100), pieceKinds: variables, ...(created.length ? { createdIds: created.slice(0, 100) } : {}) },
+    }))
     if (!created.length) return { allowed: false, reason: message.value || 'No room to clone the selection.' }
     return { allowed: true, createdIds: created }
   }
@@ -244,9 +259,14 @@ export function useSystemsCountActivity(options: {
       .sort((p, q) => q.anchor.x - p.anchor.x)[0]
     if (!single) {
       message.value = `There is no separate ${variable} rod to remove.`
+      events.record({ type: 'count.rod-removed', ...outcome(false, ''), data: { variant: variable, count: 0 } })
       return
     }
-    const result = scene.apply([single.id], { type: 'delete' })
+    const result = events.during(() => scene.apply([single.id], { type: 'delete' }), result => ({
+      type: 'count.rod-removed',
+      ...(result.allowed ? { outcome: 'applied' as const } : { outcome: 'rejected' as const, reason: result.reason.slice(0, 200) }),
+      data: { variant: variable, count: result.allowed ? 1 : 0, pieceIds: [single.id] },
+    }))
     message.value = result.allowed ? `Removed one ${variable} rod.` : result.reason
   }
 

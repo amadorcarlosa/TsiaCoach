@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWorkflowContext, type WorkflowContext } from '~/effect/registry'
+import type { PlaygroundEventDraft } from '~/effect/playground-events'
+import type { StartPlaygroundSession } from '#shared/effect/playground-events'
 import type { PracticeItemPrompt } from '#shared/types/sample-items'
 import type { ScaffoldSession } from '#shared/types/scaffolds'
 import {
@@ -164,5 +166,66 @@ describe('scaffold session store', () => {
     await reply
     expect(store.coachReply).toBeNull()
     expect(store.session?.state.type === 'active' && store.session.state.currentStep.id).toBe('step-2')
+  })
+
+  describe('action log', () => {
+    function fakeLog() {
+      const sessions: StartPlaygroundSession[] = []
+      const drafts: PlaygroundEventDraft[] = []
+      const calls: string[] = []
+      const log = {
+        recorder(input: StartPlaygroundSession) {
+          sessions.push(input)
+          return { playground: input.playground, record: (draft: PlaygroundEventDraft) => { drafts.push(draft) } }
+        },
+        flush: async () => { calls.push('flush') },
+      }
+      return { log, sessions, drafts, calls }
+    }
+
+    it('records checks and step changes against the attempt and scaffold session', async () => {
+      const fake = fakeLog()
+      const rejected = { ...activeSession('step-1', 0, false), lastCheck: { stepId: 'step-1', satisfied: false, outcome: 'rejected' } }
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(activeSession('step-1'))
+        .mockResolvedValueOnce(item)
+        .mockResolvedValueOnce(rejected)
+        .mockResolvedValueOnce({ ...activeSession('step-2', 1, true), checkCount: 2, lastCheck: { stepId: 'step-1', satisfied: true, outcome: 'complete' } })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useScaffoldSessionStore(context, { eventLog: fake.log })
+
+      await store.load('attempt-1')
+      await store.submit({ type: 'selectAnswerChoice', answerChoiceId: 'answer-a' })
+      await store.submit({ type: 'selectAnswerChoice', answerChoiceId: 'answer-d' })
+
+      expect(fake.sessions).toEqual([{ playground: 'scaffold', attemptId: 'attempt-1', scaffoldSessionId: 'session-1' }])
+      expect(fake.drafts.map(draft => [draft.type, draft.outcome])).toEqual([
+        ['step.checked', 'rejected'],
+        ['step.checked', 'applied'],
+        ['step.advanced', 'applied'],
+      ])
+      expect(fake.drafts[0]).toMatchObject({ reason: "The move broke the step's rule.", data: { stepId: 'step-1', satisfied: false, variant: 'rejected' } })
+      expect(fake.drafts[2]).toMatchObject({ data: { stepId: 'step-2', variant: 'active', count: 1 }, sceneSummary: { checks: 2, completedSteps: 1, totalSteps: 3 } })
+    })
+
+    it('flushes before asking the coach and logs only the question length', async () => {
+      const fake = fakeLog()
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(activeSession('step-1'))
+        .mockResolvedValueOnce(item)
+        .mockImplementationOnce(async () => {
+          fake.calls.push('coach')
+          return { move: { type: 'answerQuestion', message: 'Start with the twos.' } }
+        })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useScaffoldSessionStore(context, { eventLog: fake.log })
+
+      await store.load('attempt-1')
+      await store.askCoach('  How do I begin?  ')
+
+      expect(fake.calls).toEqual(['flush', 'coach'])
+      expect(fake.drafts).toEqual([{ type: 'coach.asked', outcome: 'applied', data: { stepId: 'step-1', length: 15, variant: 'answered' } }])
+      expect(JSON.stringify(fake.drafts)).not.toContain('begin')
+    })
   })
 })

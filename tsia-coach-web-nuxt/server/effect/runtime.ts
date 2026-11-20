@@ -5,7 +5,7 @@ import { incomingTraceContext } from '#shared/effect/trace'
 import { unwrapExit } from '#shared/effect/run'
 import { serverTelemetry } from './telemetry'
 
-const routeParts = new Set(['api', 'agent', 'models', 'attempts', 'checks', 'coach', 'scaffold-sessions', 'scaffolds', 'practice-items', 'sample-items', 'decisions', 'rods', 'algebra-tiles', 'base-ten-blocks', 'health'])
+const routeParts = new Set(['api', 'agent', 'models', 'attempts', 'checks', 'coach', 'scaffold-sessions', 'scaffolds', 'practice-items', 'sample-items', 'decisions', 'rods', 'algebra-tiles', 'base-ten-blocks', 'health', 'playground-sessions', 'playground-events', 'events', 'summary'])
 function routeName(event: H3Event) {
   const pathname = (event.path ?? event.node?.req?.url ?? '/api').split('?')[0]!
   return pathname.split('/').map(part => !part || routeParts.has(part) ? part : ':id').join('/')

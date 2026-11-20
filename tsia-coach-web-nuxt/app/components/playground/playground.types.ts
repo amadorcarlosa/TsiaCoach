@@ -1,6 +1,7 @@
 import type { BoardDescriptor } from './files/level-document'
 import type { SceneSnapshot } from '~/components/rod/scene/scene-snapshot'
 import type { SceneResult } from '~/components/rod/scene/rod.scene.types'
+import type { RecentAction } from './events/scene-events'
 
 // The page opens on the first tab, so the default comes first.
 export const playgroundTabs = [
@@ -34,6 +35,7 @@ export const playgroundBoardLayout = {
  * playground reads boards this way, so each rod tab must provide it.
  */
 export type RodPlaygroundExposed = {
-  capture: () => { board: BoardDescriptor; trains: SceneSnapshot }
+  /** `recentActions`: the student's last actions on this board, oldest first. */
+  capture: () => { board: BoardDescriptor; trains: SceneSnapshot; recentActions: readonly RecentAction[] }
   clear: () => SceneResult
 }

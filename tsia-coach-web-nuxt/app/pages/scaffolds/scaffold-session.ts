@@ -9,6 +9,8 @@ import type {
 } from '#shared/types/scaffolds'
 import type { CoachTurnResponse } from '#shared/types/coaching'
 import { CoachTurnEvents, isAnswerQuestionMove } from '#shared/types/coaching'
+import type { PlaygroundRecorder } from '~/effect/playground-events'
+import type { StartPlaygroundSession } from '#shared/effect/playground-events'
 
 export const ScaffoldSessionLoadStates = {
   Idle: 'idle',
@@ -37,7 +39,26 @@ function statusCodeOf(error: unknown): number | null {
   return candidate.statusCode ?? candidate.status ?? candidate.response?.status ?? null
 }
 
-function createScaffoldSessionWorkflow(context: WorkflowContext) {
+const isToken = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(value)
+const stepToken = (value: unknown) => isToken(value) ? { stepId: value } : {}
+
+function progress(session: ScaffoldSession) {
+  return {
+    checks: Number(session.checkCount),
+    completedSteps: Number(session.completedStepCount),
+    totalSteps: Number(session.totalStepCount),
+  }
+}
+
+type ScaffoldSessionOptions = {
+  /** Learner action log; one recorder per scaffold session, linked to its attempt. */
+  eventLog?: {
+    recorder(input: StartPlaygroundSession): PlaygroundRecorder
+    flush(timeoutMillis?: number): Promise<void>
+  } | null
+}
+
+function createScaffoldSessionWorkflow(context: WorkflowContext, options: ScaffoldSessionOptions = {}) {
   const attemptId = workflowField<string | null>(context, 'scaffoldSession.attemptId', null)
   const session = workflowField<ScaffoldSession | null>(context, 'scaffoldSession.session', null)
   const practiceItem = workflowField<PracticeItemPrompt | null>(context, 'scaffoldSession.practiceItem', null)
@@ -51,6 +72,20 @@ function createScaffoldSessionWorkflow(context: WorkflowContext) {
   const coachReply = workflowField<string | null>(context, 'scaffoldSession.coachReply', null)
   const asking = workflowField(context, 'scaffoldSession.asking', false)
   const askError = workflowField<string | null>(context, 'scaffoldSession.askError', null)
+  const recorders = new Map<string, PlaygroundRecorder>()
+  function recorderFor(current: ScaffoldSession): PlaygroundRecorder | null {
+    if (!options.eventLog) return null
+    let recorder = recorders.get(current.sessionId)
+    if (!recorder) {
+      recorder = options.eventLog.recorder({
+        playground: 'scaffold',
+        ...(isToken(current.attemptId) ? { attemptId: current.attemptId } : {}),
+        ...(isToken(current.sessionId) ? { scaffoldSessionId: current.sessionId } : {}),
+      })
+      recorders.set(current.sessionId, recorder)
+    }
+    return recorder
+  }
 
   const completedPercent = computed(() => {
     if (!session.value || Number(session.value.totalStepCount) === 0) {
@@ -149,6 +184,26 @@ function createScaffoldSessionWorkflow(context: WorkflowContext) {
           askError.value = null
         }
         session.value = next
+        const recorder = recorderFor(next)
+        const check = next.lastCheck
+        if (recorder && check && Number(next.checkCount) > Number(current.checkCount)) {
+          recorder.record({
+            type: 'step.checked',
+            ...(check.outcome === 'rejected'
+              ? { outcome: 'rejected' as const, reason: "The move broke the step's rule." }
+              : { outcome: 'applied' as const }),
+            data: { ...stepToken(check.stepId), satisfied: check.satisfied, ...(isToken(check.outcome) ? { variant: check.outcome } : {}) },
+            sceneSummary: progress(next),
+          })
+        }
+        if (recorder && (nextStepId !== currentStepId || next.state.type !== current.state.type)) {
+          recorder.record({
+            type: 'step.advanced',
+            outcome: 'applied',
+            data: { ...stepToken(nextStepId), variant: next.state.type, count: Number(next.completedStepCount) },
+            sceneSummary: progress(next),
+          })
+        }
       }))
     }
     catch {
@@ -180,6 +235,8 @@ function createScaffoldSessionWorkflow(context: WorkflowContext) {
     const capturedAttemptId = attemptId.value
 
     try {
+      // The coach reads this attempt's actions on the server; send the latest first.
+      if (options.eventLog) await options.eventLog.flush(1000)
       await executeWorkflow('ScaffoldSessions.askCoach', Effect.gen(function* () {
         const turn = yield* workflowRequest<CoachTurnResponse>(
           context, `/api/attempts/${encodeURIComponent(capturedAttemptId)}/coach`,
@@ -198,6 +255,13 @@ function createScaffoldSessionWorkflow(context: WorkflowContext) {
         if (!coachReply.value) {
           askError.value = 'The coach could not answer that. Try asking another way.'
         }
+        // The question's length only; its text is never logged.
+        const recorder = session.value ? recorderFor(session.value) : null
+        recorder?.record({
+          type: 'coach.asked',
+          outcome: 'applied',
+          data: { ...stepToken(capturedStepId), length: trimmed.length, variant: coachReply.value ? 'answered' : 'unanswered' },
+        })
       }))
     }
     catch (error) {
@@ -229,6 +293,7 @@ function createScaffoldSessionWorkflow(context: WorkflowContext) {
   })
 }
 
-export function useScaffoldSessionStore(context: WorkflowContext = useWorkflowContext()) {
-  return workflowFeature(context, 'scaffoldSession', () => createScaffoldSessionWorkflow(context))
+/** The first caller's options win; the store is one per Nuxt app. */
+export function useScaffoldSessionStore(context: WorkflowContext = useWorkflowContext(), options: ScaffoldSessionOptions = {}) {
+  return workflowFeature(context, 'scaffoldSession', () => createScaffoldSessionWorkflow(context, options))
 }

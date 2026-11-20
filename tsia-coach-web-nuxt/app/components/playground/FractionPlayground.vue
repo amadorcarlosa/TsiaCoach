@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentScene } from '~/composables/usePlaygroundEvents'
 import { computed, ref } from 'vue'
 import { createFractionGoalAdapter } from './goals/board-goal-adapters'
 import FractionRodTabla from '~/components/tabla/FractionRodTabla.vue'
@@ -77,7 +78,7 @@ const editingDisabled = computed(
   () => !props.active || phonePortrait.value,
 )
 
-const scene = useRodScene({
+const scene = instrumentScene(useRodScene({
   columns: fullColumns,
   rows: boardDefinition.config.rows,
   spawnRows: trackRows,
@@ -86,7 +87,7 @@ const scene = useRodScene({
   allowOrientation: false,
   allowFactors: false,
   requireHorizontalAnchorRow: true,
-})
+}), 'fraction-rod')
 
 const readouts = computed(() =>
   fractionReadout(scene.trains.value, boardDefinition.targets),
@@ -146,7 +147,7 @@ const {
 const goalAdapter = createFractionGoalAdapter({ columns: fullColumns, pairCount })
 const board = { kind: 'fraction', config: { columns: fullColumns, pairCount } } as const
 
-defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene() }), clear: () => replaceScene([]) })
+defineExpose<RodPlaygroundExposed>({ capture: () => ({ board, trains: captureScene(), recentActions: scene.events.recent() }), clear: () => replaceScene([]) })
 
 const menuChoices = computed<SceneMenuChoice[]>(() => [
   ...baseRodMenuChoices(addendMenuChoice.value),
