@@ -216,6 +216,11 @@ export interface SceneEvents {
    * as "added 3 x rods" in place of three creations.
    */
   during<T>(run: () => T, describe: (value: T) => PlaygroundEventDraft | null): T
+  /**
+   * Adds playground state, such as equation checks, to every later event's
+   * summary, read after the action. Its keys win over the scene's own.
+   */
+  addSummary(extra: () => SceneSummary): void
 }
 
 /** Records nothing; used when the log is off. */
@@ -223,6 +228,19 @@ export const silentSceneEvents: SceneEvents = {
   record() {},
   recent: () => [],
   during: run => run(),
+  addSummary() {},
+}
+
+const MAX_SUMMARY_KEYS = 40
+
+/** The playground's keys first, then the scene's, within the schema's key limit. */
+function mergeSummary(base: SceneSummary | undefined, extra: SceneSummary): SceneSummary {
+  const merged: Record<string, number> = { ...extra }
+  for (const [key, value] of Object.entries(base ?? {})) {
+    if (Object.keys(merged).length >= MAX_SUMMARY_KEYS) break
+    if (!(key in merged)) merged[key] = value
+  }
+  return merged
 }
 
 type Scene<Item, Action, R extends Result> = {
@@ -252,10 +270,14 @@ export function recordSceneActions<Item extends { id: string }, Action, R extend
     'trains' in scene ? scene.trains.value : 'tiles' in scene ? scene.tiles.value : scene.blocks.value
   let paused = 0
   const history: RecentAction[] = []
+  const extras: (() => SceneSummary)[] = []
   const record = (draft: PlaygroundEventDraft | null) => {
     if (!draft) return
     try {
-      const complete = draft.sceneSummary || !summarize ? draft : { ...draft, sceneSummary: summarize() }
+      let complete = draft.sceneSummary || !summarize ? draft : { ...draft, sceneSummary: summarize() }
+      for (const extra of extras) {
+        try { complete = { ...complete, sceneSummary: mergeSummary(complete.sceneSummary, extra()) } } catch { /* Keep the event. */ }
+      }
       history.push({ ...complete, at: new Date().toISOString() })
       if (history.length > RECENT_ACTION_LIMIT) history.shift()
       recorder?.record(complete)
@@ -270,6 +292,9 @@ export function recordSceneActions<Item extends { id: string }, Action, R extend
       try { value = run() } finally { paused-- }
       try { record(describe(value)) } catch { /* Never break the playground. */ }
       return value
+    },
+    addSummary(extra) {
+      extras.push(extra)
     },
   }
   return {

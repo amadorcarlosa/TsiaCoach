@@ -24,6 +24,7 @@ const systemsEventTypes = [
   ...rodEventTypes,
   'arrange.x-then-y', 'count.rod-added', 'count.rod-removed',
   'denomination.converted', 'system.correctness-evaluated',
+  'conversion.started', 'conversion.cancelled', 'exchange.selected', 'hint.requested',
 ] as const
 
 /** Event types each playground may emit. The envelope refuses any other pairing. */

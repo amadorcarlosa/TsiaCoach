@@ -11,6 +11,7 @@ import type { useBoardTransformPreview } from './useBoardTransformPreview'
 import { useCountConversionWorkspace } from './useCountConversionWorkspace'
 import type { useRodScene } from './useRodScene'
 import { silentSceneEvents, type SceneEvents } from '~/components/playground/events/scene-events'
+import type { SceneSummary } from '#shared/effect/playground-events'
 
 /**
  * What Equation 2 shows, and why. The check is always derived from counts;
@@ -22,6 +23,9 @@ import { silentSceneEvents, type SceneEvents } from '~/components/playground/eve
  * - waiting:   no counts to check yet
  */
 export type LowerDisplayKind = 'current' | 'confirmed' | 'proposed' | 'previous' | 'waiting'
+
+/** Cancel's own wording; any other reason means the board cancelled for the learner. */
+const LEARNER_CANCEL = 'Conversion cancelled. Nothing changed.'
 
 export type LowerDisplay = {
   kind: LowerDisplayKind
@@ -54,7 +58,7 @@ export function useSystemsCountActivity(options: {
     ? { outcome: 'applied' as const }
     : { outcome: 'rejected' as const, reason: (message.value || fallback).slice(0, 200) }
   const active = computed(() => strategyOf(config.value) === 'rod-count')
-  const conversion = useCountConversionWorkspace({ config, scene, editable: options.editable })
+  const conversion = useCountConversionWorkspace({ config, scene, editable: options.editable, events })
   const converting = computed(() => conversion.active.value)
   const layout = computed(() => countLayout(config.value))
   const coefficients = computed(() => config.value.system.equations[0].coefficients)
@@ -79,6 +83,7 @@ export function useSystemsCountActivity(options: {
   watch(() => [config.value, evaluation.value.valid && evaluation.value.candidate?.xCount], () => { hintLevel.value = 0 })
   function nextHint(): void {
     hintLevel.value = Math.min(3, hintLevel.value + 1)
+    events.record({ type: 'hint.requested', outcome: 'applied', data: { value: hintLevel.value } })
   }
 
   const counts = computed<CandidateCounts>(() => conversion.session.value?.baselineCounts
@@ -131,6 +136,33 @@ export function useSystemsCountActivity(options: {
   const derived = computed<RodTrain[]>(() => active.value && display.value.counts
     ? derivedLowerTrains(config.value, display.value.counts)
     : [])
+
+  // What the learner saw after each action, so a reader of the log can tell
+  // why Equation 2 did or did not change. Whole numbers only (0/1 for flags).
+  events.addSummary((): SceneSummary => {
+    if (!active.value) return {}
+    const current = evaluation.value
+    if (!current.valid) return { invalid: 1 }
+    const shown = display.value
+    const summary: Record<string, number> = {
+      xCount: current.counts.xCount,
+      yCount: current.counts.yCount,
+      unassigned: current.upper.unassigned,
+      xLying: current.material.units.filter(unit => unit.variable === 'x' && !unit.upright).length,
+      yLying: current.material.units.filter(unit => unit.variable === 'y' && !unit.upright).length,
+      eq1Total: current.upper.total,
+      eq1Holds: current.upper.satisfied ? 1 : 0,
+      eq2Stale: shown.kind === 'previous' ? 1 : 0,
+      converting: converting.value ? 1 : 0,
+      solved: current.solved ? 1 : 0,
+      hintLevel: hintLevel.value,
+    }
+    if (shown.check) {
+      summary.eq2Total = shown.check.total
+      summary.eq2Holds = shown.check.satisfied ? 1 : 0
+    }
+    return summary
+  })
 
   function conversionStatus(): string {
     const session = conversion.session.value
@@ -278,10 +310,12 @@ export function useSystemsCountActivity(options: {
     const result = exchangeSelection(config.value, scene.trains.value)
     if ('reason' in result) {
       message.value = result.reason
+      events.record({ type: 'exchange.selected', outcome: 'rejected', reason: result.reason.slice(0, 200), data: {} })
       return false
     }
     scene.select(result.ids)
     message.value = `Selected ${step.value.removedX} x rods to exchange.`
+    events.record({ type: 'exchange.selected', outcome: 'applied', data: { pieceIds: result.ids.slice(0, 100), count: result.ids.length } })
     return true
   }
 
@@ -300,8 +334,8 @@ export function useSystemsCountActivity(options: {
     return result
   }
 
-  function cancelConversion(reason = 'Conversion cancelled. Nothing changed.'): boolean {
-    const cancelled = conversion.cancel(reason)
+  function cancelConversion(reason = LEARNER_CANCEL): boolean {
+    const cancelled = conversion.cancel(reason, reason === LEARNER_CANCEL ? 'learner' : 'system')
     if (cancelled) message.value = reason
     return cancelled
   }

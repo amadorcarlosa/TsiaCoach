@@ -112,10 +112,34 @@ describe('rod-count layout and evaluation', () => {
     expect(countStatus(reference, evaluation, 'building')).toMatch(/2 cells are unassigned material/)
   })
 
-  it('counts lying x rods as unassigned until they stand up', () => {
-    const lying: RodTrain = { id: 'lying', anchor: { x: 2, y: 0 }, parts: [{ value: 3, offset: { x: 0, y: 0 }, orientation: 'horizontal' }] }
-    const evaluation = evaluateCountSystem(reference, [lying])
-    expect(evaluation.valid && evaluation.material.unassigned[0]?.reason).toBe('orientation')
+  it('counts lying x and y rods like upright ones; only towers stay unassigned', () => {
+    // The reported board: 16 upright x rods, the y rod, and 5 x rods laid down beside it.
+    const lying = Array.from({ length: 5 }, (_, row): RodTrain =>
+      ({ id: `lying${row}`, anchor: { x: layout.upper.x + 17, y: row }, parts: [{ value: 3, offset: { x: 0, y: 0 }, orientation: 'horizontal' }] }))
+    const trains = [...build(reference, 16, 1), ...lying]
+    const evaluation = evaluateCountSystem(reference, trains)
+    if (!evaluation.valid) throw new Error(evaluation.reason)
+    expect(evaluation.material.unassigned).toHaveLength(0)
+    expect(evaluation.candidate).toEqual({ xCount: 21, yCount: 1 })
+    expect(evaluation.lower?.total).toBe(193)
+    expect(evaluation.canonical).toBe(false)
+
+    const tower: RodTrain = { id: 'tower', anchor: { x: 2, y: 0 }, parts: [{ value: 3, offset: { x: 0, y: 0 }, orientation: 'tower' }] }
+    const towered = evaluateCountSystem(reference, [tower])
+    expect(towered.valid && towered.material.unassigned[0]?.reason).toBe('orientation')
+  })
+
+  it('arranges lying rods by standing them up in their slots', () => {
+    const lying = Array.from({ length: 5 }, (_, row): RodTrain =>
+      ({ id: `lying${row}`, anchor: { x: layout.upper.x + 17, y: row }, parts: [{ value: 3, offset: { x: 0, y: 0 }, orientation: 'horizontal' }] }))
+    const scene = sceneWith(reference, [...build(reference, 16, 1), ...lying])
+    const planned = planSystemsTransform(reference, scene.trains.value, ['lying0'], { name: 'count-arrange' })
+    if (!planned.allowed) throw new Error(planned.reason)
+    expect(scene.apply(['lying0'], { type: 'board-transform', transform: { name: 'count-arrange', expected: planned.plan.key } }).allowed).toBe(true)
+    const evaluation = evaluateCountSystem(reference, scene.trains.value)
+    expect(evaluation.valid && evaluation.canonical).toBe(true)
+    expect(evaluation.valid && evaluation.counts).toEqual({ xCount: 21, yCount: 1 })
+    expect(scene.trains.value.every(train => train.parts.every(part => part.orientation === 'vertical'))).toBe(true)
   })
 
   it('counts every unit of a multi-unit train', () => {

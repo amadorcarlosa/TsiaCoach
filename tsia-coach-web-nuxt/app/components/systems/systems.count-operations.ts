@@ -42,7 +42,7 @@ export type CountPlanResult = { allowed: true; plan: CountPlan } | { allowed: fa
 type Snapshot = readonly DeepReadonly<RodTrain>[]
 
 export const countReasons = {
-  notCandidate: 'Make Equation 1 hold with whole, upright x and y rods first.',
+  notCandidate: 'Make Equation 1 hold with whole x and y rods first.',
   solved: 'Both equations already hold: this is the common solution.',
   stale: 'The rods changed. Open the preview again.',
   select: 'Select existing rods first.',
@@ -77,7 +77,7 @@ function arrange(
   const layout = countLayout(config)
   const { x: a, y: b } = config.system.equations[0].coefficients
   const slots = canonicalSlots(layout, next)
-  const atSlot = (unit: CountUnit) => unit.footprint.y === layout.upper.y && slots[unit.variable].includes(unit.footprint.x)
+  const atSlot = (unit: CountUnit) => unit.upright && unit.footprint.y === layout.upper.y && slots[unit.variable].includes(unit.footprint.x)
 
   const byTrain = new Map<string, CountUnit[]>()
   for (const unit of remaining) byTrain.set(unit.trainId, [...(byTrain.get(unit.trainId) ?? []), unit])
@@ -197,10 +197,9 @@ export type ConversionSource =
   | { allowed: false; reason: string }
 
 /**
- * Whether these trains can start an exchange. Selected whole x rods may
- * already be lying down for conversion; only that explicit selection gets
- * its source meaning back. All other material must remain whole upright
- * units, and the reconstructed source counts must satisfy Equation 1.
+ * Whether these trains can start an exchange. Selected whole x rods may be
+ * upright or lying; a selected tower is refused. All other material must be
+ * whole x or y units, and the source counts must satisfy Equation 1.
  * This never changes ordinary scene classification or takes part of a train.
  */
 export function conversionSource(config: SystemsBoardConfig, trains: Snapshot, ids: readonly string[]): ConversionSource {

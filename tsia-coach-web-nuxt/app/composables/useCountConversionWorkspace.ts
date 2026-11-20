@@ -1,11 +1,12 @@
 import { computed, shallowRef, watch, type DeepReadonly, type Ref } from 'vue'
-import type { RodTrain, SceneApplyResult, ScenePolicy } from '~/components/rod/scene/rod.scene.types'
+import type { RodTrain, SceneAction, SceneApplyResult, ScenePolicy } from '~/components/rod/scene/rod.scene.types'
 import { copyScene } from '~/components/rod/scene/scene-snapshot'
 import type { CandidateCounts, ExchangeStep } from '~/components/systems/systems.candidates'
 import { assessConversion, targetShape, type ConversionAssessment } from '~/components/systems/systems.count-conversion'
 import { countLayout } from '~/components/systems/systems.count-layout'
 import { conversionSource, encodePlacements, planCountTransform } from '~/components/systems/systems.count-operations'
 import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
+import { describeRodAction, recordSceneActions, rodSceneSummary, silentSceneEvents, type SceneEvents } from '~/components/playground/events/scene-events'
 import { useRodScene } from './useRodScene'
 
 /**
@@ -41,8 +42,11 @@ export function useCountConversionWorkspace(options: {
   scene: ReturnType<typeof useRodScene>
   /** The committed board can be edited (active tab, not portrait preview). */
   editable: () => boolean
+  /** Learner action log of the committed board; draft edits are recorded into it too. */
+  events?: SceneEvents
 }) {
   const { config, scene } = options
+  const events = options.events ?? silentSceneEvents
   const layout = computed(() => countLayout(config.value))
   const session = shallowRef<CountConversionSession | null>(null)
   const message = shallowRef('')
@@ -62,15 +66,23 @@ export function useCountConversionWorkspace(options: {
     regionBoundEdits: true,
     protectedIds: () => session.value?.protectedIds ?? none,
   }
-  const draft = useRodScene(draftPolicy)
+  // Draft edits are how the learner regroups the area, so they are logged like
+  // board edits, summarised by the editable material only.
+  const draftScene = useRodScene(draftPolicy)
+  const draft = recordSceneActions(
+    draftScene,
+    { playground: 'rod-count-systems', record: entry => events.record(entry) },
+    ({ selected }, action: SceneAction, result) => describeRodAction(selected as Snapshot, action, result, material.value),
+    () => rodSceneSummary(material.value),
+  )
 
   const active = computed(() => session.value !== null)
   const protectedIds = computed(() => session.value?.protectedIds ?? none)
 
   /** Editable draft material: everything except the protected context. */
-  const material = computed(() => {
+  const material = computed<Snapshot>(() => {
     const locked = protectedIds.value
-    return session.value ? draft.trains.value.filter(train => !locked.has(train.id)) : []
+    return session.value ? draftScene.trains.value.filter(train => !locked.has(train.id)) : []
   })
 
   const assessment = computed<ConversionAssessment | null>(() => {
@@ -91,6 +103,16 @@ export function useCountConversionWorkspace(options: {
   })
 
   function begin(ids: readonly string[]): SceneApplyResult {
+    const opened = open(ids)
+    events.record({
+      type: 'conversion.started',
+      ...(opened.allowed ? { outcome: 'applied' as const } : { outcome: 'rejected' as const, reason: opened.reason.slice(0, 200) }),
+      data: { pieceIds: ids.slice(0, 100), count: ids.length },
+    })
+    return opened
+  }
+
+  function open(ids: readonly string[]): SceneApplyResult {
     if (session.value) return { allowed: false, reason: 'A conversion is already open.' }
     if (!options.editable()) return { allowed: false, reason: 'Editing is unavailable.' }
     const source = conversionSource(config.value, scene.trains.value, ids)
@@ -121,12 +143,18 @@ export function useCountConversionWorkspace(options: {
   }
 
   /** Discards every draft experiment; the committed scene was never touched. */
-  function cancel(reason = ''): boolean {
+  function cancel(reason = '', by: 'learner' | 'system' = 'system'): boolean {
     const current = session.value
     if (!current) return false
     session.value = null
     message.value = reason
     scene.select(current.sourceIds)
+    // `variant` says who cancelled: the learner, or the board on their behalf.
+    events.record({
+      type: 'conversion.cancelled',
+      outcome: 'applied',
+      data: { pieceIds: current.sourceIds.slice(0, 100), variant: by },
+    })
     return true
   }
 
@@ -135,6 +163,7 @@ export function useCountConversionWorkspace(options: {
     if (!current) return { allowed: false, reason: 'No conversion is open.' }
     const fail = (reason: string): SceneApplyResult => {
       message.value = reason
+      events.record({ type: 'denomination.converted', outcome: 'rejected', reason: reason.slice(0, 200), data: { pieceIds: current.sourceIds.slice(0, 100) } })
       return { allowed: false, reason }
     }
     if (conversionKey(config.value, scene.trains.value) !== current.baselineKey) {

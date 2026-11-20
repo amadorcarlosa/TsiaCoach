@@ -33,6 +33,7 @@ public static partial class PlaygroundEventSchema
         .. RodTypes,
         "arrange.x-then-y", "count.rod-added", "count.rod-removed",
         "denomination.converted", "system.correctness-evaluated",
+        "conversion.started", "conversion.cancelled", "exchange.selected", "hint.requested",
     ];
 
     public static readonly FrozenDictionary<string, FrozenSet<string>> EventTypes =

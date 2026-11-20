@@ -8,13 +8,15 @@ import { exchangeSelection } from '~/components/systems/systems.count-operations
 import { systemsFixtures } from '~/components/systems/systems.fixtures'
 import { planSystemsTransform } from '~/components/systems/systems.operations'
 import type { SystemsBoardConfig } from '~/components/systems/systems.schema'
+import type { SceneEvents } from '~/components/playground/events/scene-events'
+import type { PlaygroundEventDraft } from '~/effect/playground-events'
 import { useCountConversionWorkspace } from './useCountConversionWorkspace'
 import { useRodScene } from './useRodScene'
 
 const reference = systemsFixtures.rodCountReference.config as SystemsBoardConfig
 const small = systemsFixtures.rodCountSmall.config as SystemsBoardConfig
 
-function setup(config: SystemsBoardConfig, xCount: number, yCount: number) {
+function setup(config: SystemsBoardConfig, xCount: number, yCount: number, events?: SceneEvents) {
   const layout = countLayout(config)
   const { x: a, y: b } = config.system.equations[0].coefficients
   const policy: ScenePolicy = {
@@ -37,7 +39,7 @@ function setup(config: SystemsBoardConfig, xCount: number, yCount: number) {
     ...Array.from({ length: yCount }, (_, index) => unitTrain(layout.upper.x + xCount + index, 0, b, `y${index}`)),
   ]
   expect(scene.replace(trains).allowed).toBe(true)
-  const workspace = useCountConversionWorkspace({ config: shallowRef(config), scene, editable: () => true })
+  const workspace = useCountConversionWorkspace({ config: shallowRef(config), scene, editable: () => true, events })
   return { scene, workspace, layout }
 }
 
@@ -76,12 +78,56 @@ function convert(config: SystemsBoardConfig, scene: ReturnType<typeof useRodScen
 }
 
 describe('conversion workspace', () => {
+  it('logs opening, each draft regrouping step and cancelling', () => {
+    const drafts: PlaygroundEventDraft[] = []
+    const events: SceneEvents = { record: draft => { drafts.push(draft) }, recent: () => [], during: run => run(), addSummary() {} }
+    const { scene, workspace } = setup(reference, 21, 1, events)
+    const selection = exchangeSelection(reference, scene.trains.value)
+    if (!('ids' in selection)) throw new Error(selection.reason)
+
+    expect(workspace.begin(selection.ids).allowed).toBe(true)
+    const made = workspace.draft.apply([...workspace.draft.selection.value], { type: 'make-rectangle', shape: workspace.suggestedShape.value! })
+    if (!made.allowed) throw new Error(made.reason)
+    expect(workspace.draft.apply(made.createdIds, { type: 'regroup-area', grouping: 'columns' }).allowed).toBe(true)
+    expect(workspace.cancel('Conversion cancelled. Nothing changed.', 'learner')).toBe(true)
+
+    expect(drafts.map(draft => [draft.type, draft.outcome])).toEqual([
+      ['conversion.started', 'applied'],
+      ['make-rectangle', 'applied'],
+      ['regroup-area', 'applied'],
+      ['conversion.cancelled', 'applied'],
+    ])
+    expect(drafts[0]!.data).toMatchObject({ pieceIds: selection.ids, count: 8 })
+    // Draft events summarise the material being converted, not the protected board.
+    expect(drafts[1]!.sceneSummary).toMatchObject({ total: 24 })
+    expect(drafts[2]!.data).toMatchObject({ variant: 'columns' })
+    expect(drafts[3]!.data).toMatchObject({ variant: 'learner' })
+  })
+
+  it('logs a refused opening and an apply that is not ready', () => {
+    const drafts: PlaygroundEventDraft[] = []
+    const events: SceneEvents = { record: draft => { drafts.push(draft) }, recent: () => [], during: run => run(), addSummary() {} }
+    const { scene, workspace } = setup(reference, 21, 1, events)
+    expect(workspace.begin(['x0']).allowed).toBe(false)
+    const selection = exchangeSelection(reference, scene.trains.value)
+    if (!('ids' in selection)) throw new Error(selection.reason)
+    workspace.begin(selection.ids)
+    expect(workspace.apply().allowed).toBe(false)
+
+    expect(drafts.map(draft => [draft.type, draft.outcome])).toEqual([
+      ['conversion.started', 'rejected'],
+      ['conversion.started', 'applied'],
+      ['denomination.converted', 'rejected'],
+    ])
+    expect(drafts[0]!.reason).toMatch(/Select exactly 8 x rods/)
+  })
   it('converts whole x rods that the learner has already laid horizontally', () => {
     const { scene, workspace } = setup(reference, 21, 1)
     const ids = layOutSources(scene)
     const before = committed(scene)
-    const unfinished = evaluateCountSystem(reference, scene.trains.value)
-    expect(unfinished.valid && unfinished.material.unassignedArea).toBe(24)
+    const laidDown = evaluateCountSystem(reference, scene.trains.value)
+    expect(laidDown.valid && laidDown.material.unassignedArea).toBe(0)
+    expect(laidDown.valid && laidDown.candidate).toEqual({ xCount: 21, yCount: 1 })
     expect(workspace.availability.value).toEqual({ allowed: true })
     expect(workspace.begin(ids).allowed).toBe(true)
     expect(workspace.session.value?.baselineCounts).toEqual({ xCount: 21, yCount: 1 })

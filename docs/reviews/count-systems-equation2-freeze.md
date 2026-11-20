@@ -88,8 +88,28 @@ rods *should* count in this activity; that's a teaching decision.
 
 ## Decision
 
-- [ ] A: lying rods count
-- [ ] B1: clearer banner
-- [ ] B2: stronger highlight
-- [ ] B3: block rotation in Equation 1
-- [ ] C: log the evaluation in `sceneSummary`
+**Option A, done on 2026-11-20.** Lying x and y rods now count. Towers are still
+unassigned.
+
+- `classifyCountMaterial` counts any non-tower x or y rod and marks it `upright` or not.
+- `isCanonical` and Arrange's "already in place" check need upright rods, so
+  **Arrange x rods, then y rods** stands lying rods up.
+- **Convert selected area… (8 x rods · 24 cells)** in the right-click menu works
+  the same as before: lying x rods were already allowed as sources, and the new y
+  rods are placed upright.
+- Tests: `systems.count.test.ts` reproduces the reported board (16 upright + 5
+  lying x rods + 1 y rod gives the candidate x = 21, y = 1, so Equation 2 checks
+  193) and checks that Arrange stands the rods up.
+  `useCountConversionWorkspace.test.ts` now expects 0 unassigned cells.
+
+B (explaining the rule) is no longer needed for lying rods.
+
+C is done too. Every rod-count event's `sceneSummary` now also carries what
+the learner saw: `xCount`, `yCount`, `unassigned` (cells), `xLying`, `yLying` (whole rods laid
+down), `eq1Total`,
+`eq1Holds`, `eq2Total`, `eq2Holds`, `eq2Stale` (1 when Equation 2 shows the
+previous candidate, the freeze reported here), `converting`, `solved` and
+`hintLevel`. Flags are 0 or 1. An invalid board sends `invalid: 1` instead.
+New event types: `conversion.started`, `conversion.cancelled` (`variant`
+`learner` or `system`), `exchange.selected` and `hint.requested`. Edits on the
+conversion draft board are now logged as well.

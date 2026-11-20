@@ -42,8 +42,8 @@ export function countLayout(config: SystemsBoardConfig): CountLayout {
     y: 0,
     width,
     depth: upperDepth,
-    // Vertical first: rods created from the tray stand upright. Other
-    // orientations are allowed as loose, uncounted material.
+    // Vertical first: rods created from the tray stand upright. Lying rods
+    // still count (same area); towers are loose, uncounted material.
     orientations: ['vertical', 'horizontal', 'tower'] as const,
   }
   const lower = { equationIndex: 1 as const, x: COUNT_GUTTER_COLUMNS, y: upperDepth + config.regionGapRows, width, depth: lowerDepth }
@@ -56,13 +56,15 @@ export function countLayout(config: SystemsBoardConfig): CountLayout {
   }
 }
 
-/** One counted rod: a part, standing upright, whose value names its variable. */
+/** One counted rod: a part, upright or lying, whose value names its variable. */
 export type CountUnit = {
   trainId: string
   partIndex: number
   variable: VariableId
   value: number
   footprint: Rectangle
+  /** Standing in a single column; only upright units sit in a canonical slot. */
+  upright: boolean
 }
 
 export type UnassignedReason = 'value' | 'orientation'
@@ -101,8 +103,8 @@ export function classifyCountMaterial(config: SystemsBoardConfig, trains: Snapsh
     train.parts.forEach((part, partIndex) => {
       const footprint = partFootprint(part, train.anchor)
       const variable: VariableId | null = part.value === a ? 'x' : part.value === b ? 'y' : null
-      if (variable && part.orientation === 'vertical') {
-        units.push({ trainId: train.id, partIndex, variable, value: part.value, footprint })
+      if (variable && part.orientation !== 'tower') {
+        units.push({ trainId: train.id, partIndex, variable, value: part.value, footprint, upright: part.orientation === 'vertical' })
       } else {
         unassigned.push({ trainId: train.id, partIndex, value: part.value, footprint, reason: variable ? 'orientation' : 'value' })
       }
@@ -155,7 +157,7 @@ export function isCanonical(config: SystemsBoardConfig, material: CountMaterial)
   const layout = countLayout(config)
   const slots = canonicalSlots(layout, { xCount: material.xCount, yCount: material.yCount })
   return material.units.every(unit =>
-    unit.footprint.y === layout.upper.y && slots[unit.variable].includes(unit.footprint.x))
+    unit.upright && unit.footprint.y === layout.upper.y && slots[unit.variable].includes(unit.footprint.x))
 }
 
 export const hasNegative = (trains: Snapshot) => trains.some(train => train.parts.some(part => partSign(part) === -1))

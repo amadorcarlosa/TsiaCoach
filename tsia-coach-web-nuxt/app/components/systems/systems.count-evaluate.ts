@@ -29,7 +29,7 @@ export type CountEvaluation =
       material: CountMaterial
       counts: CandidateCounts
       upper: UpperCheck
-      /** Only whole, upright x and y rods, at least one of each. */
+      /** Only whole x and y rods (upright or lying), at least one of each. */
       clean: boolean
       /** A clean arrangement that satisfies Equation 1 exactly. */
       candidate: CandidateCounts | null

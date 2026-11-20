@@ -71,7 +71,7 @@ const upperSatisfied = computed(() => props.converting || (props.evaluation.vali
 const waitingText = computed(() => {
   if (!props.evaluation.valid) return ''
   if (props.derived.length) return ''
-  return 'Equation 2 is rebuilt here from your x and y counts once Equation 1 uses only whole, upright x and y rods.'
+  return 'Equation 2 is rebuilt here from your x and y counts once Equation 1 uses only whole x and y rods (no towers).'
 })
 
 /**
@@ -202,7 +202,7 @@ const ghosts = computed(() => props.preview
       :key="`unassigned-${index}`"
       class="count-unassigned"
       data-systems-unassigned
-      :title="part.reason === 'orientation' ? 'Lying rod: stand it upright to count it' : 'Unassigned material'"
+      :title="part.reason === 'orientation' ? 'Tower: lay it down or stand it upright to count it' : 'Unassigned material'"
       :style="box(part.footprint.x, part.footprint.y, part.footprint.width, part.footprint.depth)"
       aria-hidden="true"
     />

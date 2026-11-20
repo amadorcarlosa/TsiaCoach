@@ -474,6 +474,17 @@ public sealed class PlaygroundSessionEndpointTests : ApiTestBase
     }
 
     [Test]
+    [Arguments("conversion.started")]
+    [Arguments("conversion.cancelled")]
+    [Arguments("exchange.selected")]
+    [Arguments("hint.requested")]
+    public async Task Schema_RecordsRodCountLearnerSteps(string type)
+    {
+        await Assert.That(PlaygroundEventSchema.Records("rod-count-systems", type)).IsTrue();
+        await Assert.That(PlaygroundEventSchema.Records("bar-rod", type)).IsFalse();
+    }
+
+    [Test]
     public async Task Append_RejectsEventTypesTheSessionsPlaygroundDoesNotRecord()
     {
         using HttpClient client = Factory.CreateClient();

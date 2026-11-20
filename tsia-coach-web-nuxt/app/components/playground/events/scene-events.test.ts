@@ -77,6 +77,23 @@ describe('scene action recording', () => {
     expect(log.drafts).toEqual([{ type: 'count.rod-added', outcome: 'applied', data: { variant: 'x', count: 2 }, sceneSummary: { 'rod-3': 2, trains: 2, total: 6 } }])
   })
 
+  it('adds playground state to every summary, its keys first and within the key limit', () => {
+    const log = recorder('rod-count-systems')
+    const scene = recordPlaygroundScene(rodScene(), 'rod-count-systems', log.recorder)
+    scene.events.addSummary(() => ({ xCount: 7, trains: -1 }))
+
+    scene.apply([], { type: 'create', value: 3 })
+    scene.events.record({ type: 'hint.requested', outcome: 'applied', data: { value: 1 } })
+
+    expect(log.drafts[0]!.sceneSummary).toEqual({ xCount: 7, trains: -1, 'rod-3': 1, total: 3 })
+    expect(log.drafts[1]!.sceneSummary).toMatchObject({ xCount: 7, 'rod-3': 1 })
+
+    const crowded = recordPlaygroundScene(rodScene(), 'bar-rod', log.recorder)
+    crowded.events.addSummary(() => Object.fromEntries(Array.from({ length: 39 }, (_, index) => [`k${index}`, index])))
+    crowded.apply([], { type: 'create', value: 3 })
+    expect(Object.keys(log.drafts.at(-1)!.sceneSummary!)).toHaveLength(40)
+  })
+
   it('leaves the scene silent when the log is off, and never lets a recorder break it', () => {
     const silent = recordPlaygroundScene(rodScene(), 'bar-rod', null)
     expect(silent.apply([], { type: 'create', value: 2 }).allowed).toBe(true)

@@ -61,7 +61,7 @@ export function countStatus(config: SystemsBoardConfig, evaluation: CountEvaluat
       const { upper, material } = evaluation
       const parts: string[] = []
       if (material.unassigned.length) {
-        parts.push(`${upper.unassigned} ${upper.unassigned === 1 ? 'cell is' : 'cells are'} unassigned material: not a whole upright x rod (${a}) or y rod (${b}), so ${upper.unassigned === 1 ? 'it counts' : 'they count'} toward no variable.`)
+        parts.push(`${upper.unassigned} ${upper.unassigned === 1 ? 'cell is' : 'cells are'} unassigned material: not a whole x rod (${a}) or y rod (${b}), or a tower, so ${upper.unassigned === 1 ? 'it counts' : 'they count'} toward no variable.`)
       }
       if (upper.satisfied && (evaluation.counts.xCount < 1 || evaluation.counts.yCount < 1)) {
         parts.push('Equation 1 needs at least one x rod and one y rod.')
